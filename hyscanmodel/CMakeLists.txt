@@ -1,6 +1,7 @@
 
 add_library (hyscanmodel SHARED
-             hyscan-db-info.c)
+             hyscan-db-info.c
+             hyscan-async.c)
 
 target_link_libraries (hyscanmodel ${GLIB2_LIBRARIES} ${HYSCAN_LIBRARIES})
 
