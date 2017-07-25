@@ -6,9 +6,11 @@ set (TEST_LIBRARIES ${GLIB2_LIBRARIES}
 
 add_executable (db-info-test db-info-test.c)
 add_executable (async-test async-test.c)
+add_executable (sonar-control-model-test sonar-control-model-test.c)
 
 target_link_libraries (db-info-test ${TEST_LIBRARIES})
 target_link_libraries (async-test ${TEST_LIBRARIES})
+target_link_libraries (sonar-control-model-test ${TEST_LIBRARIES})
 
 install (TARGETS db-info-test
                  async-test
@@ -17,3 +19,4 @@ install (TARGETS db-info-test
          LIBRARY DESTINATION lib
          ARCHIVE DESTINATION lib
          PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
+

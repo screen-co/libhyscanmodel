@@ -1,7 +1,8 @@
 
 add_library (${HYSCAN_MODEL_LIBRARY} SHARED
              hyscan-db-info.c
-             hyscan-async.c)
+             hyscan-async.c
+             hyscan-sonar-control-model.c)
 
 target_link_libraries (${HYSCAN_MODEL_LIBRARY} ${GLIB2_LIBRARIES} ${HYSCAN_LIBRARIES})
 
