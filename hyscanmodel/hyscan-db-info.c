@@ -5,6 +5,7 @@
  * \author Andrei Fadeev (andrei@webcontrol.ru)
  * \date 2017
  * \license Проприетарная лицензия ООО "Экран"
+ *
  */
 
 #include "hyscan-db-info.h"

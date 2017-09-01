@@ -1,9 +1,11 @@
-/*
+/**
  * \file hyscan-async.h
+ *
  * \brief Заголовочный файл класса HyScanAsync, выполняющего список запросов в отдельном потоке.
  * \author Vladimir Maximov (vmakxs@gmail.com)
  * \date 2017
  * \license Проприетарная лицензия ООО "Экран"
+ *
  * \defgroup HyScanAsync HyScanAsync - выполнение списка запросов в отдельном потоке.
  *
  * Порядок работы с классом:
@@ -30,7 +32,9 @@
  * Сигнал "completed" вернет в результате TRUE только в случае, если все запросы будут успешно
  * выполнены (т.е. команды вернут TRUE). Если команда из списка вернёт FALSE, выполнение запросов
  * прекращается, результатом выполнения запросов будет FALSE.
+ *
  */
+
 #ifndef __HYSCAN_ASYNC_H__
 #define __HYSCAN_ASYNC_H__
 
@@ -70,7 +74,6 @@ GType        hyscan_async_get_type      (void);
 
 /**
  * Создаёт новый объект \link HyScanAsync \endlink.
- * Созданный объект должен быть удалён функцией #g_object_unref.
  *
  * \return указатель на класс \link HyScanAsync \endlink.
  */
