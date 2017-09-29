@@ -764,13 +764,22 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
       hyscan_db_close (db, channel_id);
     }
 
+  g_strfreev (channels);
+
+  /* Если в галсе нет каналов, пропускаем его и добавляем в список проверяемых. */
+  if (g_hash_table_size (track_info->sources) == 0)
+    {
+      hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter);
+      hyscan_db_info_free_track_info (track_info);
+
+      return NULL;
+    }
+
   /* Если в галсе есть открытый для записи канал, проверим этот галс позже. */
   if (track_info->active)
     hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter);
   else
     hyscan_db_close (db, track_id);
-
-  g_strfreev (channels);
 
   return track_info;
 }
