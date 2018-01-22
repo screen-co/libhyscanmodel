@@ -253,6 +253,7 @@ static void       hyscan_sonar_model_set_property              (GObject         
                                                                 GParamSpec         *pspec);
 static void       hyscan_sonar_model_object_constructed        (GObject            *object);
 static void       hyscan_sonar_model_object_finalize           (GObject            *object);
+static void       hyscan_sonar_model_update_before_start       (HyScanSonarModel   *model);
 static void       hyscan_sonar_model_set_valid_params          (HyScanSonarModel   *model);
 static void       hyscan_sonar_model_set_sonar_control_state   (HyScanSonarModel   *model,
                                                                 gboolean            state);
@@ -454,6 +455,46 @@ hyscan_sonar_model_object_finalize (GObject *object)
   g_free (priv->sonar_params.track_name);
 
   G_OBJECT_CLASS (hyscan_sonar_model_parent_class)->finalize (object);
+}
+
+/* Помечает текущие параметры, как модифицированные, перед стартом
+ * новой записи.
+ *
+ * Выполняется по причине того, что состояние параметров не хранится
+ * между сессиями записи и нужно выполнить синхронизацию между значениями
+ * параметров гидролокатора, заданными в приложении и реальными
+ * значениями его параметров.
+ */
+static void
+hyscan_sonar_model_update_before_start (HyScanSonarModel *model)
+{
+  HyScanSonarModelPrivate *priv = model->priv;
+  guint i;
+
+  /* Тип синхронизации.
+   */
+  priv->sonar_params.sync_type.modified = TRUE;
+
+  /* Задание допустимых значений параметров источников данных.
+   */
+  for (i = 0; priv->sources[i] != HYSCAN_SOURCE_INVALID; ++i)
+    {
+      HyScanSrcParamsContainer *prm;
+      prm = g_hash_table_lookup (priv->sources_params, GINT_TO_POINTER (priv->sources[i]));
+
+      /* Время приёма эхосигнала. */
+      prm->src.receive_time.modified = TRUE;
+
+      /* Режим генератора.
+       */
+      prm->gen.enabled.modified = TRUE;
+      prm->gen.mode.modified = TRUE;
+
+      /* Режим ВАРУ.
+       */
+      prm->tvg.enabled.modified = TRUE;
+      prm->tvg.mode.modified = TRUE;
+    }
 }
 
 /*
@@ -2005,6 +2046,8 @@ hyscan_sonar_model_sonar_start (HyScanSonarModel *model)
 
   if (!priv->sonar_control_state)
     return;
+
+  hyscan_sonar_model_update_before_start (model);
 
   priv->sonar_params.record_state.nval = TRUE;
   priv->sonar_params.record_state.modified = TRUE;
