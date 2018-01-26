@@ -36,11 +36,11 @@
  *                                     gpointer          user_data);
  * \endcode
  *
- * После применения изменений, испускается сигнал "sonar-params-updated".
- * Прототип обработчика сигнала "sonar-params-updated":
+ * После применения изменений, испускается сигнал "sonar-params-changed".
+ * Прототип обработчика сигнала "sonar-params-changed":
  *
  * \code
- * void sonar_params_updated_cb (HyScanSonarModel *sonar_model,
+ * void sonar_params_changed_cb (HyScanSonarModel *sonar_model,
  *                               gboolean          result,
  *                               gpointer          user_data);
  * \endcode
@@ -48,17 +48,8 @@
  * где:
  * - result - результат применения изменений.
  *
- * Сигнал "sonar-params-updated" вернет в результате TRUE только в случае, если изменения
+ * Сигнал "sonar-params-changed" вернет в результате TRUE только в случае, если изменения
  * успешно применены.
- *
- * При переводе гидролокатора в рабочее состояние функцией #hyscan_sonar_model_sonar_start, создаётся
- * новый галс - испускается исгнал "active-track-changed":
- *
- * \code
- * void active_track_changed_cb (HyScanSonarModel *sonar_model,
- *                               gchar            *track_name,
- *                               gpointer          user_data);
- * \endcode
  *
  * \warning Данный класс корректно работает только с GMainLoop, кроме того
  * он не является потокобезопасным.
@@ -111,14 +102,12 @@ GType                    hyscan_sonar_model_get_type                    (void);
 /**
  * Создаёт объект \link HyScanSonarModel \endlink.
  *
- * \param sonar_control указатель на объект \link HyScanSonarControl \endlink;
- * \param db_info указатель на объект \link HyScanDBInfo \endlink.
+ * \param sonar_control указатель на объект \link HyScanSonarControl \endlink.
  *
  * \return Объект \link HyScanSonarModel \endlink.
  */
 HYSCAN_API
-HyScanSonarModel*        hyscan_sonar_model_new                         (HyScanSonarControl         *sonar_control,
-                                                                         HyScanDBInfo               *db_info);
+HyScanSonarModel*        hyscan_sonar_model_new                         (HyScanSonarControl         *sonar_control);
 
 /**
  * Вызывает отправку изменений вне зависимости от режима работы гидролокатора.
@@ -723,7 +712,8 @@ void                     hyscan_sonar_model_set_track_type              (HyScanS
  * \param model указатель на объект \link HyScanSonarModel \endlink.
  */
 HYSCAN_API
-void                     hyscan_sonar_model_sonar_start                 (HyScanSonarModel           *model);
+void                     hyscan_sonar_model_sonar_start                 (HyScanSonarModel           *model,
+                                                                         const gchar                *track_name);
 
 /**
  * Переводит гидролокатор в ждущий режим и отключает запись данных.

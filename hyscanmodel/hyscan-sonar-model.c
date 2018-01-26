@@ -209,16 +209,14 @@ typedef struct
 enum
 {
   PROP_O,
-  PROP_DB_INFO,        /* Модель системы хранения. */
   PROP_SONAR_CONTROL   /* Интерфейс управления гидролокатором. */
 };
 
 /* Индексы сигналов в массиве идентификаторов сигналов. */
 enum
 {
-  SIGNAL_SONAR_CONTROL_STATE_CHANGED,  /* Изменение состояния системы управления гидролокатором. */
-  SIGNAL_SONAR_PARAMS_UPDATED,         /* Обновлены параметры гидролокатора. */
-  SIGNAL_ACTIVE_TRACK_CHANGED,         /* Изменен записываемый галс. */
+  SIGNAL_SONAR_CONTROL_STATE_CHANGED,  /* Изменилось состояние системы управления гидролокатором. */
+  SIGNAL_SONAR_PARAMS_CHANGED,         /* Изменились параметры гидролокатора. */
   SIGNAL_LAST
 };
 
@@ -229,7 +227,6 @@ struct _HyScanSonarModelPrivate
 {
   HyScanSonarControl       *sonar_control;                 /* Интерфейс управления гидролокатором. */
   HyScanSonarControlModel  *sonar_control_model;           /* Управление гидролокатором. */
-  HyScanDBInfo             *db_info;                       /* Модель БД. */
 
   GTimer                   *check_for_updates_timer;       /* Таймер изменения параметров ГЛ. */
   guint                     check_for_updates_source_id;   /* Идентификатор таймера изменения параметров ГЛ. */
@@ -257,7 +254,6 @@ static void       hyscan_sonar_model_update_before_start       (HyScanSonarModel
 static void       hyscan_sonar_model_set_valid_params          (HyScanSonarModel   *model);
 static void       hyscan_sonar_model_set_sonar_control_state   (HyScanSonarModel   *model,
                                                                 gboolean            state);
-static gchar*     hyscan_sonar_model_generate_track_name       (HyScanSonarModel   *model);
 static void       hyscan_sonar_model_on_started                (HyScanSonarModel   *model,
                                                                 HyScanAsync        *async);
 static void       hyscan_sonar_model_on_completed              (HyScanSonarModel   *model,
@@ -290,16 +286,7 @@ hyscan_sonar_model_class_init (HyScanSonarModelClass *klass)
   gobject_class->constructed = hyscan_sonar_model_object_constructed;
   gobject_class->finalize = hyscan_sonar_model_object_finalize;
 
-  /* Свойства.
-   */
-  g_object_class_install_property (gobject_class,
-                                   PROP_DB_INFO,
-                                   g_param_spec_object ("db-info",
-                                                        "DBInfo",
-                                                        "Database info",
-                                                        HYSCAN_TYPE_DB_INFO,
-                                                        G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY));
-
+  /* Свойства. */
   g_object_class_install_property (gobject_class,
                                    PROP_SONAR_CONTROL,
                                    g_param_spec_object ("sonar-control",
@@ -308,8 +295,7 @@ hyscan_sonar_model_class_init (HyScanSonarModelClass *klass)
                                                         HYSCAN_TYPE_SONAR_CONTROL,
                                                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY));
 
-  /* Сигналы.
-   */
+  /* Сигналы. */
   hyscan_sonar_model_signals[SIGNAL_SONAR_CONTROL_STATE_CHANGED] =
     g_signal_new ("sonar-control-state-changed",
                   G_TYPE_FROM_CLASS (klass),
@@ -317,19 +303,12 @@ hyscan_sonar_model_class_init (HyScanSonarModelClass *klass)
                   g_cclosure_marshal_VOID__VOID,
                   G_TYPE_NONE, 0);
 
-  hyscan_sonar_model_signals[SIGNAL_SONAR_PARAMS_UPDATED] =
-    g_signal_new ("sonar-params-updated",
+  hyscan_sonar_model_signals[SIGNAL_SONAR_PARAMS_CHANGED] =
+    g_signal_new ("sonar-params-changed",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST, 0, NULL, NULL,
                   g_cclosure_marshal_VOID__BOOLEAN,
                   G_TYPE_NONE, 1, G_TYPE_BOOLEAN);
-
-  hyscan_sonar_model_signals[SIGNAL_ACTIVE_TRACK_CHANGED] =
-    g_signal_new ("active-track-changed",
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_RUN_LAST, 0, NULL, NULL,
-                  g_cclosure_marshal_VOID__STRING,
-                  G_TYPE_NONE, 1, G_TYPE_STRING);
 }
 
 static void
@@ -357,10 +336,6 @@ hyscan_sonar_model_set_property (GObject      *object,
 
   switch (prop_id)
     {
-    case PROP_DB_INFO:
-      priv->db_info = g_value_dup_object (value);
-      break;
-
     case PROP_SONAR_CONTROL:
       priv->sonar_control = g_value_dup_object (value);
       break;
@@ -444,7 +419,6 @@ hyscan_sonar_model_object_finalize (GObject *object)
 
   g_clear_object (&priv->sonar_control);
   g_clear_object (&priv->sonar_control_model);
-  g_clear_object (&priv->db_info);
 
   g_clear_pointer (&priv->sensors_params, g_hash_table_unref);
   g_clear_pointer (&priv->sources_params, g_hash_table_unref);
@@ -642,41 +616,6 @@ hyscan_sonar_model_set_sonar_control_state (HyScanSonarModel *model,
     }
 }
 
-/* Генерирует названия галсов. */
-static gchar *
-hyscan_sonar_model_generate_track_name (HyScanSonarModel *model)
-{
-  gchar *track = NULL;
-
-  /* Если система хранения задана, осуществляется поиск следующего свободного названия,
-   * в противном случае выбирается имя, содержащее текущие дату и время. */
-  if (model->priv->db_info != NULL)
-    {
-      GHashTable *tracks = hyscan_db_info_get_tracks (model->priv->db_info);
-      guint n_tracks = g_hash_table_size (tracks);
-
-      do
-        {
-          g_free (track);
-          track = g_strdup_printf ("Track%02d", ++n_tracks);
-        } while (g_hash_table_lookup (tracks, track) != NULL);
-
-      g_hash_table_unref (tracks);
-    }
-  else
-    {
-      GDateTime *dt = g_date_time_new_now_local ();
-      gchar *name_base = g_date_time_format (dt, "Track%y%m%d%H%M%S");
-
-      track = g_strdup_printf ("%s%d", name_base, (gint) (g_get_monotonic_time () % 1000));
-
-      g_free (name_base);
-      g_date_time_unref (dt);
-    }
-
-  return track;
-}
-
 /* Обработчик сигнала "started" модели управления гидролокатором. */
 static void
 hyscan_sonar_model_on_started (HyScanSonarModel *model,
@@ -694,7 +633,7 @@ hyscan_sonar_model_on_completed (HyScanSonarModel *model,
   hyscan_sonar_model_set_sonar_control_state (model, TRUE);
 
   /* Уведомить потребителей об изменении параметров. */
-  g_signal_emit (model, hyscan_sonar_model_signals [SIGNAL_SONAR_PARAMS_UPDATED], 0, result);
+  g_signal_emit (model, hyscan_sonar_model_signals [SIGNAL_SONAR_PARAMS_CHANGED], 0, result);
 }
 
 /* Обновляет параметры датчика. */
@@ -987,9 +926,12 @@ hyscan_sonar_model_update_sensors (HyScanSonarModel *model)
     return TRUE;
 
   /* Поиск изменений в параметрах датчиков. */
-  for (port = model->priv->ports; *port != NULL; ++port)
-    if (!hyscan_sonar_model_update_sensor_params (model, *port))
+  for (port = model->priv->ports; *port != NULL; ++port) {
+    if (!hyscan_sonar_model_update_sensor_params (model, *port)) {
+      g_warning ("Couldn't update sensor params.");
       return FALSE;
+    }
+  }
 
   return TRUE;
 }
@@ -1015,6 +957,7 @@ hyscan_sonar_model_update_sources (HyScanSonarModel *model)
             hyscan_sonar_model_update_tvg_params (model, source_type, &prm->tvg) &&
             hyscan_sonar_model_update_src_params (model, source_type, &prm->src)))
         {
+          g_warning ("Couldn't update gen or tvg or src.");
           return FALSE;
         }
     }
@@ -1047,20 +990,11 @@ hyscan_sonar_model_update_sonar (HyScanSonarModel *model)
       prm->record_state.modified = FALSE;
       if (prm->record_state.nval)
         {
-          gchar *track_name = hyscan_sonar_model_generate_track_name (model);
-          if (!hyscan_sonar_control_model_sonar_start (scm, track_name, prm->track_type))
+          if (!hyscan_sonar_control_model_sonar_start (scm, prm->track_name, prm->track_type))
             {
               g_warning ("Can't start sonar.");
-              g_free (track_name);
               return FALSE;
             }
-
-          /* Задать имя записываемого галса. */
-          g_free (prm->track_name);
-          prm->track_name = track_name;
-
-          /* Уведомить потребителей об изменении записываемого галса. */
-          g_signal_emit (model, hyscan_sonar_model_signals [SIGNAL_ACTIVE_TRACK_CHANGED], 0, track_name);
         }
       else if (!hyscan_sonar_control_model_sonar_stop (scm))
         {
@@ -1117,15 +1051,12 @@ hyscan_sonar_model_check_for_updates (gpointer sonar_model_ptr)
 
 /* Создаёт объект HyScanSonarModel. */
 HyScanSonarModel *
-hyscan_sonar_model_new (HyScanSonarControl *sonar_control,
-                        HyScanDBInfo       *db_info)
+hyscan_sonar_model_new (HyScanSonarControl *sonar_control)
 {
-  g_return_val_if_fail (HYSCAN_IS_DB_INFO (db_info), NULL);
   g_return_val_if_fail (HYSCAN_IS_SONAR_CONTROL (sonar_control), NULL);
 
   return g_object_new (HYSCAN_TYPE_SONAR_MODEL,
                        "sonar-control", sonar_control,
-                       "db-info", db_info,
                        NULL);
 }
 
@@ -2036,18 +1967,27 @@ hyscan_sonar_model_set_track_type (HyScanSonarModel *model,
 
 /* Переводит гидролокатор в рабочий режим и включает запись данных. */
 void
-hyscan_sonar_model_sonar_start (HyScanSonarModel *model)
+hyscan_sonar_model_sonar_start (HyScanSonarModel *model,
+                                const gchar      *track_name)
 {
   HyScanSonarModelPrivate *priv;
 
   g_return_if_fail (HYSCAN_IS_SONAR_MODEL (model));
+
+  /* Если имя галса не задано - возврат. */
+  if (track_name == NULL)
+    return;
 
   priv = model->priv;
 
   if (!priv->sonar_control_state)
     return;
 
-  hyscan_sonar_model_update_before_start (model);
+  if (!hyscan_sonar_model_get_record_state (model))
+    hyscan_sonar_model_update_before_start (model);
+
+  g_free (priv->sonar_params.track_name);
+  priv->sonar_params.track_name = g_strdup (track_name);
 
   priv->sonar_params.record_state.nval = TRUE;
   priv->sonar_params.record_state.modified = TRUE;

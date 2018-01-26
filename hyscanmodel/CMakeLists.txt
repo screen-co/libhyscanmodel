@@ -1,9 +1,15 @@
+set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
+     hyscan-appearance.c
+     hyscan-async.c
+     hyscan-connector.c
+     hyscan-db-info.c
+     hyscan-db-profile.c
+     hyscan-profile-common.c
+     hyscan-sonar-control-model.c
+     hyscan-sonar-model.c
+     hyscan-sonar-profile.c)
 
-add_library (${HYSCAN_MODEL_LIBRARY} SHARED
-             hyscan-db-info.c
-             hyscan-async.c
-             hyscan-sonar-control-model.c
-             hyscan-sonar-model.c)
+add_library (${HYSCAN_MODEL_LIBRARY} SHARED ${HYSCAN_MODEL_LIBRARY_SOURCE_FILES})
 
 target_link_libraries (${HYSCAN_MODEL_LIBRARY} ${GLIB2_LIBRARIES} ${HYSCAN_LIBRARIES})
 
@@ -26,8 +32,18 @@ install (FILES "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/hyscanmodel-${HYSCAN_MAJOR_VER
          DESTINATION "lib/pkgconfig"
          PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
 
-install (FILES hyscan-async.h
-               hyscan-db-info.h
+set (HYSCAN_MODEL_LIBRARY_INSTALL_FILES
+     hyscan-appearance.h
+     hyscan-async.h
+     hyscan-connector.h
+     hyscan-db-info.h
+     hyscan-db-profile.h
+     hyscan-profile-common.h
+     hyscan-sonar-control-model.h
+     hyscan-sonar-model.h
+     hyscan-sonar-profile.h)
+
+install (FILES ${HYSCAN_MODEL_LIBRARY_INSTALL_FILES}
          COMPONENT development
          DESTINATION "include/hyscan-${HYSCAN_MAJOR_VERSION}/hyscanmodel"
          PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)

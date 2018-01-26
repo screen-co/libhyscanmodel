@@ -4,5 +4,7 @@
  *
  * - \link HyScanDBInfo \endlink - асинхронный мониторинг БД;
  * - \link HyScanAsync \endlink - асинхронное выполнение заданий.
+ * - \link HyScanSonarModel \endlink - асинхронное управление гидролокатором.
+ * - \link HyScanDBModel \endlink - модель БД.
  *
  */

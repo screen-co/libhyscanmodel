@@ -28,7 +28,12 @@
 
 #define GENERATOR_N_PRESETS            32
 
-static gboolean test_result = TRUE;
+enum
+{
+  TEST_START,
+  TEST_SET,
+  TEST_STOP
+};
 
 typedef struct
 {
@@ -136,261 +141,271 @@ typedef struct
   HyScanSonarControlServer            *sonar;
 } ServerInfo;
 
-static GMainLoop                *main_loop    = NULL;
+typedef struct
+{
+  gchar                     *name;
+  guint                      channel;
+  gint64                     time_offset;
 
-static int                       n_test_repeats;
-
-static GHashTable               *ports;
-static SourceInfo                starboard;
-static SourceInfo                port;
-static SourceInfo                echosounder;
-static SonarInfo                 sonar_info;
-
-static ServerInfo                server;
-static HyScanSonarBox           *sonar_box;
-static HyScanSonarModel         *sonar_model;
-static HyScanSonarControl       *sonar_control;
+  gboolean                   result;
+} SensorVirtualPortParamFrame;
 
 typedef struct
 {
-  struct
-  {
-    gchar                     *name;
-    guint                      channel;
-    gint64                     time_offset;
+  gchar                     *name;
+  guint                      channel;
+  gint64                     time_offset;
+  HyScanSensorProtocolType   protocol;
+  guint                      uart_device;
+  guint                      uart_mode;
 
-    gboolean                   test;
-    gboolean                   result;
-  } sensor_virtual_port_param_frame;
+  gboolean                   result;
+} SensorUartPortParamFrame;
 
-  struct
-  {
-    gchar                     *name;
-    guint                      channel;
-    gint64                     time_offset;
-    HyScanSensorProtocolType   protocol;
-    guint                      uart_device;
-    guint                      uart_mode;
+typedef struct
+{
+  gchar                     *name;
+  guint                      channel;
+  gint64                     time_offset;
+  HyScanSensorProtocolType   protocol;
+  guint                      ip_address;
+  guint                      udp_port;
 
-    gboolean                   test;
-    gboolean                   result;
-  } sensor_uart_port_param_frame;
+  gboolean                   result;
+} SensorUdpIpPortParamFrame;
 
-  struct
-  {
-    gchar                     *name;
-    guint                      channel;
-    gint64                     time_offset;
-    HyScanSensorProtocolType   protocol;
-    guint                      ip_address;
-    guint                      udp_port;
+typedef struct
+{
+  gchar                    *name;
+  HyScanAntennaPosition     position;
 
-    gboolean                   test;
-    gboolean                   result;
-  } sensor_udp_ip_port_param_frame;
+  gboolean                  result;
+} SensorSetPositionFrame;
 
-  struct
-  {
-    gchar                    *name;
-    HyScanAntennaPosition     position;
+typedef struct
+{
+  gchar                    *name;
+  gboolean                  enable;
 
-    gboolean                  test;
-    gboolean                  result;
-  } sensor_set_position_frame;
+  gboolean                  result;
+} SensorSetEnableFrame;
 
-  struct
-  {
-    gchar                    *name;
-    gboolean                  enable;
+typedef struct
+{
+  HyScanSourceType          source;
+  guint                     preset;
 
-    gboolean                  test;
-    gboolean                  result;
-  } sensor_set_enable_frame;
+  gboolean                  result;
+} GeneratorSetPresetFrame;
 
-  struct
-  {
-    HyScanSourceType          source;
-    guint                     preset;
+typedef struct
+{
+  HyScanSourceType          source;
+  HyScanGeneratorSignalType signal_type;
 
-    gboolean                  test;
-    gboolean                  result;
-  } generator_set_preset_frame;
+  gboolean                  result;
+} GeneratorSetAutoFrame;
 
-  struct
-  {
-    HyScanSourceType          source;
-    HyScanGeneratorSignalType signal;
+typedef struct
+{
+  HyScanSourceType          source;
+  HyScanGeneratorSignalType signal_type;
+  gdouble                   power;
 
-    gboolean                  test;
-    gboolean                  result;
-  } generator_set_auto_frame;
+  gboolean                  result;
+} GeneratorSetSimpleFrame;
 
-  struct
-  {
-    HyScanSourceType          source;
-    HyScanGeneratorSignalType signal;
-    gdouble                   power;
+typedef struct
+{
+  HyScanSourceType          source;
+  HyScanGeneratorSignalType signal_type;
+  gdouble                   duration;
+  gdouble                   power;
 
-    gboolean                  test;
-    gboolean                  result;
-  } generator_set_simple_frame;
+  gboolean                  result;
+} GeneratorSetExtendedFrame;
 
-  struct
-  {
-    HyScanSourceType          source;
-    HyScanGeneratorSignalType signal;
-    gdouble                   duration;
-    gdouble                   power;
+typedef struct
+{
+  HyScanSourceType          source;
+  gboolean                  enable;
 
-    gboolean                  test;
-    gboolean                  result;
-  } generator_set_extended_frame;
+  gboolean                  result;
+} GeneratorSetEnableFrame;
 
-  struct
-  {
-    HyScanSourceType source;
-    gboolean                  enable;
+typedef struct
+{
+  HyScanSourceType source;
+  gdouble                   level;
+  gdouble                   sensitivity;
 
-    gboolean                  test;
-    gboolean                  result;
-  } generator_set_enable_frame;
+  gboolean                  result;
+} TvgSetAutoFrame;
 
-  struct
-  {
-    HyScanSourceType source;
-    gdouble                   level;
-    gdouble                   sensitivity;
+typedef struct
+{
+  HyScanSourceType          source;
+  gdouble                   gain;
 
-    gboolean                  test;
-    gboolean                  result;
-  } tvg_set_auto_frame;
+  gboolean                  result;
+} TvgSetConstantFrame;
 
-  struct
-  {
-    HyScanSourceType          source;
-    gdouble                   gain;
+typedef struct
+{
+  HyScanSourceType          source;
+  gdouble                   gain0;
+  gdouble                   step;
 
-    gboolean                  test;
-    gboolean                  result;
-  } tvg_set_constant_frame;
+  gboolean                  result;
+} TvgSetLinearDBFrame;
 
-  struct
-  {
-    HyScanSourceType          source;
-    gdouble                   gain0;
-    gdouble                   step;
+typedef struct
+{
+  HyScanSourceType          source;
+  gdouble                   gain0;
+  gdouble                   beta;
+  gdouble                   alpha;
 
-    gboolean                  test;
-    gboolean                  result;
-  } tvg_set_linear_db_frame;
+  gboolean                  result;
+} TvgSetLogarithmicFrame;
 
-  struct
-  {
-    HyScanSourceType          source;
-    gdouble                   gain0;
-    gdouble                   beta;
-    gdouble                   alpha;
+typedef struct
+{
+  HyScanSourceType          source;
+  gboolean                  enable;
 
-    gboolean                  test;
-    gboolean                  result;
-  } tvg_set_logarithmic_frame;
+  gboolean                  result;
+} TvgSetEnableFrame;
 
-  struct
-  {
-    HyScanSourceType          source;
-    gboolean                  enable;
+typedef struct
+{
+  HyScanSourceType          source;
+  HyScanAntennaPosition     position;
 
-    gboolean                  test;
-    gboolean                  result;
-  } tvg_set_enable_frame;
+  gboolean                  result;
+} SonarSetPositionFrame;
 
-  struct
-  {
-    HyScanSourceType          source;
-    HyScanAntennaPosition     position;
+typedef struct
+{
+  HyScanSourceType          source;
+  gdouble                   receive_time;
 
-    gboolean                  test;
-    gboolean                  result;
-  } sonar_set_position_frame;
+  gboolean                  result;
+} SonarSetReceiveTimeFrame;
 
-  struct
-  {
-    HyScanSourceType          source;
-    gdouble                   receive_time;
+typedef struct
+{
+  HyScanSonarSyncType       sync_type;
+  gboolean                  result;
+} SonarSetSyncTypeFrame;
 
-    gboolean                  test;
-    gboolean                  result;
-  } sonar_set_receive_time_frame;
+typedef struct
+{
+  gchar                    *track_name;
+  HyScanTrackType           track_type;
+  gboolean                  result;
+} SonarStartFrame;
 
-  struct
-  {
-    HyScanSonarSyncType       sync_type;
+typedef struct
+{
+  gboolean                  result;
+} SonarStopFrame;
 
-    gboolean                  test;
-    gboolean                  result;
-  } sonar_set_sync_type_frame;
+typedef struct
+{  gboolean                 result;
+} SonarPingFrame;
 
-  struct
-  {
-    gchar                    *track_name;
-    HyScanTrackType           track_type;
+/* Параметры датчика. */
+typedef struct
+{
+  SensorVirtualPortParamFrame virtual_port_frame;
+  SensorUartPortParamFrame    uart_port_frame;
+  SensorUdpIpPortParamFrame   udp_port_frame;
+  SensorSetPositionFrame      set_position_frame;
+  SensorSetEnableFrame        set_enable_frame;
+} SensorFrames;
 
-    gboolean                  test;
-    gboolean                  result;
-  } sonar_start_frame;
+/* Параметры источника данных. */
+typedef struct
+{
+  GeneratorSetPresetFrame    gen_set_preset_frame;
+  GeneratorSetAutoFrame      gen_set_auto_frame;
+  GeneratorSetSimpleFrame    gen_set_simple_frame;
+  GeneratorSetExtendedFrame  gen_set_extended_frame;
+  GeneratorSetEnableFrame    gen_set_enable_frame;
+  TvgSetAutoFrame            tvg_set_auto_frame;
+  TvgSetConstantFrame        tvg_set_constant_frame;
+  TvgSetLinearDBFrame        tvg_set_linear_db_frame;
+  TvgSetLogarithmicFrame     tvg_set_logarithmic_frame;
+  TvgSetEnableFrame          tvg_set_enable_frame;
+  SonarSetPositionFrame      set_position_frame;
+  SonarSetReceiveTimeFrame   set_receive_time_frame;
+} SourceFrames;
 
-  struct
-  {
-    gboolean                  test;
-    gboolean                  result;
-  } sonar_stop_frame;
+typedef struct
+{
+  SonarSetSyncTypeFrame sync_type_frame;
+  SonarStartFrame       start_frame;
+  SonarStopFrame        stop_frame;
+  SonarPingFrame        ping_frame;
+} SonarFrames;
 
-  struct
-  {
-    gboolean                  test;
-    gboolean                  result;
-  } sonar_ping_frame;
-} Frames;
+/* Данные приложения. */
+typedef struct
+{
+  int                 test_id;           /* Идентификатор теста. */
+  int                 result;            /* Результат тестирования. */
 
-Frames frames;
+  ServerInfo          server;            /* Сервер. */
 
-/*
- * Вспомогательные функции.
- */
+  GMainLoop          *main_loop;         /* MainLoop. */
+  
+  GHashTable         *sensors_frames;    /* Хеш-таблица параметров датчиков. */
+  GHashTable         *sources_frames;    /* Хеш-таблица параметров источников данных. */
+  SonarFrames         sonar_frames;      /* Параметры гидролокатора. */
 
-static gboolean                  pos_equals                     (const HyScanAntennaPosition    *p1,
-                                                                 const HyScanAntennaPosition    *p2,
-                                                                 const gdouble                   eps);
+  HyScanSonarModel   *sonar_model;       /* Модель локатора */
+  HyScanSonarControl *sonar_control;     /* Интерфейс управления локтаором. */
 
-static HyScanSourceType          source_type_by_index           (const guint                     index);
-static SourceInfo               *source_info_by_source_type     (const HyScanSourceType          type);
+  GHashTable         *ports;
+  SourceInfo          starboard;
+  SourceInfo          port;
+  SourceInfo          echosounder;
+  SonarInfo           sonar_info;
+} ApplicationData;
 
-static gchar                    *random_virtual_port_name       (void);
-static gchar                    *random_udp_ip_port_name        (void);
-static gchar                    *random_uart_port_name          (void);
-static gchar                    *random_port_name_with_prefix   (const gchar                    *prefix);
-static gchar                    *random_port_name               (void);
-static gint                      random_uart_mode               (const gchar                    *name);
-static gint                      random_uart_device             (const gchar                    *name);
-static gint                      random_ip_addres               (const gchar                    *name);
-static HyScanAntennaPosition     random_antenna_position        (void);
-static HyScanSourceType          random_source_type             (void);
-static gint                      random_preset                  (const HyScanSourceType          source_type);
-static HyScanGeneratorSignalType random_signal                  (void);
-static HyScanGeneratorSignalType random_signal_full             (HyScanGeneratorSignalType       accepted_signals);
-static HyScanSonarSyncType       random_sync                    (void);
-static HyScanTrackType           random_track_type              (void);
+static gboolean                   pos_equals                     (const HyScanAntennaPosition    *p1,
+                                                                  const HyScanAntennaPosition    *p2);
+
+static HyScanSourceType           source_type_by_index           (guint                           index);
+
+static SourceInfo*                source_info_by_source_type     (ApplicationData                *app_data,
+                                                                  HyScanSourceType                type);
+
+static gint                       random_uart_mode               (GHashTable                     *ports,
+                                                                  const gchar                    *name);
+static gint                       random_uart_device             (GHashTable                     *ports,
+                                                                  const gchar                    *name);
+static gint                       random_ip_addres               (GHashTable                     *ports,
+                                                                  const gchar                    *name);
+
+static HyScanAntennaPosition      random_antenna_position        (void);
+static gint                       random_preset                  (SourceInfo                     *source_info);
+static HyScanGeneratorSignalType  random_signal_type             (void);
+static HyScanGeneratorSignalType  random_accepted_signal_type    (HyScanGeneratorSignalType       accepted_signals);
+static HyScanSonarSyncType        random_sync                    (void);
+static HyScanTrackType            random_track_type              (void);
 
 /*
  * Функции обратного вызова для серверов SENSOR, GENERATOR, TVG, SONAR.
  */
 
-static gboolean sensor_virtual_port_param   (ServerInfo                 *server,
+static gboolean sensor_virtual_port_param   (GHashTable                 *sensors_frames,
                                              const gchar                *name,
                                              guint                       channel,
                                              gint64                      time_offset);
 
-static gboolean sensor_uart_port_param      (ServerInfo                 *server,
+static gboolean sensor_uart_port_param      (GHashTable                 *sensors_frames,
                                              const gchar                *name,
                                              guint                       channel,
                                              gint64                      time_offset,
@@ -398,7 +413,7 @@ static gboolean sensor_uart_port_param      (ServerInfo                 *server,
                                              guint                       uart_device,
                                              guint                       uart_mode);
 
-static gboolean sensor_udp_ip_port_param    (ServerInfo                 *server,
+static gboolean sensor_udp_ip_port_param    (GHashTable                 *sensors_frames,
                                              const gchar                *name,
                                              guint                       channel,
                                              gint64                      time_offset,
@@ -406,232 +421,172 @@ static gboolean sensor_udp_ip_port_param    (ServerInfo                 *server,
                                              guint                       ip_address,
                                              guint                       udp_port);
 
-static gboolean sensor_set_position         (ServerInfo                 *server,
+static gboolean sensor_set_position         (GHashTable                 *sensors_frames,
                                              const gchar                *name,
                                              HyScanAntennaPosition      *position);
 
-static gboolean sensor_set_enable           (ServerInfo                 *server,
+static gboolean sensor_set_enable           (GHashTable                 *sensors_frames,
                                              const gchar                *name,
                                              gboolean                    enable);
 
-static gboolean generator_set_preset        (ServerInfo                 *server,
+static gboolean generator_set_preset        (GHashTable                 *sources_frames,
                                              HyScanSourceType            source,
                                              guint                       preset);
 
-static gboolean generator_set_auto          (ServerInfo                 *server,
+static gboolean generator_set_auto          (GHashTable                 *sources_frames,
                                              HyScanSourceType            source,
-                                             HyScanGeneratorSignalType   signal);
+                                             HyScanGeneratorSignalType   signal_type);
 
-static gboolean generator_set_simple        (ServerInfo                 *server,
+static gboolean generator_set_simple        (GHashTable                 *sources_frames,
                                              HyScanSourceType            source,
-                                             HyScanGeneratorSignalType   signal,
+                                             HyScanGeneratorSignalType   signal_type,
                                              gdouble                     power);
 
-static gboolean generator_set_extended      (ServerInfo                 *server,
+static gboolean generator_set_extended      (GHashTable                 *sources_frames,
                                              HyScanSourceType            source,
-                                             HyScanGeneratorSignalType   signal,
+                                             HyScanGeneratorSignalType   signal_type,
                                              gdouble                     duration,
                                              gdouble                     power);
 
-static gboolean generator_set_enable        (ServerInfo                 *server,
+static gboolean generator_set_enable        (GHashTable                 *sources_frames,
                                              HyScanSourceType            source,
                                              gboolean                    enable);
 
-static gboolean tvg_set_auto                (ServerInfo                 *server,
+static gboolean tvg_set_auto                (GHashTable                 *sources_frames,
                                              HyScanSourceType            source,
                                              gdouble                     level,
                                              gdouble                     sensitivity);
 
-static gboolean tvg_set_constant            (ServerInfo                 *server,
+static gboolean tvg_set_constant            (GHashTable                 *sources_frames,
                                              HyScanSourceType            source,
                                              gdouble                     gain);
 
-static gboolean tvg_set_linear_db           (ServerInfo                 *server,
+static gboolean tvg_set_linear_db           (GHashTable                 *sources_frames,
                                              HyScanSourceType            source,
                                              gdouble                     gain0,
                                              gdouble                     step);
 
-static gboolean tvg_set_logarithmic         (ServerInfo                 *server,
+static gboolean tvg_set_logarithmic         (GHashTable                 *sources_frames,
                                              HyScanSourceType            source,
                                              gdouble                     gain0,
                                              gdouble                     beta,
                                              gdouble                     alpha);
 
-static gboolean tvg_set_enable              (ServerInfo                 *server,
+static gboolean tvg_set_enable              (GHashTable                 *sources_frames,
                                              HyScanSourceType            source,
                                              gboolean                    enable);
 
-static gboolean sonar_set_position          (ServerInfo                 *server,
+static gboolean sonar_set_position          (GHashTable                 *sources_frames,
                                              HyScanSourceType            source,
                                              HyScanAntennaPosition      *position);
 
-static gboolean sonar_set_receive_time      (ServerInfo                *server,
-                                             HyScanSourceType           source,
-                                             gdouble                    receive_time);
+static gboolean sonar_set_receive_time      (GHashTable                 *sources_frames,
+                                             HyScanSourceType            source,
+                                             gdouble                     receive_time);
 
-static gboolean sonar_set_sync_type         (ServerInfo                 *server,
+static gboolean sonar_set_sync_type         (SonarFrames                *sonar_frames,
                                              HyScanSonarSyncType         sync_type);
 
-static gboolean sonar_start                 (ServerInfo                 *server,
+static gboolean sonar_start                 (SonarFrames                *sonar_frames,
                                              const gchar                *track_name,
                                              HyScanTrackType             track_type);
 
-static gboolean sonar_stop                  (ServerInfo                 *server);
+static gboolean sonar_stop                  (SonarFrames                *sonar_frames);
 
-static gboolean sonar_ping                  (ServerInfo                 *server);
+static gboolean sonar_ping                  (SonarFrames                *sonar_frames);
 
-/*
- *  Функция обратного вызова для модели управления гидролокатором.
- */
 
-static void on_sonar_model_params_updated    (HyScanSonarModel          *model,
-                                              gboolean                   result,
-                                              gpointer                   udata);
+static void             on_sonar_params_changed  (ApplicationData   *app_data,
+                                                  gboolean           result,
+                                                  HyScanSonarModel  *model);
 
-/*
- * Основные функции теста.
- */
+static HyScanSonarBox*  make_mock_sonar          (ApplicationData   *app_data);
 
-static HyScanSonarBox   *create_sonar   (void);
+static void             init_servers             (ApplicationData   *app_data,
+                                                  HyScanSonarBox    *mock_sonar);
+static void             free_servers_data        (ApplicationData   *app_data);
+static void             free_frames_data         (ApplicationData   *app_data);
 
-static void              init_servers   (HyScanSonarBox                 *sonar_box);
-
-static gboolean          test_entry     (gpointer                        udata);
+static void             test                     (ApplicationData   *app_data);
+static void             do_test                  (ApplicationData   *app_data,
+                                                  int                test_id);
+static void             complete_test            (ApplicationData   *app_data,
+                                                  int                test_result);
+static gboolean         test_source              (ApplicationData   *app_data);
 
 
 /* Сравнивает структуры HyScanAntennaPosition. */
 static gboolean
 pos_equals (const HyScanAntennaPosition *p1,
-            const HyScanAntennaPosition *p2,
-            const gdouble                eps)
+            const HyScanAntennaPosition *p2)
 {
-  if (fabs (p1->x - p2->x) > eps)
-    return FALSE;
-  if (fabs (p1->y - p2->y) > eps)
-    return FALSE;
-  if (fabs (p1->z - p2->z) > eps)
-    return FALSE;
-  if (fabs (p1->gamma - p2->gamma) > eps)
-    return FALSE;
-  if (fabs (p1->psi - p2->psi) > eps)
-    return FALSE;
-  if (fabs (p1->theta - p2->theta) > eps)
-    return FALSE;
-  return TRUE;
+  return p1->x == p2->x &&
+         p1->y == p2->y &&
+         p1->z == p2->z &&
+         p1->gamma == p2->gamma &&
+         p1->psi == p2->psi &&
+         p1->theta == p2->theta;
 }
 
 /* Функция возвращает тип источника данных по его индексу. */
 static HyScanSourceType
-source_type_by_index (const guint index)
+source_type_by_index (guint index)
 {
+  HyScanSourceType source_type;
+
   switch (index)
     {
-      case 0:
-        return HYSCAN_SOURCE_SIDE_SCAN_STARBOARD;
-      case 1:
-        return HYSCAN_SOURCE_SIDE_SCAN_PORT;
-      case 2:
-        return HYSCAN_SOURCE_ECHOSOUNDER;
-      default:
-        return HYSCAN_SOURCE_INVALID;
+    case 0:
+      source_type = HYSCAN_SOURCE_SIDE_SCAN_STARBOARD;
+      break;
+
+    case 1:
+      source_type = HYSCAN_SOURCE_SIDE_SCAN_PORT;
+      break;
+
+    case 2:
+      source_type = HYSCAN_SOURCE_ECHOSOUNDER;
+      break;
+
+    default:
+      source_type = HYSCAN_SOURCE_INVALID;
     }
+
+  return source_type;
 }
 
 /* Функция возвращает информацию об источнике данных по его типу. */
 static SourceInfo *
-source_info_by_source_type (const HyScanSourceType type)
+source_info_by_source_type (ApplicationData *app_data,
+                            HyScanSourceType type)
 {
+  SourceInfo *source_info;
+
   switch (type)
     {
-      case HYSCAN_SOURCE_SIDE_SCAN_STARBOARD:
-        return &starboard;
-      case HYSCAN_SOURCE_SIDE_SCAN_PORT:
-        return &port;
-      case HYSCAN_SOURCE_ECHOSOUNDER:
-        return &echosounder;
-      default:
-        return NULL;
-    }
-}
+    case HYSCAN_SOURCE_SIDE_SCAN_STARBOARD:
+      source_info = &app_data->starboard;
+      break;
 
-/* Возвращает случайное имя виртуального порта из доступных. */
-static gchar *
-random_virtual_port_name (void)
-{
-  return random_port_name_with_prefix ("virtual");
-}
+    case HYSCAN_SOURCE_SIDE_SCAN_PORT:
+      source_info = &app_data->port;
+      break;
 
-/* Возвращает случайное имя udp/ip порта из доступных. */
-static gchar *
-random_udp_ip_port_name (void)
-{
-  return random_port_name_with_prefix ("udp");
-}
+    case HYSCAN_SOURCE_ECHOSOUNDER:
+      source_info = &app_data->echosounder;
+      break;
 
-/* Возвращает случайное имя uart порта из доступных. */
-static gchar *
-random_uart_port_name (void)
-{
-  return random_port_name_with_prefix ("uart");
-}
-
-/* Возвращает случайное имя порта.
- * Имя собирается из префикса и номера порта.
- * Номер порта выбирается из доступного интервала. */
-static gchar *
-random_port_name_with_prefix (const gchar *prefix)
-{
-  GList *keys, *port;
-  gint i, len;
-  gchar *target_name;
-  gpointer retval = NULL;
-
-  target_name = g_strdup_printf ("%s.%d", prefix, g_random_int_range (0, SENSOR_N_PORTS) + 1);
-  keys = g_hash_table_get_keys (ports);
-  len = g_list_length (keys);
-
-  port = keys;
-  for (i = 0; i < len; ++i)
-    {
-      if (!g_strcmp0 (port->data, target_name))
-        {
-          retval = port->data;
-          break;
-        }
-
-      port = port->next;
+    default:
+      source_info = NULL;
     }
 
-  g_list_free (keys);
-  g_free (target_name);
-
-  return retval;
-}
-
-/* Возвращает случайное имя порта из доступных. */
-static gchar *
-random_port_name (void)
-{
-  GList *keys, *port;
-  gint i, index;
-  gpointer retval;
-
-  keys = g_hash_table_get_keys (ports);
-  index = g_random_int_range (0, g_list_length (keys));
-
-  port = keys;
-  for (i = 0; i < index; ++i)
-    port = port->next;
-
-  retval = port->data;
-  g_list_free (keys);
-
-  return retval;
+  return source_info;
 }
 
 /* Возвращает случайный режим uart для указанного порта. */
 static gint
-random_uart_mode (const gchar *name)
+random_uart_mode (GHashTable  *ports,
+                  const gchar *name)
 {
   UARTPortInfo *port = g_hash_table_lookup (ports, name);
   return port->uart_mode_ids[g_random_int_range (1, SENSOR_N_UART_MODES)];
@@ -639,7 +594,8 @@ random_uart_mode (const gchar *name)
 
 /* Возвращает случайное uart-устройство для указанного порта. */
 static gint
-random_uart_device (const gchar *name)
+random_uart_device (GHashTable  *ports,
+                    const gchar *name)
 {
   UARTPortInfo *port = g_hash_table_lookup (ports, name);
   return port->uart_device_ids[g_random_int_range (1, SENSOR_N_UART_DEVICES)];
@@ -647,7 +603,8 @@ random_uart_device (const gchar *name)
 
 /* Возвращает случайный ip-адрес для указанного порта. */
 static gint
-random_ip_addres (const gchar *name)
+random_ip_addres (GHashTable  *ports,
+                  const gchar *name)
 {
   UDPIPPortInfo *port = g_hash_table_lookup (ports, name);
   return port->ip_address_ids[g_random_int_range (1, SENSOR_N_IP_ADDRESSES)];
@@ -657,60 +614,66 @@ random_ip_addres (const gchar *name)
 static HyScanAntennaPosition
 random_antenna_position (void)
 {
-  HyScanAntennaPosition p;
-  p.x = g_random_double ();
-  p.y = g_random_double ();
-  p.z = g_random_double ();
-  p.psi = g_random_double ();
-  p.gamma = g_random_double ();
-  p.theta = g_random_double ();
+  HyScanAntennaPosition p = {
+    g_random_double (),
+    g_random_double (),
+    g_random_double (),
+    g_random_double (),
+    g_random_double (),
+    g_random_double ()
+  };
   return p;
-}
-
-/* Возвращает случайный источник из доступных. */
-static HyScanSourceType
-random_source_type (void)
-{
-  return source_type_by_index (g_random_int () % 2);
 }
 
 /* Возвращает случайную преднастройку для указанного источника. */
 static gint
-random_preset (const HyScanSourceType source_type)
+random_preset (SourceInfo *source_info)
 {
-  SourceInfo *source_info = source_info_by_source_type (source_type);
   return source_info->generator.preset_ids[g_random_int () % (GENERATOR_N_PRESETS - 1)];
 }
 
 /* Возвращает случайный сигнал. */
 static HyScanGeneratorSignalType
-random_signal (void)
+random_signal_type (void)
 {
+  HyScanGeneratorSignalType signal_type;
+
   switch (g_random_int_range (0, 4))
     {
-      case 0:
-        return HYSCAN_GENERATOR_SIGNAL_AUTO;
-      case 1:
-        return HYSCAN_GENERATOR_SIGNAL_TONE;
-      case 2:
-        return HYSCAN_GENERATOR_SIGNAL_LFM;
-      case 3:
-        return HYSCAN_GENERATOR_SIGNAL_LFMD;
-      default:
-        return HYSCAN_GENERATOR_SIGNAL_INVALID;
+    case 0:
+      signal_type = HYSCAN_GENERATOR_SIGNAL_AUTO;
+      break;
+
+    case 1:
+      signal_type = HYSCAN_GENERATOR_SIGNAL_TONE;
+      break;
+
+    case 2:
+      signal_type = HYSCAN_GENERATOR_SIGNAL_LFM;
+      break;
+
+    case 3:
+      signal_type = HYSCAN_GENERATOR_SIGNAL_LFMD;
+      break;
+
+    default:
+      signal_type = HYSCAN_GENERATOR_SIGNAL_INVALID;
     }
+
+  return signal_type;
 }
 
 /* Возвращает случайный сигнал из указанных. */
 static HyScanGeneratorSignalType
-random_signal_full (HyScanGeneratorSignalType accepted_signals)
+random_accepted_signal_type (HyScanGeneratorSignalType accepted_signals)
 {
   HyScanGeneratorSignalType signal_type;
+
   if (accepted_signals == HYSCAN_GENERATOR_SIGNAL_INVALID)
     return HYSCAN_GENERATOR_SIGNAL_INVALID;
 
   do
-    signal_type = random_signal ();
+    signal_type = random_signal_type ();
   while (!(signal_type & accepted_signals));
 
   return signal_type;
@@ -720,57 +683,86 @@ random_signal_full (HyScanGeneratorSignalType accepted_signals)
 static HyScanSonarSyncType
 random_sync (void)
 {
+  HyScanSonarSyncType sync_type;
+
   switch (g_random_int_range (0, 3))
     {
-      case 0:
-        return HYSCAN_SONAR_SYNC_INTERNAL;
-      case 1:
-        return HYSCAN_SONAR_SYNC_SOFTWARE;
-      case 2:
-        return HYSCAN_SONAR_SYNC_EXTERNAL;
-      default:
-        return HYSCAN_SONAR_SYNC_INVALID;
+    case 0:
+      sync_type = HYSCAN_SONAR_SYNC_INTERNAL;
+      break;
+
+    case 1:
+      sync_type = HYSCAN_SONAR_SYNC_SOFTWARE;
+      break;
+
+    case 2:
+      sync_type = HYSCAN_SONAR_SYNC_EXTERNAL;
+      break;
+
+    default:
+      sync_type = HYSCAN_SONAR_SYNC_INVALID;
     }
+
+  return sync_type;
 }
 
 /* Возвращает случайный тип галса. */
 static HyScanTrackType
 random_track_type (void)
 {
+  HyScanTrackType track_type;
+
   switch (g_random_int_range (0, 3))
     {
-      case 0:
-        return HYSCAN_TRACK_TACK;
-      case 1:
-        return HYSCAN_TRACK_SURVEY;
-      case 2:
-        return HYSCAN_TRACK_CALIBRATION;
-      default:
-        return HYSCAN_TRACK_UNSPECIFIED;
+    case 0:
+      track_type = HYSCAN_TRACK_TACK;
+      break;
+
+    case 1:
+      track_type = HYSCAN_TRACK_SURVEY;
+      break;
+
+    case 2:
+      track_type = HYSCAN_TRACK_CALIBRATION;
+      break;
+
+    default:
+      track_type = HYSCAN_TRACK_UNSPECIFIED;
     }
+
+  return track_type;
 }
 
 /* Функция изменяет параметры VIRTUAL порта. */
 static gboolean
-sensor_virtual_port_param (ServerInfo  *server,
+sensor_virtual_port_param (GHashTable  *sensors_frames,
                            const gchar *name,
                            guint        channel,
                            gint64       time_offset)
 {
-  if (g_strcmp0 (name, frames.sensor_virtual_port_param_frame.name))
-    return FALSE;
-  if (channel != frames.sensor_virtual_port_param_frame.channel)
-    return FALSE;
-  if (time_offset != frames.sensor_virtual_port_param_frame.time_offset)
-    return FALSE;
+  SensorFrames *sensor_frames;
+  SensorVirtualPortParamFrame *frame;
 
-  frames.sensor_virtual_port_param_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  sensor_frames = g_hash_table_lookup (sensors_frames, name);
+  if (sensor_frames == NULL)
+    {
+      g_warning ("sensor_virtual_port_param(): unknown sensor %s", name);
+      return FALSE;
+    }
+
+  frame = &sensor_frames->virtual_port_frame;
+
+  frame->result = !g_strcmp0 (name, frame->name) &&
+                  channel == frame->channel &&
+                  time_offset == frame->time_offset;
+
+  return frame->result;
 }
 
 /* Функция изменяет параметры UART порта. */
 static gboolean
-sensor_uart_port_param (ServerInfo                *server,
+sensor_uart_port_param (GHashTable                *sensors_frames,
                         const gchar               *name,
                         guint                      channel,
                         gint64                     time_offset,
@@ -778,26 +770,30 @@ sensor_uart_port_param (ServerInfo                *server,
                         guint                      uart_device,
                         guint                      uart_mode)
 {
-  if (g_strcmp0 (name, frames.sensor_uart_port_param_frame.name))
-    return FALSE;
-  if (channel != frames.sensor_uart_port_param_frame.channel)
-    return FALSE;
-  if (time_offset != frames.sensor_uart_port_param_frame.time_offset)
-    return FALSE;
-  if (protocol != frames.sensor_uart_port_param_frame.protocol)
-    return FALSE;
-  if (uart_device != frames.sensor_uart_port_param_frame.uart_device)
-    return FALSE;
-  if (uart_mode != frames.sensor_uart_port_param_frame.uart_mode)
-    return FALSE;
+  SensorFrames *sensor_frames;
+  SensorUartPortParamFrame *frame;
 
-  frames.sensor_uart_port_param_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  sensor_frames = g_hash_table_lookup (sensors_frames, name);
+  if (sensor_frames == NULL)
+    {
+      g_warning ("sensor_uart_port_param(): unknown sensor %s", name);
+      return FALSE;
+    }
+
+  frame = &sensor_frames->uart_port_frame;
+  frame->result = !g_strcmp0 (name, frame->name) &&
+                  channel == frame->channel &&
+                  time_offset == frame->time_offset &&
+                  protocol == frame->protocol &&
+                  uart_device == frame->uart_device &&
+                  uart_mode == frame->uart_mode;
+  return frame->result;
 }
 
 /* Функция изменяет параметры UDP/IP порта. */
 static gboolean
-sensor_udp_ip_port_param (ServerInfo                *server,
+sensor_udp_ip_port_param (GHashTable                *sensors_frames,
                           const gchar               *name,
                           guint                      channel,
                           gint64                     time_offset,
@@ -805,590 +801,1164 @@ sensor_udp_ip_port_param (ServerInfo                *server,
                           guint                      ip_address,
                           guint                      udp_port)
 {
-  if (g_strcmp0 (name, frames.sensor_udp_ip_port_param_frame.name))
-    return FALSE;
-  if (channel != frames.sensor_udp_ip_port_param_frame.channel)
-    return FALSE;
-  if (time_offset != frames.sensor_udp_ip_port_param_frame.time_offset)
-    return FALSE;
-  if (protocol != frames.sensor_udp_ip_port_param_frame.protocol)
-    return FALSE;
-  if (ip_address != frames.sensor_udp_ip_port_param_frame.ip_address)
-    return FALSE;
-  if (udp_port != frames.sensor_udp_ip_port_param_frame.udp_port)
-    return FALSE;
+  SensorFrames *sensor_frames;
+  SensorUdpIpPortParamFrame *frame;
 
-  frames.sensor_udp_ip_port_param_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  sensor_frames = g_hash_table_lookup (sensors_frames, name);
+  if (sensor_frames == NULL)
+    {
+      g_warning ("sensor_udp_ip_port_param(): unknown sensor %s", name);
+      return FALSE;
+    }
+
+  frame = &sensor_frames->udp_port_frame;
+  frame->result  = !g_strcmp0 (name, frame->name) &&
+                   channel == frame->channel &&
+                   time_offset == frame->time_offset &&
+                   protocol == frame->protocol &&
+                   ip_address == frame->ip_address &&
+                   udp_port == frame->udp_port;
+  return frame->result;
 }
 
 /* Функция устанавливает местоположение приёмной антенны датчика. */
 static gboolean
-sensor_set_position (ServerInfo            *server,
+sensor_set_position (GHashTable            *sensors_frames,
                      const gchar           *name,
                      HyScanAntennaPosition *position)
 {
-  if (g_strcmp0 (name, frames.sensor_set_position_frame.name))
-    return FALSE;
-  if (!pos_equals (position, &frames.sensor_set_position_frame.position, 10e-3))
-    return FALSE;
+  SensorFrames *sensor_frames;
+  SensorSetPositionFrame *frame;
 
-  frames.sensor_set_position_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  sensor_frames = g_hash_table_lookup (sensors_frames, name);
+  if (sensor_frames == NULL)
+    {
+      g_warning ("sensor_set_position(): unknown sensor %s", name);
+      return FALSE;
+    }
+
+  frame = &sensor_frames->set_position_frame;
+  frame->result = !g_strcmp0 (name, frame->name) &&
+           pos_equals (position, &frame->position);
+  return frame->result;
 }
 
 /* Функция включает и выключает датчик. */
 static gboolean
-sensor_set_enable (ServerInfo  *server,
+sensor_set_enable (GHashTable  *sensors_frames,
                    const gchar *name,
                    gboolean     enable)
 {
-  if (g_strcmp0 (name, frames.sensor_set_enable_frame.name))
-    return FALSE;
-  if (enable != frames.sensor_set_enable_frame.enable)
-    return FALSE;
+  SensorFrames *sensor_frames;
+  SensorSetEnableFrame *frame;
 
-  frames.sensor_set_enable_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  sensor_frames = g_hash_table_lookup (sensors_frames, name);
+  if (sensor_frames == NULL)
+    {
+      g_warning ("sensor_set_enable(): unknown sensor %s", name);
+      return FALSE;
+    }
+
+  frame = &sensor_frames->set_enable_frame;
+  frame->result = !g_strcmp0 (name, frame->name) &&
+                  enable == frame->enable;
+  return frame->result;
 }
 
 /* Функция устанавливает режим работы генератора по преднастройкам. */
 static gboolean
-generator_set_preset (ServerInfo       *server,
+generator_set_preset (GHashTable       *sources_frames,
                       HyScanSourceType  source,
                       guint             preset)
 {
-  if (source != frames.generator_set_preset_frame.source)
-    return FALSE;
-  if (preset != frames.generator_set_preset_frame.preset)
-    return FALSE;
+  SourceFrames *source_frames;
+  GeneratorSetPresetFrame *frame;
 
-  frames.generator_set_preset_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  source_frames = g_hash_table_lookup (sources_frames, GINT_TO_POINTER (source));
+  if (source_frames == NULL)
+    {
+      g_warning ("generator_set_preset(): unknown source %d", source);
+      return FALSE;
+    }
+
+  frame = &source_frames->gen_set_preset_frame;
+  frame->result = source == frame->source &&
+                  preset == frame->preset;
+  return frame->result;
 }
 
 /* Функция устанавливает автоматический режим работы генератора. */
 static gboolean
-generator_set_auto (ServerInfo                *server,
+generator_set_auto (GHashTable                *sources_frames,
                     HyScanSourceType           source,
-                    HyScanGeneratorSignalType  signal)
+                    HyScanGeneratorSignalType  signal_type)
 {
-  if (source != frames.generator_set_auto_frame.source)
-    return FALSE;
-  if (signal != frames.generator_set_auto_frame.signal)
-    return FALSE;
+  SourceFrames *source_frames;
+  GeneratorSetAutoFrame *frame;
 
-  frames.generator_set_auto_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  source_frames = g_hash_table_lookup (sources_frames, GINT_TO_POINTER (source));
+  if (source_frames == NULL)
+    {
+      g_warning ("generator_set_auto(): unknown source %d", source);
+      return FALSE;
+    }
+
+  frame = &source_frames->gen_set_auto_frame;
+  frame->result = source == frame->source &&
+                  signal_type == frame->signal_type;
+  return frame->result;
 }
 
 /* Функция устанавливает упрощённый режим работы генератора. */
 static gboolean
-generator_set_simple (ServerInfo                *server,
+generator_set_simple (GHashTable                *sources_frames,
                       HyScanSourceType           source,
-                      HyScanGeneratorSignalType  signal,
+                      HyScanGeneratorSignalType  signal_type,
                       gdouble                    power)
 {
-  if (source != frames.generator_set_simple_frame.source)
-    return FALSE;
-  if (signal != frames.generator_set_simple_frame.signal)
-    return FALSE;
-  if (fabs (power - frames.generator_set_simple_frame.power) > 10e-3)
-    return FALSE;
+  SourceFrames *source_frames;
+  GeneratorSetSimpleFrame *frame;
 
-  frames.generator_set_simple_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  source_frames = g_hash_table_lookup (sources_frames, GINT_TO_POINTER (source));
+  if (source_frames == NULL)
+    {
+      g_warning ("generator_set_simple(): unknown source %d", source);
+      return FALSE;
+    }
+
+  frame = &source_frames->gen_set_simple_frame;
+  frame->result = source == frame->source &&
+                  signal_type == frame->signal_type &&
+                  power == frame->power;
+  return frame->result;
 }
 
 /* Функция устанавливает расширенный режим работы генератора. */
 static gboolean
-generator_set_extended (ServerInfo                *server,
+generator_set_extended (GHashTable                *sources_frames,
                         HyScanSourceType           source,
-                        HyScanGeneratorSignalType  signal,
+                        HyScanGeneratorSignalType  signal_type,
                         gdouble                    duration,
                         gdouble                    power)
 {
-  if (source != frames.generator_set_extended_frame.source)
-    return FALSE;
-  if (signal != frames.generator_set_extended_frame.signal)
-    return FALSE;
-  if (duration != frames.generator_set_extended_frame.duration)
-    return FALSE;
-  if (fabs (power - frames.generator_set_extended_frame.power) > 10e-3)
-    return FALSE;
+  SourceFrames *source_frames;
+  GeneratorSetExtendedFrame *frame;
 
-  frames.generator_set_extended_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  source_frames = g_hash_table_lookup (sources_frames, GINT_TO_POINTER (source));
+  if (source_frames == NULL)
+    {
+      g_warning ("generator_set_extended(): unknown source %d", source);
+      return FALSE;
+    }
+
+  frame = &source_frames->gen_set_extended_frame;
+  frame->result = source == frame->source &&
+                  signal_type == frame->signal_type &&
+                  duration == frame->duration &&
+                  power == frame->power;
+  return frame->result;
 }
 
 /* Функция включает или отключает генератор. */
 static gboolean
-generator_set_enable (ServerInfo       *server,
+generator_set_enable (GHashTable       *sources_frames,
                       HyScanSourceType  source,
                       gboolean          enable)
 {
-  if (source != frames.generator_set_enable_frame.source)
-    return FALSE;
-  if (enable != frames.generator_set_enable_frame.enable)
-    return FALSE;
+  SourceFrames *source_frames;
+  GeneratorSetEnableFrame *frame;
 
-  frames.generator_set_enable_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  source_frames = g_hash_table_lookup (sources_frames, GINT_TO_POINTER (source));
+  if (source_frames == NULL)
+    {
+      g_warning ("generator_set_enable(): unknown source %d", source);
+      return FALSE;
+    }
+
+  frame = &source_frames->gen_set_enable_frame;
+  frame->result = source == frame->source &&
+                  enable == frame->enable;
+  return frame->result;
 }
 
 /* Функция устанавливает автоматический режим управления ВАРУ. */
 static gboolean
-tvg_set_auto (ServerInfo       *server,
+tvg_set_auto (GHashTable       *sources_frames,
               HyScanSourceType  source,
               gdouble           level,
               gdouble           sensitivity)
 {
-  if (source != frames.tvg_set_auto_frame.source)
-    return FALSE;
-  if (fabs (level - frames.tvg_set_auto_frame.level) > 10e-3)
-    return FALSE;
-  if (fabs (sensitivity - frames.tvg_set_auto_frame.sensitivity) > 10e-3)
-    return FALSE;
+  SourceFrames *source_frames;
+  TvgSetAutoFrame *frame;
 
-  frames.tvg_set_auto_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  source_frames = g_hash_table_lookup (sources_frames, GINT_TO_POINTER (source));
+  if (source_frames == NULL)
+    {
+      g_warning ("tvg_set_auto(): unknown source %d", source);
+      return FALSE;
+    }
+
+  frame = &source_frames->tvg_set_auto_frame;
+  frame->result = source == frame->source &&
+                  level == frame->level &&
+                  sensitivity == frame->sensitivity;
+  return frame->result;
 }
 
 /* Функция устанавливает постоянный уровень усиления ВАРУ. */
 static gboolean
-tvg_set_constant (ServerInfo       *server,
+tvg_set_constant (GHashTable       *sources_frames,
                   HyScanSourceType  source,
                   gdouble           gain)
 {
-  if (source != frames.tvg_set_constant_frame.source)
-    return FALSE;
-  if (fabs (gain - frames.tvg_set_constant_frame.gain) > 10e-3)
-    return FALSE;
+  SourceFrames *source_frames;
+  TvgSetConstantFrame *frame;
 
-  frames.tvg_set_constant_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  source_frames = g_hash_table_lookup (sources_frames, GINT_TO_POINTER (source));
+  if (source_frames == NULL)
+    {
+      g_warning ("tvg_set_constant(): unknown source %d", source);
+      return FALSE;
+    }
+
+  frame = &source_frames->tvg_set_constant_frame;
+  frame->result = source == frame->source &&
+                  gain == frame->gain;
+  return frame->result;
 }
 
 /* Функция устанавливает линейный закон усиления ВАРУ. */
 static gboolean
-tvg_set_linear_db (ServerInfo       *server,
+tvg_set_linear_db (GHashTable       *sources_frames,
                    HyScanSourceType  source,
                    gdouble           gain0,
                    gdouble           step)
 {
-  if (source != frames.tvg_set_linear_db_frame.source)
-    return FALSE;
-  if (fabs (gain0 - frames.tvg_set_linear_db_frame.gain0) > 10e-3)
-    return FALSE;
-  if (fabs (step - frames.tvg_set_linear_db_frame.step) > 10e-3)
-    return FALSE;
+  SourceFrames *source_frames;
+  TvgSetLinearDBFrame *frame;
 
-  frames.tvg_set_linear_db_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  source_frames = g_hash_table_lookup (sources_frames, GINT_TO_POINTER (source));
+  if (source_frames == NULL)
+    {
+      g_warning ("tvg_set_linear_db(): unknown source %d", source);
+      return FALSE;
+    }
+
+  frame = &source_frames->tvg_set_linear_db_frame;
+  frame->result = source == frame->source &&
+                  gain0 == frame->gain0 &&
+                  step == frame->step;
+  return frame->result;
 }
 
 /* Функция устанавливает логарифмический закон усиления ВАРУ. */
 static gboolean
-tvg_set_logarithmic (ServerInfo       *server,
+tvg_set_logarithmic (GHashTable       *sources_frames,
                      HyScanSourceType  source,
                      gdouble           gain0,
                      gdouble           beta,
                      gdouble           alpha)
 {
-  if (source != frames.tvg_set_logarithmic_frame.source)
-    return FALSE;
-  if (fabs (gain0 - frames.tvg_set_logarithmic_frame.gain0) > 10e-3)
-    return FALSE;
-  if (fabs (beta - frames.tvg_set_logarithmic_frame.beta) > 10e-3)
-    return FALSE;
-  if (fabs (alpha - frames.tvg_set_logarithmic_frame.alpha) > 10e-3)
-    return FALSE;
+  SourceFrames *source_frames;
+  TvgSetLogarithmicFrame *frame;
 
-  frames.tvg_set_logarithmic_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  source_frames = g_hash_table_lookup (sources_frames, GINT_TO_POINTER (source));
+  if (source_frames == NULL)
+    {
+      g_warning ("tvg_set_logarithmic(): unknown source %d", source);
+      return FALSE;
+    }
+
+  frame = &source_frames->tvg_set_logarithmic_frame;
+  frame->result = source == frame->source &&
+                  gain0 == frame->gain0 &&
+                  beta == frame->beta &&
+                  alpha == frame->alpha;
+  return frame->result;
 }
 
 /* Функция включает или отключает ВАРУ. */
 static gboolean
-tvg_set_enable (ServerInfo       *server,
+tvg_set_enable (GHashTable       *sources_frames,
                 HyScanSourceType  source,
                 gboolean          enable)
 {
-  if (source != frames.tvg_set_enable_frame.source)
-    return FALSE;
-  if (enable != frames.tvg_set_enable_frame.enable)
-    return FALSE;
+  SourceFrames *source_frames;
+  TvgSetEnableFrame *frame;
 
-  frames.tvg_set_enable_frame.result = TRUE;
-  return TRUE;
-}
+  /* Получение параметров для источника данных. */
+  source_frames = g_hash_table_lookup (sources_frames, GINT_TO_POINTER (source));
+  if (source_frames == NULL)
+    {
+      g_warning ("tvg_set_enable(): unknown source %d", source);
+      return FALSE;
+    }
 
-/* Функция устанавливает тип синхронизации излучения. */
-static gboolean
-sonar_set_sync_type (ServerInfo          *server,
-                     HyScanSonarSyncType  sync_type)
-{
-  if (sync_type != frames.sonar_set_sync_type_frame.sync_type)
-    return FALSE;
-
-  frames.sonar_set_sync_type_frame.result = TRUE;
-  return TRUE;
+  frame = &source_frames->tvg_set_enable_frame;
+  frame->result = source == frame->source &&
+                  enable == frame->enable;
+  return frame->result;
 }
 
 /* Функция устанавливает местоположение приёмной антенны гидролокатора. */
 static gboolean
-sonar_set_position (ServerInfo            *server,
+sonar_set_position (GHashTable            *sources_frames,
                     HyScanSourceType       source,
                     HyScanAntennaPosition *position)
 {
-  if (source != frames.sonar_set_position_frame.source)
-    return FALSE;
-  if (!pos_equals (position, &frames.sonar_set_position_frame.position, 10e-3))
-    return FALSE;
+  SourceFrames *source_frames;
+  SonarSetPositionFrame *frame;
 
-  frames.sonar_set_position_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  source_frames = g_hash_table_lookup (sources_frames, GINT_TO_POINTER (source));
+  if (source_frames == NULL)
+    {
+      g_warning ("sonar_set_position(): unknown source %d", source);
+      return FALSE;
+    }
+
+  frame = &source_frames->set_position_frame;
+  frame->result = source == frame->source &&
+                  pos_equals (position, &frame->position);
+  return frame->result;
 }
 
 /* Функция устанавливает время приёма эхосигнала бортом. */
 static gboolean
-sonar_set_receive_time (ServerInfo       *server,
+sonar_set_receive_time (GHashTable       *sources_frames,
                         HyScanSourceType  source,
                         gdouble           receive_time)
 {
-  if (source != frames.sonar_set_receive_time_frame.source)
-    return FALSE;
-  if (fabs (receive_time - frames.sonar_set_receive_time_frame.receive_time) > 10e-3)
-    return FALSE;
+  SourceFrames *source_frames;
+  SonarSetReceiveTimeFrame *frame;
 
-  frames.sonar_set_receive_time_frame.result = TRUE;
-  return TRUE;
+  /* Получение параметров для источника данных. */
+  source_frames = g_hash_table_lookup (sources_frames, GINT_TO_POINTER (source));
+  if (source_frames == NULL)
+    {
+      g_warning ("sonar_set_receive_time(): unknown source %d", source);
+      return FALSE;
+    }
+
+  frame = &source_frames->set_receive_time_frame;
+  frame->result = source == frame->source &&
+                  receive_time == frame->receive_time;
+  return frame->result;
+}
+
+/* Функция устанавливает тип синхронизации излучения. */
+static gboolean
+sonar_set_sync_type (SonarFrames         *sonar_frames,
+                     HyScanSonarSyncType  sync_type)
+{
+  sonar_frames->sync_type_frame.result = sync_type == sonar_frames->sync_type_frame.sync_type;
+  return sonar_frames->sync_type_frame.result;
 }
 
 /* Функция включает гидролокатор в работу. */
 static gboolean
-sonar_start (ServerInfo      *server,
+sonar_start (SonarFrames     *sonar_frames,
              const gchar     *track_name,
              HyScanTrackType  track_type)
 {
-  if (track_type != frames.sonar_start_frame.track_type)
-    return FALSE;
+  SonarStartFrame *frame;
 
-  frames.sonar_start_frame.result = TRUE;
-  return TRUE;
+  frame = &sonar_frames->start_frame;
+  frame->result = !g_strcmp0 (track_name, frame->track_name) &&
+                  track_type == frame->track_type;
+  return frame->result;
 }
 
 /* Функция останавливает работу гидролокатора. */
 static gboolean
-sonar_stop (ServerInfo *server)
+sonar_stop (SonarFrames *sonar_frames)
 {
-
-  frames.sonar_stop_frame.result = TRUE;
+  sonar_frames->stop_frame.result = TRUE;
   return TRUE;
 }
 
 /* Функция выполняет цикл зондирования. */
 static gboolean
-sonar_ping (ServerInfo *server)
+sonar_ping (SonarFrames *sonar_frames)
 {
-  frames.sonar_ping_frame.result = TRUE;
+  sonar_frames->ping_frame.result = TRUE;
   return TRUE;
+}
+
+static gboolean
+check_virtual_sensor (const gchar      *name,
+                      SensorFrames     *frames,
+                      HyScanSonarModel *sonar_model)
+{
+  guint channel;
+  gint64 time_offset;
+  SensorVirtualPortParamFrame *frame;
+
+  if (!frames->set_enable_frame.enable)
+    return TRUE;
+
+  frame = &frames->virtual_port_frame;
+
+  if (!frame->result)
+    {
+      g_message ("%s set params failed.", name);
+      return FALSE;
+    }
+
+  hyscan_sonar_model_sensor_get_virtual_params (sonar_model, name, &channel, &time_offset);
+
+  return channel == frame->channel &&
+         time_offset == frame->time_offset;
+}
+
+static gboolean
+check_uart_sensor (const gchar      *name,
+                   SensorFrames     *frames,
+                   HyScanSonarModel *sonar_model)
+{
+  guint channel;
+  gint64 time_offset;
+  HyScanSensorProtocolType protocol;
+  guint uart_device;
+  guint uart_mode;
+  SensorUartPortParamFrame *frame;
+
+  if (!frames->set_enable_frame.enable)
+    return TRUE;
+
+  frame = &frames->uart_port_frame;
+
+  if (!frame->result)
+    {
+      g_message ("%s set params failed.", name);
+      return FALSE;
+    }
+
+  hyscan_sonar_model_sensor_get_uart_params (sonar_model,
+                                             name,
+                                             &channel,
+                                             &time_offset,
+                                             &protocol,
+                                             &uart_device,
+                                             &uart_mode);
+
+  return channel == frame->channel &&
+         time_offset == frame->time_offset &&
+         protocol == frame->protocol &&
+         uart_device == frame->uart_device &&
+         uart_mode == frame->uart_mode;
+}
+
+static gboolean
+check_udp_sensor (const gchar      *name,
+                  SensorFrames     *frames,
+                  HyScanSonarModel *sonar_model)
+{
+  guint channel;
+  gint64 time_offset;
+  HyScanSensorProtocolType protocol;
+  guint ip_address;
+  guint16 udp_port;
+  SensorUdpIpPortParamFrame *frame;
+
+  if (!frames->set_enable_frame.enable)
+    return TRUE;
+
+  frame = &frames->udp_port_frame;
+
+  if (!frame->result)
+    {
+      g_message ("%s set params failed.", name);
+      return FALSE;
+    }
+
+  hyscan_sonar_model_sensor_get_udp_ip_params (sonar_model,
+                                               name,
+                                               &channel,
+                                               &time_offset,
+                                               &protocol,
+                                               &ip_address,
+                                               &udp_port);
+
+  return channel == frame->channel &&
+         time_offset == frame->time_offset &&
+         protocol == frame->protocol &&
+         ip_address == frame->ip_address &&
+         udp_port == frame->udp_port;
+}
+
+static gboolean
+check_sensor_params (const gchar      *name,
+                     SensorFrames     *frames,
+                     HyScanSonarModel *sonar_model)
+{
+  HyScanAntennaPosition *pos;
+  gboolean result = TRUE;
+
+  if (!frames->set_enable_frame.result)
+    {
+      g_message ("Sensor %s enable failed", name);
+      result = FALSE;
+      goto exit;
+    }
+
+  if (!frames->set_position_frame.result)
+    {
+      g_message ("Sensor %s position failed", name);
+      result = FALSE;
+      goto exit;
+    }
+
+  if (hyscan_sonar_model_sensor_is_enabled (sonar_model, name) != frames->set_enable_frame.enable)
+    {
+      g_message ("Sensor %s enable mismatch", name);
+      result = FALSE;
+      goto exit;
+    }
+
+  pos = hyscan_sonar_model_sensor_get_position (sonar_model, name);
+  if (pos == NULL)
+    {
+      g_message ("Sensor %s position is NULL", name);
+      result = FALSE;
+      goto exit;
+    }
+
+  result = pos_equals (pos, &frames->set_position_frame.position);
+  g_free (pos);
+  
+  if (!result)
+    g_message ("Sensor %s position mismatch", name);
+
+exit:
+  return result;
+}
+
+static gboolean
+check_tvg_enable (HyScanSonarModel *sonar_model,
+                  HyScanSourceType  source_type,
+                  SourceFrames     *frames)
+{
+  TvgSetEnableFrame *frame;
+  gdouble enabled;
+
+  frame = &frames->tvg_set_enable_frame;
+
+  if (!frame->result)
+    {
+      g_message ("source %d: tvg enable failed.", source_type);
+      return FALSE;
+    }
+
+  enabled = hyscan_sonar_model_tvg_is_enabled (sonar_model, source_type);
+
+  return enabled == frame->enable;
+}
+
+static gboolean
+check_tvg_auto (HyScanSonarModel *sonar_model,
+                HyScanSourceType  source_type,
+                SourceFrames     *frames)
+{
+  TvgSetAutoFrame *frame;
+  gdouble level, sensitivity;
+
+  if (!frames->tvg_set_enable_frame.enable)
+    return TRUE;
+
+  frame = &frames->tvg_set_auto_frame;
+
+  if (!frame->result)
+    {
+      g_message ("source %d: tvg auto failed.", source_type);
+      return FALSE;
+    }
+
+  hyscan_sonar_model_tvg_get_auto_params (sonar_model, source_type, &level, &sensitivity);
+
+  return level == frame->level &&
+         sensitivity == frame->sensitivity;
+}
+
+static gboolean
+check_tvg_constant (HyScanSonarModel *sonar_model,
+                    HyScanSourceType  source_type,
+                    SourceFrames     *frames)
+{
+  TvgSetConstantFrame *frame;
+  double gain;
+
+  if (!frames->tvg_set_enable_frame.enable)
+    return TRUE;
+
+  frame = &frames->tvg_set_constant_frame;
+
+  if (!frame->result)
+    {
+      g_message ("source %d: tvg constant failed.", source_type);
+      return FALSE;
+    }
+
+  hyscan_sonar_model_tvg_get_const_params (sonar_model, source_type, &gain);
+
+  return gain == frame->gain;
+}
+
+static gboolean
+check_tvg_linear_db (HyScanSonarModel *sonar_model,
+                     HyScanSourceType  source_type,
+                     SourceFrames     *frames)
+{
+  TvgSetLinearDBFrame *frame;
+  gdouble gain0, step;
+
+  if (!frames->tvg_set_enable_frame.enable)
+    return TRUE;
+
+  frame = &frames->tvg_set_linear_db_frame;
+
+  if (!frame->result)
+    {
+      g_message ("source %d: tvg linear db failed.", source_type);
+      return FALSE;
+    }
+
+  hyscan_sonar_model_tvg_get_linear_db_params (sonar_model, source_type, &gain0, &step);
+
+  return gain0 == frame->gain0 &&
+         step == frame->step;
+}
+
+static gboolean
+check_tvg_logarithmic (HyScanSonarModel *sonar_model,
+                       HyScanSourceType  source_type,
+                       SourceFrames     *frames)
+{
+  TvgSetLogarithmicFrame *frame;
+  gdouble gain0, beta, alpha;
+
+  if (!frames->tvg_set_enable_frame.enable)
+    return TRUE;
+
+  frame = &frames->tvg_set_logarithmic_frame;
+
+  if (!frame->result)
+    {
+      g_message ("source %d: tvg logarigthmic failed.", source_type);
+      return FALSE;
+    }
+
+  hyscan_sonar_model_tvg_get_logarithmic_params (sonar_model, source_type, &gain0, &beta, &alpha);
+
+  return gain0 == frame->gain0 &&
+         beta == frame->beta &&
+         alpha == frame->alpha;
+}
+
+static gboolean
+check_generator_enable (HyScanSonarModel *sonar_model,
+                        HyScanSourceType  source_type,
+                        SourceFrames     *frames)
+{
+  GeneratorSetEnableFrame *frame;
+  gdouble enabled;
+
+  frame = &frames->gen_set_enable_frame;
+
+  if (!frame->result)
+    {
+      g_message ("source %d: generator enable failed.", source_type);
+      return FALSE;
+    }
+
+  enabled = hyscan_sonar_model_gen_is_enabled (sonar_model, source_type);
+
+  return enabled == frame->enable;
+}
+
+static gboolean
+check_generator_preset (HyScanSonarModel *sonar_model,
+                        HyScanSourceType  source_type,
+                        SourceFrames     *frames)
+{
+  GeneratorSetPresetFrame *frame;
+  guint preset;
+
+  if (!frames->gen_set_enable_frame.enable)
+    return TRUE;
+
+  frame = &frames->gen_set_preset_frame;
+
+  if (!frame->result)
+    {
+      g_message ("source %d: generator preset failed.", source_type);
+      return FALSE;
+    }
+
+  hyscan_sonar_model_gen_get_preset_params (sonar_model, source_type, &preset);
+
+  return preset == frame->preset;
+}
+
+static gboolean
+check_generator_auto (HyScanSonarModel *sonar_model,
+                      HyScanSourceType  source_type,
+                      SourceFrames     *frames)
+{
+  HyScanGeneratorSignalType signal_type;
+  GeneratorSetAutoFrame *frame;
+
+  if (!frames->gen_set_enable_frame.enable)
+    return TRUE;
+
+  frame = &frames->gen_set_auto_frame;
+
+  if (!frame->result)
+    {
+      g_message ("source %d: generator auto failed.", source_type);
+      return FALSE;
+    }
+
+  hyscan_sonar_model_gen_get_auto_params (sonar_model, source_type, &signal_type);
+
+  return signal_type == frame->signal_type;
+}
+
+static gboolean
+check_generator_simple (HyScanSonarModel *sonar_model,
+                        HyScanSourceType  source_type,
+                        SourceFrames     *frames)
+{
+  HyScanGeneratorSignalType signal_type;
+  gdouble power;
+  GeneratorSetSimpleFrame *frame;
+
+  if (!frames->gen_set_enable_frame.enable)
+    return TRUE;
+
+  frame = &frames->gen_set_simple_frame;
+
+  if (!frame->result)
+    {
+      g_message ("source %d: generator extended failed.", source_type);
+      return FALSE;
+    }
+  
+  hyscan_sonar_model_gen_get_simple_params (sonar_model, source_type, &signal_type, &power);
+
+  return signal_type == frame->signal_type &&
+         power == frame->power;
+}
+
+static gboolean
+check_generator_extended (HyScanSonarModel *sonar_model,
+                          HyScanSourceType  source_type,
+                          SourceFrames     *frames)
+{
+  HyScanGeneratorSignalType signal_type;
+  gdouble power, duration;
+  GeneratorSetExtendedFrame *frame;
+
+  if (!frames->gen_set_enable_frame.enable)
+    return TRUE;
+
+  frame = &frames->gen_set_extended_frame;
+
+  if (!frame->result)
+    {
+      g_message ("source %d: generator extended failed.", source_type);
+      return FALSE;
+    }
+  
+  hyscan_sonar_model_gen_get_extended_params (sonar_model, source_type, &signal_type, &duration, &power);
+
+  return signal_type == frame->signal_type &&
+         duration  == frame->duration &&
+         power == frame->power;
+}
+
+static gboolean
+check_source (HyScanSonarModel *sonar_model,
+              HyScanSourceType  source_type,
+              SourceFrames     *frames)
+{
+  HyScanAntennaPosition *pos;
+  gboolean result = TRUE;
+
+  if (!frames->set_receive_time_frame.result)
+    {
+      g_message ("Source %d receive time failed", source_type);
+      result = FALSE;
+      goto exit;
+    }
+
+  if (!frames->set_position_frame.result)
+    {
+      g_message ("Source %d position failed", source_type);
+      result = FALSE;
+      goto exit;
+    }
+
+  if (hyscan_sonar_model_get_receive_time (sonar_model, source_type) != frames->set_receive_time_frame.receive_time)
+    {
+      g_message ("Source %d receive time mismatch", source_type);
+      result = FALSE;
+      goto exit;
+    }
+
+  pos = hyscan_sonar_model_sonar_get_position (sonar_model, source_type);
+  if (pos == NULL)
+    {
+      g_message ("Source %d position is NULL", source_type);
+      result = FALSE;
+      goto exit;
+    }
+
+  result = pos_equals (pos, &frames->set_position_frame.position);
+  g_free (pos);
+  
+  if (!result)
+    g_message ("Source %d position mismatch", source_type);
+
+exit:
+  return result;
+}
+
+static gboolean
+check_sonar_sync_type (HyScanSonarModel      *sonar_model,
+                       SonarSetSyncTypeFrame *frame)
+{
+  HyScanSonarSyncType sync_type;
+
+  if (!frame->result)
+    {
+      g_message ("Sonar set sync type failed");
+      return FALSE;
+    }
+
+  /* Тип синхронизации. */
+  sync_type = hyscan_sonar_model_get_sync_type (sonar_model);
+
+  return sync_type == frame->sync_type;
+}
+
+static gboolean
+check_sonar_start (HyScanSonarModel *sonar_model,
+                   SonarStartFrame  *frame)
+{
+  gboolean record_state;
+  HyScanTrackType track_type;
+
+  if (!frame->result)
+    {
+      g_message ("Sonar start failed");
+      return FALSE;
+    }
+
+  /* Состояние локатора. */
+  record_state = hyscan_sonar_model_get_record_state (sonar_model);
+  /* Тип записываемого галса. */
+  track_type = hyscan_sonar_model_get_track_type (sonar_model);
+
+  return record_state &&
+         track_type == frame->track_type;
+}
+
+static gboolean
+check_test_start (ApplicationData *app_data)
+{
+  int i;
+  HyScanSonarModel *sonar_model;
+  GHashTable *sensors_frames, *sources_frames;
+  gboolean result = TRUE;
+
+  sonar_model = app_data->sonar_model;
+
+  sensors_frames = app_data->sensors_frames;
+
+  /* Проверка соответствия параметров датчиков. */
+  for (i = 1; i <= SENSOR_N_PORTS; ++i)
+    {
+      SensorFrames *frames;
+      gchar *name;
+
+      name = g_strdup_printf ("virtual.%d", i);
+      frames = g_hash_table_lookup (sensors_frames, name);
+      if (!check_sensor_params (name, frames, sonar_model) ||
+          !check_virtual_sensor (name, frames, sonar_model))
+        {
+          result = FALSE;
+          g_free (name);
+          goto exit;
+        }
+      g_free (name);
+
+      name = g_strdup_printf ("uart.%d", i);
+      frames = g_hash_table_lookup (sensors_frames, name);
+      if (!check_sensor_params (name, frames, sonar_model) ||
+          !check_uart_sensor (name, frames, sonar_model))
+        {
+          result = FALSE;
+          g_free (name);
+          goto exit;
+        }
+      g_free (name);
+
+      name = g_strdup_printf ("udp.%d", i);
+      frames = g_hash_table_lookup (sensors_frames, name);
+      if (!check_sensor_params (name, frames, sonar_model) ||
+          !check_udp_sensor (name, frames, sonar_model))
+        {
+          result = FALSE;
+          g_free (name);
+          goto exit;
+        }
+      g_free (name);
+    }
+
+  sources_frames = app_data->sources_frames;
+
+  /* Проверка соответствия параметров источников данных. */
+  for (i = 0; i < SONAR_N_SOURCES; ++i)
+    {
+      HyScanSourceType source_type;
+      SourceFrames *frames;
+
+      source_type = source_type_by_index (i);
+      frames = g_hash_table_lookup (sources_frames, GINT_TO_POINTER (source_type));
+      if (!check_source (sonar_model, source_type, frames))
+        {
+          result = FALSE;
+          goto exit;
+        }
+
+      if (!check_tvg_enable (sonar_model, source_type, frames))
+        {
+          result = FALSE;
+          goto exit;
+        }
+      if (!check_tvg_auto (sonar_model, source_type, frames))
+        {
+          result = FALSE;
+          goto exit;
+        }
+
+      if (!check_generator_enable (sonar_model, source_type, frames))
+        {
+          result = FALSE;
+          goto exit;
+        }
+      if (!check_generator_auto (sonar_model, source_type, frames))
+        {
+          result = FALSE;
+          goto exit;
+        }
+    }
+
+  /* Проверка соответствия параметров гидролокатора. */
+  if (!check_sonar_sync_type (sonar_model, &app_data->sonar_frames.sync_type_frame))
+    {
+      result = FALSE;
+      goto exit;
+    }
+  if (!check_sonar_start (sonar_model, &app_data->sonar_frames.start_frame))
+    {
+      result = FALSE;
+      goto exit;
+    }
+    
+    g_message ("OK\n");
+
+exit:
+  return result;
+}
+
+static gboolean
+check_test_set (ApplicationData  *app_data)
+{
+  HyScanSonarModel *sonar_model;
+  HyScanSourceType source_type;
+  SourceFrames *frames;
+  gboolean result = TRUE;
+
+  sonar_model = app_data->sonar_model;
+
+  source_type = HYSCAN_SOURCE_ECHOSOUNDER;
+  frames = g_hash_table_lookup (app_data->sources_frames, GINT_TO_POINTER (source_type));
+  if (!check_tvg_enable (sonar_model, source_type, frames))
+    {
+      result = FALSE;
+      goto exit;
+    }
+  if (!check_tvg_constant (sonar_model, source_type, frames))
+    {
+      result = FALSE;
+      goto exit;
+    }
+
+  if (!check_generator_enable (sonar_model, source_type, frames))
+    {
+      result = FALSE;
+      goto exit;
+    }
+  if (!check_generator_simple (sonar_model, source_type, frames))
+    {
+      result = FALSE;
+      goto exit;
+    }
+
+  source_type = HYSCAN_SOURCE_SIDE_SCAN_STARBOARD;
+  frames = g_hash_table_lookup (app_data->sources_frames, GINT_TO_POINTER (source_type));
+  if (!check_tvg_enable (sonar_model, source_type, frames))
+    {
+      result = FALSE;
+      goto exit;
+    }
+  if (!check_tvg_linear_db (sonar_model, source_type, frames))
+    {
+      result = FALSE;
+      goto exit;
+    }
+
+  if (!check_generator_enable (sonar_model, source_type, frames))
+    {
+      result = FALSE;
+      goto exit;
+    }
+  if (!check_generator_extended (sonar_model, source_type, frames))
+    {
+      result = FALSE;
+      goto exit;
+    }
+
+  source_type = HYSCAN_SOURCE_SIDE_SCAN_PORT;
+  frames = g_hash_table_lookup (app_data->sources_frames, GINT_TO_POINTER (source_type));
+  if (!check_tvg_enable (sonar_model, source_type, frames))
+    {
+      result = FALSE;
+      goto exit;
+    }
+  if (!check_tvg_logarithmic (sonar_model, source_type, frames))
+    {
+      result = FALSE;
+      goto exit;
+    }
+
+  if (!check_generator_enable (sonar_model, source_type, frames))
+    {
+      result = FALSE;
+      goto exit;
+    }
+  if (!check_generator_preset (sonar_model, source_type, frames))
+    {
+      result = FALSE;
+      goto exit;
+    }
+
+  g_message ("OK\n");
+
+exit:
+  return result;
+}
+
+/* Проверяет результат теста останова локатора. */
+static gboolean
+check_test_stop (ApplicationData *app_data)
+{
+  gboolean record_state;
+  gboolean result;
+
+  /* Состояние локатора. */
+  record_state = hyscan_sonar_model_get_record_state (app_data->sonar_model);
+  /* Локатор выключен и фукнция останова локатора вызывалась. */
+  result = !record_state && app_data->sonar_frames.stop_frame.result;
+
+  if (result)
+    g_message ("OK\n");
+
+  return result;    
 }
 
 /* Асинхронное управление гидролокатором завершено. */
 static void
-on_sonar_model_params_updated (HyScanSonarModel *model,
-                               gboolean          result,
-                               gpointer          udata)
+on_sonar_params_changed (ApplicationData  *app_data,
+                         gboolean          result,
+                         HyScanSonarModel *model)
 {
+  (void) model;
 
-  if (result)
+  if (!result)
     {
-      gboolean retval = TRUE;
-
-      /* Сверка параметров VIRTUAL-порта. */
-      if (retval && frames.sensor_virtual_port_param_frame.test)
-        {
-          guint channel;
-          gint64 time_offset;
-
-          hyscan_sonar_model_sensor_get_virtual_params (model, frames.sensor_virtual_port_param_frame.name,
-                                                        &channel, &time_offset);
-
-          retval = retval &&
-                   (channel == frames.sensor_virtual_port_param_frame.channel) &&
-                   (time_offset == frames.sensor_virtual_port_param_frame.time_offset);
-
-          if (!retval)
-            g_warning ("sensor_virtual_port_param_frame");
-        }
-
-      /* Сверка параметров UART-порта. */
-      if (retval && frames.sensor_uart_port_param_frame.test)
-        {
-          guint channel;
-          gint64 time_offset;
-          HyScanSensorProtocolType protocol;
-          guint uart_device;
-          guint uart_mode;
-
-          hyscan_sonar_model_sensor_get_uart_params (model, frames.sensor_uart_port_param_frame.name,
-                                                     &channel, &time_offset, &protocol, &uart_device, &uart_mode);
-
-          retval = retval &&
-                   (channel == frames.sensor_uart_port_param_frame.channel) &&
-                   (time_offset == frames.sensor_uart_port_param_frame.time_offset) &&
-                   (protocol == frames.sensor_uart_port_param_frame.protocol) &&
-                   (uart_device == frames.sensor_uart_port_param_frame.uart_device) &&
-                   (uart_mode == frames.sensor_uart_port_param_frame.uart_mode);
-
-          if (!retval)
-            g_warning ("sensor_uart_port_param_frame");
-        }
-
-      /* Сверка параметров UDP/IP-порта. */
-      if (retval && frames.sensor_udp_ip_port_param_frame.test)
-        {
-          guint channel;
-          gint64 time_offset;
-          HyScanSensorProtocolType protocol;
-          guint ip_address;
-          guint16 udp_port;
-
-          hyscan_sonar_model_sensor_get_udp_ip_params (model, frames.sensor_udp_ip_port_param_frame.name,
-                                                       &channel, &time_offset, &protocol, &ip_address, &udp_port);
-
-          retval = retval &&
-                   (channel == frames.sensor_udp_ip_port_param_frame.channel) &&
-                   (time_offset == frames.sensor_udp_ip_port_param_frame.time_offset) &&
-                   (protocol == frames.sensor_udp_ip_port_param_frame.protocol) &&
-                   (ip_address == frames.sensor_udp_ip_port_param_frame.ip_address) &&
-                   (udp_port == frames.sensor_udp_ip_port_param_frame.udp_port);
-
-          if (!retval)
-            g_warning ("sensor_udp_ip_port_param_frame");
-        }
-
-      /* Сверка местоположения. */
-      if (retval && frames.sonar_set_position_frame.test)
-        {
-          HyScanAntennaPosition *pos;
-          pos = hyscan_sonar_model_sensor_get_position (model, frames.sensor_set_position_frame.name);
-          retval = retval &&
-                   pos != NULL &&
-                   memcmp (pos, &frames.sensor_set_position_frame.position, sizeof (HyScanAntennaPosition)) == 0;
-          g_free (pos);
-
-          if (!retval)
-            g_warning ("sensor_set_position_frame");
-        }
-
-      /* Сверка состояния датчика. */
-      if (retval && frames.sensor_set_enable_frame.test)
-        {
-          gboolean enabled = hyscan_sonar_model_sensor_is_enabled (model, frames.sensor_set_enable_frame.name);
-          retval = retval && (frames.sensor_set_enable_frame.enable == enabled);
-
-          if (!retval)
-            g_warning ("sensor_set_enable_frame");
-        }
-
-      /* Сверка преднастроек генератора. */
-      if (retval && frames.generator_set_preset_frame.test)
-        {
-          guint preset;
-          hyscan_sonar_model_gen_get_preset_params (model, frames.generator_set_preset_frame.source, &preset);
-          retval = retval && frames.generator_set_preset_frame.preset == preset;
-
-          if (!retval)
-            g_warning ("generator_set_preset_frame");
-        }
-
-      /* Сверка автоматических параметров генератора. */
-      if (retval && frames.generator_set_auto_frame.test)
-        {
-          HyScanGeneratorSignalType signal;
-          hyscan_sonar_model_gen_get_auto_params (model, frames.generator_set_auto_frame.source, &signal);
-          retval = retval && frames.generator_set_auto_frame.signal == signal;
-
-          if (!retval)
-            g_warning ("generator_set_auto_frame");
-        }
-
-      /* Сверка упрощенных параметров генератора. */
-      if (retval && frames.generator_set_simple_frame.test)
-        {
-          HyScanGeneratorSignalType signal;
-          gdouble power;
-          hyscan_sonar_model_gen_get_simple_params (model, frames.generator_set_simple_frame.source, &signal, &power);
-          retval = retval &&
-                   frames.generator_set_simple_frame.signal == signal &&
-                   frames.generator_set_simple_frame.power == power;
-
-          if (!retval)
-            g_warning ("generator_set_simple_frame");
-        }
-
-      /* Сверка расширенных параметров генератора. */
-      if (retval && frames.generator_set_extended_frame.test)
-        {
-          HyScanGeneratorSignalType signal;
-          gdouble power, duration;
-          hyscan_sonar_model_gen_get_extended_params (model, frames.generator_set_extended_frame.source,
-                                                      &signal, &duration, &power);
-          retval = retval &&
-                   frames.generator_set_extended_frame.signal == signal &&
-                   frames.generator_set_extended_frame.duration == duration &&
-                   frames.generator_set_extended_frame.power == power;
-
-          if (!retval)
-            g_warning ("generator_set_extended_frame");
-        }
-
-      /* Сверка состояния генератора. */
-      if (retval && frames.generator_set_enable_frame.test)
-        {
-          gdouble enabled = hyscan_sonar_model_gen_is_enabled (model, frames.generator_set_enable_frame.source);
-          retval = retval && frames.generator_set_enable_frame.enable == enabled;
-
-          if (!retval)
-            g_warning ("generator_set_enable_frame");
-        }
-
-      /* Сверка автоматических ВАРУ. */
-      if (retval && frames.tvg_set_auto_frame.test)
-        {
-          gdouble level, sensitivity;
-          hyscan_sonar_model_tvg_get_auto_params (model, frames.tvg_set_auto_frame.source, &level, &sensitivity);
-          retval = retval &&
-                   frames.tvg_set_auto_frame.level == level &&
-                   frames.tvg_set_auto_frame.sensitivity == sensitivity;
-
-          if (!retval)
-            g_warning ("tvg_set_auto_frame");
-        }
-
-      /* Сверка постоянного ВАРУ. */
-      if (retval && frames.tvg_set_constant_frame.test)
-        {
-          gdouble gain;
-          hyscan_sonar_model_tvg_get_const_params (model, frames.tvg_set_constant_frame.source, &gain);
-          retval = retval && frames.tvg_set_constant_frame.gain == gain;
-
-          if (!retval)
-            g_warning ("tvg_set_constant_frame");
-        }
-
-      /* Сверка линейного ВАРУ. */
-      if (retval && frames.tvg_set_linear_db_frame.test)
-        {
-          gdouble gain0, step;
-          hyscan_sonar_model_tvg_get_linear_db_params (model, frames.tvg_set_linear_db_frame.source,
-                                                       &gain0, &step);
-          retval = retval &&
-                   frames.tvg_set_linear_db_frame.gain0 == gain0 &&
-                   frames.tvg_set_linear_db_frame.step == step;
-
-          if (!retval)
-            g_warning ("tvg_set_linear_db_frame");
-        }
-
-      /* Сверка логарифмичкеского ВАРУ. */
-      if (retval && frames.tvg_set_logarithmic_frame.test)
-        {
-          gdouble gain0, beta, alpha;
-          hyscan_sonar_model_tvg_get_logarithmic_params (model, frames.tvg_set_logarithmic_frame.source,
-                                                         &gain0, &beta, &alpha);
-          retval = retval &&
-                   frames.tvg_set_logarithmic_frame.gain0 == gain0 &&
-                   frames.tvg_set_logarithmic_frame.beta == beta &&
-                   frames.tvg_set_logarithmic_frame.alpha == alpha;
-
-          if (!retval)
-            g_warning ("tvg_set_logarithmic_frame");
-        }
-
-      /* Сверка состояния ВАРУ. */
-      if (retval && frames.tvg_set_enable_frame.test)
-        {
-          gdouble enabled = hyscan_sonar_model_tvg_is_enabled (model, frames.tvg_set_enable_frame.source);
-          retval = retval && frames.tvg_set_enable_frame.enable == enabled;\
-
-          if (!retval)
-            g_warning ("tvg_set_enable_frame");
-        }
-
-      /* Сверка времени приёма. */
-      if (retval && frames.sonar_set_receive_time_frame.test)
-        {
-          gdouble recv_time = hyscan_sonar_model_get_receive_time (model, frames.sonar_set_receive_time_frame.source);
-          retval = retval && frames.sonar_set_receive_time_frame.receive_time == recv_time;
-
-          if (!retval)
-            g_warning ("sonar_set_receive_time_frame");
-        }
-
-      /* Сверка типа синхронизации. */
-      if (retval && frames.sonar_set_sync_type_frame.test)
-        {
-          retval = retval && frames.sonar_set_sync_type_frame.sync_type == hyscan_sonar_model_get_sync_type (model);
-
-          if (!retval)
-            g_warning ("sonar_set_sync_type_frame");
-        }
-
-      /* Сверка тип галса. */
-      if (retval && frames.sonar_start_frame.test)
-        {
-          retval = retval && frames.sonar_start_frame.track_type == hyscan_sonar_model_get_track_type (model);
-
-          if (!retval)
-            g_warning ("sonar_start_frame");
-        }
-
-      /* Сверка местоположения. */
-      if (retval && frames.sonar_set_position_frame.test)
-        {
-          HyScanAntennaPosition *pos;
-          pos = hyscan_sonar_model_sonar_get_position (sonar_model, frames.sonar_set_position_frame.source);
-          retval = retval &&
-                   pos != NULL &&
-                   memcmp (pos, &frames.sonar_set_position_frame.position, sizeof (HyScanAntennaPosition)) == 0;
-          g_free (pos);
-
-          if (!retval)
-            g_warning ("sonar_set_position_frame");
-        }
-
-      g_print ("Attempt %3d (out of %d): ", n_test_repeats + 1, TEST_N_REPEATS);
-      if (retval)
-        {
-          g_print ("PASS\n");
-        }
-      else
-        {
-          g_print ("FAIL\n");
-          test_result = FALSE;
-          g_main_loop_quit (main_loop);
-          return;
-        }
-    }
-  else
-    {
-      g_message ("Can't change sonar parameters. Test failed.");
-      g_main_loop_quit (main_loop);
+      g_message ("Couldn't change sonar params.");
+      complete_test (app_data, EXIT_FAILURE);
       return;
     }
 
-  if (++n_test_repeats < TEST_N_REPEATS)
-    g_timeout_add (100, test_entry, NULL);
-  else
-    g_main_loop_quit (main_loop);
+  switch (app_data->test_id)
+    {
+    /* Проверка результатов теста запуска локатора. */
+    case TEST_START:
+      if (check_test_start (app_data))
+        {
+          do_test (app_data, TEST_SET);
+        }
+      else 
+        {
+          g_warning ("FAILED: sonar start test.");
+          complete_test (app_data, EXIT_FAILURE);
+        }
+      break;
+
+    /* Проверка результатов теста установки параметров локатора. */
+    case TEST_SET:
+      if (check_test_set (app_data))
+        {
+          do_test (app_data, TEST_STOP);
+        }
+      else 
+        {
+          g_warning ("FAILED: sonar set test.");
+          complete_test (app_data, EXIT_FAILURE);
+        }
+      break;
+
+    /* Проверка результатов теста останова локатора. */
+    case TEST_STOP:
+      {
+        if (check_test_stop (app_data))
+        {
+          g_message ("All done.");
+          complete_test (app_data, EXIT_SUCCESS);
+        }
+        else
+        {
+          g_warning ("FAILED: sonar stop test.");
+          complete_test (app_data, EXIT_FAILURE);
+        }
+      }
+      break;
+
+    default:
+      g_warning ("Invalid test id.");
+      complete_test (app_data, EXIT_FAILURE);
+    }
 }
 
 /* Создаёт виртуальный гидролокатор. */
 static HyScanSonarBox *
-create_sonar (void)
+make_mock_sonar (ApplicationData *app_data)
 {
   HyScanSonarBox *sonar_box;
   HyScanSonarSchema *schema;
@@ -1396,11 +1966,11 @@ create_sonar (void)
   guint i, j;
 
   /* Параметры источников данных. */
-  for (i = 0; i < 3; i++)
+  for (i = 0; i < SONAR_N_SOURCES; ++i)
     {
       SourceInfo *info;
 
-      info = source_info_by_source_type (source_type_by_index (i));
+      info = source_info_by_source_type (app_data, source_type_by_index (i));
       memset (info, 0, sizeof (SourceInfo));
 
       info->raw_info.antenna.pattern.vertical = g_random_double ();
@@ -1413,15 +1983,20 @@ create_sonar (void)
       info->raw_info.adc.offset = (gint) (100 * g_random_double ());
 
       info->max_receive_time = g_random_double () + 0.1;
-      info->auto_receive_time = (i == 0) ? TRUE : FALSE;
+      info->auto_receive_time = i % 2 ? TRUE : FALSE;
 
       info->signal_rate = g_random_double ();
       info->tvg_rate = g_random_double ();
 
-      info->generator.capabilities = HYSCAN_GENERATOR_MODE_PRESET | HYSCAN_GENERATOR_MODE_AUTO |
-                                     HYSCAN_GENERATOR_MODE_SIMPLE | HYSCAN_GENERATOR_MODE_EXTENDED;
-      info->generator.signals = HYSCAN_GENERATOR_SIGNAL_AUTO | HYSCAN_GENERATOR_SIGNAL_TONE |
-                                HYSCAN_GENERATOR_SIGNAL_LFM | HYSCAN_GENERATOR_SIGNAL_LFMD;
+      info->generator.capabilities = HYSCAN_GENERATOR_MODE_PRESET |
+                                     HYSCAN_GENERATOR_MODE_AUTO |
+                                     HYSCAN_GENERATOR_MODE_SIMPLE |
+                                     HYSCAN_GENERATOR_MODE_EXTENDED;
+
+      info->generator.signals = HYSCAN_GENERATOR_SIGNAL_AUTO |
+                                HYSCAN_GENERATOR_SIGNAL_TONE |
+                                HYSCAN_GENERATOR_SIGNAL_LFM |
+                                HYSCAN_GENERATOR_SIGNAL_LFMD;
 
       info->generator.min_tone_duration = g_random_double ();
       info->generator.max_tone_duration = info->generator.min_tone_duration + g_random_double ();
@@ -1432,8 +2007,10 @@ create_sonar (void)
       info->generator.cur_mode = HYSCAN_GENERATOR_MODE_AUTO;
       info->generator.cur_signal = HYSCAN_GENERATOR_SIGNAL_AUTO;
 
-      info->tvg.capabilities = HYSCAN_TVG_MODE_AUTO | HYSCAN_TVG_MODE_CONSTANT |
-                               HYSCAN_TVG_MODE_LINEAR_DB | HYSCAN_TVG_MODE_LOGARITHMIC;
+      info->tvg.capabilities = HYSCAN_TVG_MODE_AUTO |
+                               HYSCAN_TVG_MODE_CONSTANT |
+                               HYSCAN_TVG_MODE_LINEAR_DB |
+                               HYSCAN_TVG_MODE_LOGARITHMIC;
 
       info->tvg.min_gain = g_random_double ();
       info->tvg.max_gain = info->tvg.min_gain + g_random_double ();
@@ -1442,14 +2019,14 @@ create_sonar (void)
     }
 
   /* Параметры гидролокатора по умолчанию. */
-  memset (&sonar_info, 0, sizeof (SonarInfo));
-  sonar_info.sync_capabilities = HYSCAN_SONAR_SYNC_INTERNAL | HYSCAN_SONAR_SYNC_EXTERNAL | HYSCAN_SONAR_SYNC_SOFTWARE;
+  memset (&app_data->sonar_info, 0, sizeof (SonarInfo));
+  app_data->sonar_info.sync_capabilities = HYSCAN_SONAR_SYNC_INTERNAL | HYSCAN_SONAR_SYNC_EXTERNAL | HYSCAN_SONAR_SYNC_SOFTWARE;
 
   /* Схема гидролокатора. */
   schema = hyscan_sonar_schema_new (HYSCAN_SONAR_SCHEMA_DEFAULT_TIMEOUT);
 
   /* Порты для датчиков. */
-  ports = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+  app_data->ports = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
 
   {
     guint pow2;
@@ -1460,7 +2037,7 @@ create_sonar (void)
         gchar *name = g_strdup_printf ("virtual.%d", i + 1);
 
         port->type = HYSCAN_SENSOR_PORT_VIRTUAL;
-        g_hash_table_insert (ports, name, port);
+        g_hash_table_insert (app_data->ports, name, port);
 
         hyscan_sonar_schema_sensor_add (schema, name, HYSCAN_SENSOR_PORT_VIRTUAL, HYSCAN_SENSOR_PROTOCOL_NMEA_0183);
       }
@@ -1471,7 +2048,7 @@ create_sonar (void)
         gchar *name = g_strdup_printf ("uart.%d", i + 1);
 
         port->type = HYSCAN_SENSOR_PORT_UART;
-        g_hash_table_insert (ports, name, port);
+        g_hash_table_insert (app_data->ports, name, port);
 
         hyscan_sonar_schema_sensor_add (schema, name, HYSCAN_SENSOR_PORT_UART, HYSCAN_SENSOR_PROTOCOL_NMEA_0183);
 
@@ -1501,7 +2078,7 @@ create_sonar (void)
         gchar *name = g_strdup_printf ("udp.%d", i + 1);
 
         port->type = HYSCAN_SENSOR_PORT_UDP_IP;
-        g_hash_table_insert (ports, name, port);
+        g_hash_table_insert (app_data->ports, name, port);
 
         hyscan_sonar_schema_sensor_add (schema, name, HYSCAN_SENSOR_PORT_UDP_IP, HYSCAN_SENSOR_PROTOCOL_NMEA_0183);
 
@@ -1518,13 +2095,13 @@ create_sonar (void)
   }
 
   /* Типы синхронизации излучения. */
-  hyscan_sonar_schema_sync_add (schema, (HyScanSonarSyncType) sonar_info.sync_capabilities);
+  hyscan_sonar_schema_sync_add (schema, (HyScanSonarSyncType) app_data->sonar_info.sync_capabilities);
 
   /* Источники данных. */
   for (i = 0; i < SONAR_N_SOURCES; i++)
     {
       HyScanSourceType source = source_type_by_index (i);
-      SourceInfo *info = source_info_by_source_type (source);
+      SourceInfo *info = source_info_by_source_type (app_data, source);
 
       hyscan_sonar_schema_source_add (schema, source,
                                       info->raw_info.antenna.pattern.vertical,
@@ -1582,423 +2159,707 @@ create_sonar (void)
 
 /* Создаёт серверы SENSOR, GENERATOR, TVG, SONAR. */
 static void
-init_servers (HyScanSonarBox *sonar_box)
+init_servers (ApplicationData *app_data,
+              HyScanSonarBox  *mock_sonar)
 {
-  /* Сервер управления. */
-  server.sensor = hyscan_sensor_control_server_new (sonar_box);
-  server.generator = hyscan_generator_control_server_new (sonar_box);
-  server.tvg = hyscan_tvg_control_server_new (sonar_box);
-  server.sonar = hyscan_sonar_control_server_new (sonar_box);
+  HyScanSensorControlServer *sensor_server;
+  HyScanGeneratorControlServer *generator_server;
+  HyScanTVGControlServer *tvg_server;
+  HyScanSonarControlServer *sonar_server;
 
-  g_signal_connect_swapped (server.sensor, "sensor-virtual-port-param",
-                            G_CALLBACK (sensor_virtual_port_param), &server);
-  g_signal_connect_swapped (server.sensor, "sensor-uart-port-param",
-                            G_CALLBACK (sensor_uart_port_param), &server);
-  g_signal_connect_swapped (server.sensor, "sensor-udp-ip-port-param",
-                            G_CALLBACK (sensor_udp_ip_port_param), &server);
-  g_signal_connect_swapped (server.sensor, "sensor-set-position",
-                            G_CALLBACK (sensor_set_position), &server);
-  g_signal_connect_swapped (server.sensor, "sensor-set-enable",
-                            G_CALLBACK (sensor_set_enable), &server);
+  sensor_server = hyscan_sensor_control_server_new (mock_sonar);
+  generator_server = hyscan_generator_control_server_new (mock_sonar);
+  tvg_server = hyscan_tvg_control_server_new (mock_sonar);
+  sonar_server = hyscan_sonar_control_server_new (mock_sonar);
 
-  g_signal_connect_swapped (server.generator, "generator-set-preset",
-                            G_CALLBACK (generator_set_preset), &server);
-  g_signal_connect_swapped (server.generator, "generator-set-auto",
-                            G_CALLBACK (generator_set_auto), &server);
-  g_signal_connect_swapped (server.generator, "generator-set-simple",
-                            G_CALLBACK (generator_set_simple), &server);
-  g_signal_connect_swapped (server.generator, "generator-set-extended",
-                            G_CALLBACK (generator_set_extended), &server);
-  g_signal_connect_swapped (server.generator, "generator-set-enable",
-                            G_CALLBACK (generator_set_enable), &server);
+  g_signal_connect_swapped (sensor_server,
+                            "sensor-virtual-port-param",
+                            G_CALLBACK (sensor_virtual_port_param),
+                            app_data->sensors_frames);
+  g_signal_connect_swapped (sensor_server,
+                            "sensor-uart-port-param",
+                            G_CALLBACK (sensor_uart_port_param),
+                            app_data->sensors_frames);
+  g_signal_connect_swapped (sensor_server,
+                            "sensor-udp-ip-port-param",
+                            G_CALLBACK (sensor_udp_ip_port_param),
+                            app_data->sensors_frames);
+  g_signal_connect_swapped (sensor_server,
+                            "sensor-set-position",
+                            G_CALLBACK (sensor_set_position),
+                            app_data->sensors_frames);
+  g_signal_connect_swapped (sensor_server,
+                            "sensor-set-enable",
+                            G_CALLBACK (sensor_set_enable),
+                            app_data->sensors_frames);
 
-  g_signal_connect_swapped (server.tvg, "tvg-set-auto",
-                            G_CALLBACK (tvg_set_auto), &server);
-  g_signal_connect_swapped (server.tvg, "tvg-set-constant",
-                            G_CALLBACK (tvg_set_constant), &server);
-  g_signal_connect_swapped (server.tvg, "tvg-set-linear-db",
-                            G_CALLBACK (tvg_set_linear_db), &server);
-  g_signal_connect_swapped (server.tvg, "tvg-set-logarithmic",
-                            G_CALLBACK (tvg_set_logarithmic), &server);
-  g_signal_connect_swapped (server.tvg, "tvg-set-enable",
-                            G_CALLBACK (tvg_set_enable), &server);
+  g_signal_connect_swapped (generator_server,
+                            "generator-set-preset",
+                            G_CALLBACK (generator_set_preset),
+                            app_data->sources_frames);
+  g_signal_connect_swapped (generator_server,
+                            "generator-set-auto",
+                            G_CALLBACK (generator_set_auto),
+                            app_data->sources_frames);
+  g_signal_connect_swapped (generator_server,
+                            "generator-set-simple",
+                            G_CALLBACK (generator_set_simple),
+                            app_data->sources_frames);
+  g_signal_connect_swapped (generator_server,
+                            "generator-set-extended",
+                            G_CALLBACK (generator_set_extended),
+                            app_data->sources_frames);
+  g_signal_connect_swapped (generator_server,
+                            "generator-set-enable",
+                            G_CALLBACK (generator_set_enable),
+                            app_data->sources_frames);
 
-  g_signal_connect_swapped (server.sonar, "sonar-set-sync-type",
-                            G_CALLBACK (sonar_set_sync_type), &server);
-  g_signal_connect_swapped (server.sonar, "sonar-set-position",
-                            G_CALLBACK (sonar_set_position), &server);
-  g_signal_connect_swapped (server.sonar, "sonar-set-receive-time",
-                            G_CALLBACK (sonar_set_receive_time), &server);
-  g_signal_connect_swapped (server.sonar, "sonar-start",
-                            G_CALLBACK (sonar_start), &server);
-  g_signal_connect_swapped (server.sonar, "sonar-stop",
-                            G_CALLBACK (sonar_stop), &server);
-  g_signal_connect_swapped (server.sonar, "sonar-ping",
-                            G_CALLBACK (sonar_ping), &server);
+  g_signal_connect_swapped (tvg_server,
+                            "tvg-set-auto",
+                            G_CALLBACK (tvg_set_auto),
+                            app_data->sources_frames);
+  g_signal_connect_swapped (tvg_server,
+                            "tvg-set-constant",
+                            G_CALLBACK (tvg_set_constant),
+                            app_data->sources_frames);
+  g_signal_connect_swapped (tvg_server,
+                            "tvg-set-linear-db",
+                            G_CALLBACK (tvg_set_linear_db),
+                            app_data->sources_frames);
+  g_signal_connect_swapped (tvg_server,
+                            "tvg-set-logarithmic",
+                            G_CALLBACK (tvg_set_logarithmic),
+                            app_data->sources_frames);
+  g_signal_connect_swapped (tvg_server,
+                            "tvg-set-enable",
+                            G_CALLBACK (tvg_set_enable),
+                            app_data->sources_frames);
+
+  g_signal_connect_swapped (sonar_server,
+                            "sonar-set-position",
+                            G_CALLBACK (sonar_set_position),
+                            app_data->sources_frames);
+  g_signal_connect_swapped (sonar_server,
+                            "sonar-set-receive-time",
+                            G_CALLBACK (sonar_set_receive_time),
+                            app_data->sources_frames);
+  g_signal_connect_swapped (sonar_server,
+                            "sonar-set-sync-type",
+                            G_CALLBACK (sonar_set_sync_type),
+                            &app_data->sonar_frames);
+  g_signal_connect_swapped (sonar_server,
+                            "sonar-start",
+                            G_CALLBACK (sonar_start),
+                            &app_data->sonar_frames);
+  g_signal_connect_swapped (sonar_server,
+                            "sonar-stop",
+                            G_CALLBACK (sonar_stop),
+                            &app_data->sonar_frames);
+  g_signal_connect_swapped (sonar_server,
+                            "sonar-ping",
+                            G_CALLBACK (sonar_ping),
+                            &app_data->sonar_frames);
+
+  app_data->server.sensor = sensor_server;
+  app_data->server.generator = generator_server;
+  app_data->server.tvg = tvg_server;
+  app_data->server.sonar = sonar_server;
+}
+
+static void
+test_sensor_set_position (HyScanSonarModel       *sonar_model,
+                          const gchar            *name,
+                          SensorSetPositionFrame *frame)
+{
+  frame->result = FALSE;
+  frame->name = g_strdup (name);
+  frame->position = random_antenna_position ();
+  hyscan_sonar_model_sensor_set_position (sonar_model, frame->name, frame->position);
+}
+
+static void
+test_sensor_set_enable (HyScanSonarModel     *sonar_model,
+                        const gchar          *name,
+                        SensorSetEnableFrame *frame)
+{
+  frame->result = FALSE;
+  frame->name = g_strdup (name);
+  frame->enable = g_random_boolean ();
+  hyscan_sonar_model_sensor_set_enable (sonar_model, frame->name, frame->enable);
+}
+
+static void
+test_sensor_set_virtual_params (HyScanSonarModel            *sonar_model,
+                                const gchar                 *name,
+                                SensorVirtualPortParamFrame *frame)
+{
+  frame->result = FALSE;
+  frame->name = g_strdup (name);
+  frame->channel = (guint) g_random_int_range (1, HYSCAN_SENSOR_CONTROL_MAX_CHANNELS);
+  frame->time_offset = g_random_int () % G_MAXUINT16;
+  hyscan_sonar_model_sensor_set_virtual_params (sonar_model, frame->name, frame->channel, frame->time_offset);
+}
+
+static void
+test_sensor_set_uart_params (HyScanSonarModel         *sonar_model,
+                             GHashTable               *ports,
+                             const gchar              *name,
+                             SensorUartPortParamFrame *frame)
+{
+  frame->result = FALSE;
+  frame->name = g_strdup (name);
+  frame->channel = (guint) g_random_int_range (1, HYSCAN_SENSOR_CONTROL_MAX_CHANNELS);
+  frame->time_offset = g_random_int () % G_MAXUINT16;
+  frame->protocol = g_random_boolean () ? HYSCAN_SENSOR_PROTOCOL_NMEA_0183 : HYSCAN_SENSOR_PROTOCOL_SAS;
+  frame->uart_device = (guint) random_uart_device (ports, name);
+  frame->uart_mode = (guint) random_uart_mode (ports, name);
+  hyscan_sonar_model_sensor_set_uart_params (sonar_model,
+                                             frame->name,
+                                             frame->channel,
+                                             frame->time_offset,
+                                             frame->protocol,
+                                             frame->uart_device,
+                                             frame->uart_mode);
+}
+
+static void
+test_sensor_set_udp_params (HyScanSonarModel          *sonar_model,
+                            GHashTable                *ports,
+                            const gchar               *name,
+                            SensorUdpIpPortParamFrame *frame)
+{
+  frame->result = FALSE;
+  frame->name = g_strdup (name);
+  frame->channel = (guint) g_random_int_range (1, HYSCAN_SENSOR_CONTROL_MAX_CHANNELS);
+  frame->time_offset = g_random_int () % G_MAXUINT16;;
+  frame->protocol = g_random_boolean () ? HYSCAN_SENSOR_PROTOCOL_NMEA_0183 : HYSCAN_SENSOR_PROTOCOL_SAS;
+  frame->ip_address = (guint) random_ip_addres (ports, name);
+  frame->udp_port = (guint) g_random_int_range (1024, G_MAXUINT16);
+  hyscan_sonar_model_sensor_set_udp_ip_params (sonar_model,
+                                               frame->name,
+                                               frame->channel,
+                                               frame->time_offset,
+                                               frame->protocol,
+                                               frame->ip_address,
+                                               (guint16) frame->udp_port);
+}
+
+static void
+test_generator_set_preset (HyScanSonarModel        *sonar_model,
+                           SourceInfo              *source_info,
+                           HyScanSourceType         source_type,
+                           GeneratorSetPresetFrame *frame)
+{
+  frame->result = FALSE;
+  frame->source = source_type;
+  frame->preset = (guint) random_preset (source_info);
+  hyscan_sonar_model_gen_set_preset (sonar_model, frame->source, (guint) frame->preset);
+}
+
+static void
+test_generator_set_auto (HyScanSonarModel      *sonar_model,
+                         HyScanSourceType       source_type,
+                         GeneratorSetAutoFrame *frame)
+{
+  frame->result = FALSE;
+  frame->source = source_type;
+  frame->signal_type = random_signal_type ();
+  hyscan_sonar_model_gen_set_auto (sonar_model, frame->source, frame->signal_type);
+}
+
+
+static void
+test_generator_set_simple (HyScanSonarModel        *sonar_model,
+                           HyScanSourceType         source_type,
+                           GeneratorSetSimpleFrame *frame)
+{
+  frame->result = FALSE;
+  frame->source = source_type;
+  frame->signal_type = random_signal_type ();
+  frame->power = g_random_double ();
+  hyscan_sonar_model_gen_set_simple (sonar_model, frame->source, frame->signal_type, frame->power);
+}
+
+static void
+test_generator_set_extended (HyScanSonarModel          *sonar_model,
+                             HyScanGeneratorControl    *generator_control,
+                             HyScanSourceType           source_type,
+                             GeneratorSetExtendedFrame *frame)
+{
+  gdouble min_duration, max_duration;
+  HyScanGeneratorSignalType signal_type;
+
+  signal_type = random_accepted_signal_type (HYSCAN_GENERATOR_SIGNAL_LFM |
+                                             HYSCAN_GENERATOR_SIGNAL_LFMD |
+                                             HYSCAN_GENERATOR_SIGNAL_TONE);
+
+  hyscan_generator_control_get_duration_range (generator_control, source_type, signal_type,
+                                               &min_duration, &max_duration);
+
+  frame->result = FALSE;
+  frame->source = source_type;
+  frame->signal_type = signal_type;
+  frame->duration = g_random_double_range (min_duration, max_duration);
+  frame->power = g_random_double ();
+  hyscan_sonar_model_gen_set_extended (sonar_model, frame->source, frame->signal_type, frame->duration, frame->power);
+}
+
+static void
+test_generator_set_enable (HyScanSonarModel        *sonar_model,
+                           HyScanSourceType         source_type,
+                           GeneratorSetEnableFrame *frame,
+                           gboolean                 enable)
+{
+  frame->result = FALSE;
+  frame->source = source_type;
+  frame->enable = enable;
+  hyscan_sonar_model_gen_set_enable (sonar_model, frame->source, frame->enable);
+}
+
+static void
+test_tvg_set_auto (HyScanSonarModel *sonar_model,
+                   HyScanSourceType  source_type,
+                   TvgSetAutoFrame  *frame)
+{
+  gboolean semiauto = g_random_boolean ();
+
+  frame->result = FALSE;
+  frame->source = source_type;
+  frame->sensitivity = semiauto ? g_random_double_range (0.0, 1.0) : -1.0;
+  frame->level = semiauto ? g_random_double_range (0.0, 1.0) : -1.0;
+  hyscan_sonar_model_tvg_set_auto (sonar_model, frame->source, frame->level, frame->sensitivity);
+}
+
+static void
+test_tvg_set_constant (HyScanSonarModel    *sonar_model,
+                       HyScanTVGControl    *tvg_control,
+                       HyScanSourceType     source_type,
+                       TvgSetConstantFrame *frame)
+{
+  gdouble min_range, max_range;
+
+  hyscan_tvg_control_get_gain_range (tvg_control, source_type, &min_range, &max_range);
+
+  frame->result = FALSE;
+  frame->source = source_type;
+  frame->gain = g_random_double_range (min_range, max_range);
+  hyscan_sonar_model_tvg_set_constant (sonar_model, frame->source, frame->gain);
+}
+
+static void
+test_tvg_set_linear_db (HyScanSonarModel    *sonar_model,
+                        HyScanTVGControl    *tvg_control,
+                        HyScanSourceType     source_type,
+                        TvgSetLinearDBFrame *frame)
+{
+  gdouble min_range, max_range;
+
+  hyscan_tvg_control_get_gain_range (tvg_control, source_type, &min_range, &max_range);
+
+  frame->result = FALSE;
+  frame->source = source_type;
+  frame->gain0 = g_random_double_range (min_range, max_range);
+  frame->step = (max_range - min_range) / 10.0;
+  hyscan_sonar_model_tvg_set_linear_db (sonar_model, frame->source, frame->gain0, frame->step);
+}
+
+static void
+test_tvg_set_logarithmic (HyScanSonarModel       *sonar_model,
+                          HyScanTVGControl       *tvg_control,
+                          HyScanSourceType        source_type,
+                          TvgSetLogarithmicFrame *frame)
+{
+  gdouble min_range, max_range;
+
+  hyscan_tvg_control_get_gain_range (tvg_control, source_type, &min_range, &max_range);
+
+  frame->result = FALSE;
+  frame->source = source_type;
+  frame->gain0 = g_random_double_range (min_range, max_range);
+  frame->beta = g_random_double ();
+  frame->alpha = g_random_double ();
+  hyscan_sonar_model_tvg_set_logarithmic (sonar_model, frame->source, frame->gain0, frame->beta, frame->alpha);
+}
+
+static void
+test_tvg_set_enable (HyScanSonarModel  *sonar_model,
+                     HyScanSourceType   source_type,
+                     TvgSetEnableFrame *frame,
+                     gboolean           enable)
+{
+  frame->result = TRUE;
+  frame->source = source_type;
+  frame->enable = enable;
+  hyscan_sonar_model_tvg_set_enable (sonar_model, frame->source, frame->enable);
+}
+
+static void
+test_source_set_receive_time (HyScanSonarModel         *sonar_model,
+                              HyScanSonarControl       *sonar_control,
+                              HyScanSourceType          source_type,
+                              SonarSetReceiveTimeFrame *frame)
+{
+  gdouble max_recv_time;
+
+  max_recv_time = hyscan_sonar_control_get_max_receive_time (sonar_control, source_type);
+
+  frame->result = FALSE;
+  frame->source = source_type;
+  frame->receive_time = g_random_double_range (0.0, max_recv_time);
+  hyscan_sonar_model_set_receive_time (sonar_model, frame->source, frame->receive_time);
+}
+
+static void
+test_source_set_position (HyScanSonarModel      *sonar_model,
+                          HyScanSourceType       source_type,
+                          SonarSetPositionFrame *frame)
+{
+  frame->result = FALSE;
+  frame->source = source_type;
+  frame->position = random_antenna_position ();
+  hyscan_sonar_model_sonar_set_position (sonar_model, frame->source, frame->position);
+}
+
+static void
+test_sonar_set_sync_type (HyScanSonarModel      *sonar_model,
+                          SonarFrames           *sonar_frames)
+{
+  SonarSetSyncTypeFrame *frame = &sonar_frames->sync_type_frame;
+  frame->result = FALSE;
+  frame->sync_type = random_sync ();
+  hyscan_sonar_model_set_sync_type (sonar_model, frame->sync_type);
+}
+
+static void
+test_sonar_start (HyScanSonarModel *sonar_model,
+                  SonarFrames      *sonar_frames)
+{
+  SonarStartFrame *frame = &sonar_frames->start_frame;
+  frame->result = FALSE;
+  frame->track_name = g_strdup ("trackname");
+  frame->track_type = random_track_type ();
+  hyscan_sonar_model_set_track_type (sonar_model, frame->track_type);
+  hyscan_sonar_model_sonar_start (sonar_model, frame->track_name);
+}
+
+static void
+test_sonar_stop (HyScanSonarModel *sonar_model,
+                 SonarFrames      *sonar_frames)
+{
+  SonarStopFrame *frame = &sonar_frames->stop_frame;
+  frame->result = FALSE;
+  hyscan_sonar_model_sonar_stop (sonar_model);
+}
+
+static void
+test_start (ApplicationData *app_data)
+{
+  int i;
+  HyScanSonarModel *sonar_model;
+
+  sonar_model = app_data->sonar_model;
+
+  /* Тестирование датчиков. */
+  for (i = 1; i <= SENSOR_N_PORTS; ++i)
+    {
+      SensorFrames *frames;
+      gchar *name;
+
+      /* Тестирование виртуального порта. */
+      name = g_strdup_printf ("virtual.%d", i);
+      frames = g_hash_table_lookup (app_data->sensors_frames, name);
+      test_sensor_set_position (sonar_model, name, &frames->set_position_frame);
+      test_sensor_set_enable (sonar_model, name, &frames->set_enable_frame);
+      test_sensor_set_virtual_params (sonar_model, name, &frames->virtual_port_frame);
+      g_free (name);
+
+      /* Тестирование uart порта. */
+      name = g_strdup_printf ("uart.%d", i);
+      frames = g_hash_table_lookup (app_data->sensors_frames, name);
+      test_sensor_set_position (sonar_model, name, &frames->set_position_frame);
+      test_sensor_set_enable (sonar_model, name, &frames->set_enable_frame);
+      test_sensor_set_uart_params (sonar_model, app_data->ports, name, &frames->uart_port_frame);
+      g_free (name);
+
+      /* Тестирование udp/ip порта. */
+      name = g_strdup_printf ("udp.%d", i);
+      frames = g_hash_table_lookup (app_data->sensors_frames, name);
+      test_sensor_set_position (sonar_model, name, &frames->set_position_frame);
+      test_sensor_set_enable (sonar_model, name, &frames->set_enable_frame);
+      test_sensor_set_udp_params (sonar_model, app_data->ports, name, &frames->udp_port_frame);
+      g_free (name);
+    }
+  /* Тестирование источников. */
+  for (i = 0; i < SONAR_N_SOURCES; ++i)
+    {
+      SourceFrames *frames;
+      HyScanSourceType source_type;
+
+      source_type = source_type_by_index (i);
+      frames = g_hash_table_lookup (app_data->sources_frames, GINT_TO_POINTER (source_type));
+      test_source_set_position (sonar_model, source_type, &frames->set_position_frame);
+      test_source_set_receive_time (sonar_model, app_data->sonar_control, source_type, &frames->set_receive_time_frame);
+      test_generator_set_enable (sonar_model, source_type, &frames->gen_set_enable_frame, g_random_boolean ());
+      test_generator_set_auto (sonar_model, source_type, &frames->gen_set_auto_frame);
+      test_tvg_set_enable (sonar_model, source_type, &frames->tvg_set_enable_frame, g_random_boolean ());
+      test_tvg_set_auto (sonar_model, source_type, &frames->tvg_set_auto_frame);
+    }
+  /* Тест синхронизации. */
+  test_sonar_set_sync_type (app_data->sonar_model, &app_data->sonar_frames);
+  /* Тест запуска локатора. */
+  test_sonar_start (app_data->sonar_model, &app_data->sonar_frames);
+}
+
+static void 
+test_set (ApplicationData *app_data)
+{
+  HyScanSonarModel *sonar_model;
+  SourceFrames *frames;
+  SourceInfo *source_info;
+
+  sonar_model = app_data->sonar_model;
+
+  /* Тестирование простой настройки генератора и константного ВАРУ. */
+  frames = g_hash_table_lookup (app_data->sources_frames, GINT_TO_POINTER (HYSCAN_SOURCE_ECHOSOUNDER));
+  test_generator_set_enable (sonar_model, HYSCAN_SOURCE_ECHOSOUNDER, &frames->gen_set_enable_frame, TRUE);
+  test_generator_set_simple (sonar_model,
+                             HYSCAN_SOURCE_ECHOSOUNDER,
+                             &frames->gen_set_simple_frame);
+  test_tvg_set_enable (sonar_model, HYSCAN_SOURCE_ECHOSOUNDER, &frames->tvg_set_enable_frame, TRUE);
+  test_tvg_set_constant (sonar_model,
+                         HYSCAN_TVG_CONTROL (app_data->sonar_control),
+                         HYSCAN_SOURCE_ECHOSOUNDER,
+                         &frames->tvg_set_constant_frame);
+
+  /* Тестирование расширенной настройки генератора и линейного ВАРУ. */
+  frames = g_hash_table_lookup (app_data->sources_frames, GINT_TO_POINTER (HYSCAN_SOURCE_SIDE_SCAN_STARBOARD));
+  test_generator_set_enable (sonar_model, HYSCAN_SOURCE_SIDE_SCAN_STARBOARD, &frames->gen_set_enable_frame, TRUE);
+  test_generator_set_extended (sonar_model,
+                               HYSCAN_GENERATOR_CONTROL (app_data->sonar_control),
+                               HYSCAN_SOURCE_SIDE_SCAN_STARBOARD,
+                               &frames->gen_set_extended_frame);
+  test_tvg_set_enable (sonar_model, HYSCAN_SOURCE_SIDE_SCAN_STARBOARD, &frames->tvg_set_enable_frame, TRUE);
+  test_tvg_set_linear_db (sonar_model,
+                          HYSCAN_TVG_CONTROL (app_data->sonar_control),
+                          HYSCAN_SOURCE_SIDE_SCAN_STARBOARD,
+                          &frames->tvg_set_linear_db_frame);
+
+  /* Тестирование преднастроек генератора и логарифмического ВАРУ. */
+  frames = g_hash_table_lookup (app_data->sources_frames, GINT_TO_POINTER (HYSCAN_SOURCE_SIDE_SCAN_PORT));
+  source_info = source_info_by_source_type (app_data, HYSCAN_SOURCE_SIDE_SCAN_PORT);
+  test_generator_set_enable (sonar_model, HYSCAN_SOURCE_SIDE_SCAN_PORT, &frames->gen_set_enable_frame, TRUE);
+  test_generator_set_preset (sonar_model,
+                             source_info,
+                             HYSCAN_SOURCE_SIDE_SCAN_PORT,
+                             &frames->gen_set_preset_frame);
+  test_tvg_set_enable (sonar_model, HYSCAN_SOURCE_SIDE_SCAN_PORT, &frames->tvg_set_enable_frame, TRUE);
+  test_tvg_set_logarithmic (sonar_model,
+                            HYSCAN_TVG_CONTROL (app_data->sonar_control),
+                            HYSCAN_SOURCE_SIDE_SCAN_PORT,
+                            &frames->tvg_set_logarithmic_frame);
 }
 
 /* Входная точка в тесты. */
-static gboolean
-test_entry (gpointer udata)
+static void
+test (ApplicationData *app_data)
 {
-  HyScanSourceType source_type;
-  gchar *port_name = "";
-  gdouble min_val, max_val;
-
-  memset(&frames, 0, sizeof(Frames));
-
-  /*
-   * Тестирование датчиков.
-   */
-
-  switch (g_random_int_range (0, 3))
+  switch (app_data->test_id)
     {
-    case 0:
-      port_name = random_virtual_port_name ();
-      /* SENSOR: SET VIRTUAL PORT PARAM */
-      frames.sensor_virtual_port_param_frame.test = TRUE;
-      frames.sensor_virtual_port_param_frame.name = port_name;
-      frames.sensor_virtual_port_param_frame.channel = (guint) g_random_int_range (1, HYSCAN_SENSOR_CONTROL_MAX_CHANNELS);
-      frames.sensor_virtual_port_param_frame.time_offset = g_random_int () % G_MAXUINT16;
-
-      hyscan_sonar_model_sensor_set_virtual_params (sonar_model,
-                                                    frames.sensor_virtual_port_param_frame.name,
-                                                    frames.sensor_virtual_port_param_frame.channel,
-                                                    frames.sensor_virtual_port_param_frame.time_offset);
+    case TEST_START:
+      /* Тест запуска локатора. */
+      g_message ("START TEST");
+      test_start (app_data);
       break;
 
-    case 1:
-      port_name = random_uart_port_name ();
-      /* SENSOR: SET UART PORT PARAM */
-      frames.sensor_uart_port_param_frame.test = TRUE;
-      frames.sensor_uart_port_param_frame.name = port_name;
-      frames.sensor_uart_port_param_frame.channel = (guint) g_random_int_range (1, HYSCAN_SENSOR_CONTROL_MAX_CHANNELS);
-      frames.sensor_uart_port_param_frame.time_offset = g_random_int () % G_MAXUINT16;;
-      frames.sensor_uart_port_param_frame.protocol = g_random_boolean () ?
-                                                     HYSCAN_SENSOR_PROTOCOL_NMEA_0183 :
-                                                     HYSCAN_SENSOR_PROTOCOL_SAS;
-      frames.sensor_uart_port_param_frame.uart_device =
-          (guint) random_uart_device (frames.sensor_uart_port_param_frame.name);
-      frames.sensor_uart_port_param_frame.uart_mode = (guint)random_uart_mode (frames.sensor_uart_port_param_frame.name);
-
-      hyscan_sonar_model_sensor_set_uart_params (sonar_model,
-                                                 frames.sensor_uart_port_param_frame.name,
-                                                 frames.sensor_uart_port_param_frame.channel,
-                                                 frames.sensor_uart_port_param_frame.time_offset,
-                                                 frames.sensor_uart_port_param_frame.protocol,
-                                                 frames.sensor_uart_port_param_frame.uart_device,
-                                                 frames.sensor_uart_port_param_frame.uart_mode);
+    case TEST_SET:
+      /* Тест установки параметров локатора. */
+      g_message ("SET TEST");
+      test_set (app_data);
       break;
 
-    case 2:
-      port_name = random_udp_ip_port_name ();
-      /* SENSOR: SET UDP/IP PORT PARAM */
-      frames.sensor_udp_ip_port_param_frame.test = TRUE;
-      frames.sensor_udp_ip_port_param_frame.name = port_name;
-      frames.sensor_udp_ip_port_param_frame.channel = (guint) g_random_int_range (1, HYSCAN_SENSOR_CONTROL_MAX_CHANNELS);
-      frames.sensor_udp_ip_port_param_frame.time_offset = g_random_int () % G_MAXUINT16;;
-      frames.sensor_udp_ip_port_param_frame.protocol = g_random_boolean () ?
-                                                       HYSCAN_SENSOR_PROTOCOL_NMEA_0183 :
-                                                       HYSCAN_SENSOR_PROTOCOL_SAS;
-      frames.sensor_udp_ip_port_param_frame.ip_address =
-          (guint) random_ip_addres (frames.sensor_udp_ip_port_param_frame.name);
-      frames.sensor_udp_ip_port_param_frame.udp_port = (guint) g_random_int_range (1024, G_MAXUINT16);
-
-      hyscan_sonar_model_sensor_set_udp_ip_params (sonar_model,
-                                                   frames.sensor_udp_ip_port_param_frame.name,
-                                                   frames.sensor_udp_ip_port_param_frame.channel,
-                                                   frames.sensor_udp_ip_port_param_frame.time_offset,
-                                                   frames.sensor_udp_ip_port_param_frame.protocol,
-                                                   frames.sensor_udp_ip_port_param_frame.ip_address,
-                                                   (guint16)frames.sensor_udp_ip_port_param_frame.udp_port);
+    case TEST_STOP:
+      /* Тест останова локатора. */
+      g_message ("STOP TEST");
+      test_sonar_stop (app_data->sonar_model, &app_data->sonar_frames);
       break;
+
+    default:
+      g_warning ("Unknown test id");
+      complete_test (app_data, EXIT_FAILURE);
     }
+}
 
-  /* SENSOR: SET ENABLE */
-  frames.sensor_set_enable_frame.test = TRUE;
-  frames.sensor_set_enable_frame.name = port_name;
-  frames.sensor_set_enable_frame.enable = g_random_boolean ();
+static void
+free_servers_data (ApplicationData *app_data)
+{
+  guint i, j;
 
-  hyscan_sonar_model_sensor_set_enable (sonar_model,
-                                        frames.sensor_set_enable_frame.name,
-                                        frames.sensor_set_enable_frame.enable);
-
-  /* SENSOR: SET POSITION */
-  frames.sensor_set_position_frame.test = TRUE;
-  frames.sensor_set_position_frame.name = random_port_name ();
-  frames.sensor_set_position_frame.position = random_antenna_position ();
-
-  hyscan_sonar_model_sensor_set_position (sonar_model,
-                                          frames.sensor_set_position_frame.name,
-                                          frames.sensor_set_position_frame.position);
-
-  /*
-   * Тестирование источников.
-   */
-
-  source_type = random_source_type ();
-
-  switch (g_random_int_range (0, 4))
+  for (i = 1; i <= SENSOR_N_PORTS; ++i)
     {
-    case 0:
-      /* GENERATOR: SET PRESET */
-      frames.generator_set_preset_frame.test = TRUE;
-      frames.generator_set_preset_frame.source = source_type;
-      frames.generator_set_preset_frame.preset = (guint) random_preset (frames.generator_set_preset_frame.source);
+      gchar *port_name = g_strdup_printf ("uart.%d", i);
+      UARTPortInfo *uart_port = g_hash_table_lookup (app_data->ports, port_name);
 
-      hyscan_sonar_model_gen_set_preset (sonar_model,
-                                         frames.generator_set_preset_frame.source,
-                                         (guint) frames.generator_set_preset_frame.preset);
-      break;
-
-    case 1:
-      /* GENERATOR: SET AUTO */
-      frames.generator_set_auto_frame.test = TRUE;
-      frames.generator_set_auto_frame.source = source_type;
-      frames.generator_set_auto_frame.signal = random_signal ();
-
-      hyscan_sonar_model_gen_set_auto (sonar_model,
-                                       frames.generator_set_auto_frame.source,
-                                       frames.generator_set_auto_frame.signal);
-      break;
-
-    case 2:
-      /* GENERATOR: SET SIMPLE */
-      frames.generator_set_simple_frame.test = TRUE;
-      frames.generator_set_simple_frame.source = source_type;
-      frames.generator_set_simple_frame.signal = random_signal ();
-      frames.generator_set_simple_frame.power = g_random_double ();
-
-      hyscan_sonar_model_gen_set_simple (sonar_model,
-                                         frames.generator_set_simple_frame.source,
-                                         frames.generator_set_simple_frame.signal,
-                                         frames.generator_set_simple_frame.power);
-      break;
-
-    case 3:
-      /* GENERATOR: SET EXTENDED */
-      frames.generator_set_extended_frame.test = TRUE;
-      frames.generator_set_extended_frame.source = source_type;
-      frames.generator_set_extended_frame.signal = random_signal_full (HYSCAN_GENERATOR_SIGNAL_LFM
-                                                                       | HYSCAN_GENERATOR_SIGNAL_LFMD
-                                                                       | HYSCAN_GENERATOR_SIGNAL_TONE);
-      hyscan_generator_control_get_duration_range (HYSCAN_GENERATOR_CONTROL (sonar_control),
-                                                   frames.generator_set_extended_frame.source,
-                                                   frames.generator_set_extended_frame.signal,
-                                                   &min_val, &max_val);
-      frames.generator_set_extended_frame.duration = g_random_double_range (min_val, max_val);
-      frames.generator_set_extended_frame.power = g_random_double ();
-
-      hyscan_sonar_model_gen_set_extended (sonar_model,
-                                           frames.generator_set_extended_frame.source,
-                                           frames.generator_set_extended_frame.signal,
-                                           frames.generator_set_extended_frame.duration,
-                                           frames.generator_set_extended_frame.power);
-      break;
-    }
-
-  /* GENERATOR: SET ENABLE */
-  frames.generator_set_enable_frame.test = TRUE;
-  frames.generator_set_enable_frame.source = source_type;
-  frames.generator_set_enable_frame.enable = g_random_boolean ();
-
-  hyscan_sonar_model_gen_set_enable (sonar_model,
-                                     frames.generator_set_enable_frame.source,
-                                     frames.generator_set_enable_frame.enable);
-
-  switch (g_random_int_range (0, 4))
-    {
-    case 0:
-        /* TVG: SET AUTO */
-      frames.tvg_set_auto_frame.test = TRUE;
-      frames.tvg_set_auto_frame.source = source_type;
-      if (g_random_boolean ())
+      for (j = 0; j <= SENSOR_N_UART_DEVICES; j++)
         {
-          frames.tvg_set_auto_frame.sensitivity = -1.0;
-          frames.tvg_set_auto_frame.level = -1.0;
+          g_free (uart_port->uart_device_names[j]);
         }
-      else
+      for (j = 0; j <= SENSOR_N_UART_MODES; j++)
         {
-          frames.tvg_set_auto_frame.sensitivity = g_random_double ();
-          frames.tvg_set_auto_frame.level = g_random_double ();
+          g_free (uart_port->uart_mode_names[j]);
         }
-
-      hyscan_sonar_model_tvg_set_auto (sonar_model,
-                                       frames.tvg_set_auto_frame.source,
-                                       frames.tvg_set_auto_frame.level,
-                                       frames.tvg_set_auto_frame.sensitivity);
-      break;
-
-    case 1:
-      /* TVG: SET CONSTANT */
-      frames.tvg_set_constant_frame.test = TRUE;
-      frames.tvg_set_constant_frame.source = source_type;
-      hyscan_tvg_control_get_gain_range (HYSCAN_TVG_CONTROL (sonar_control),
-                                         frames.tvg_set_constant_frame.source,
-                                         &min_val, &max_val);
-      frames.tvg_set_constant_frame.gain = g_random_double_range (min_val, max_val);
-
-      hyscan_sonar_model_tvg_set_constant (sonar_model,
-                                           frames.tvg_set_constant_frame.source,
-                                           frames.tvg_set_constant_frame.gain);
-      break;
-
-    case 2:
-      /* TVG: SET LINEAR DB */
-      frames.tvg_set_linear_db_frame.test = TRUE;
-      frames.tvg_set_linear_db_frame.source = source_type;
-      hyscan_tvg_control_get_gain_range (HYSCAN_TVG_CONTROL (sonar_control),
-                                         frames.tvg_set_linear_db_frame.source,
-                                         &min_val, &max_val);
-      frames.tvg_set_linear_db_frame.gain0 = g_random_double_range (min_val, max_val);
-      frames.tvg_set_linear_db_frame.step = (max_val - min_val) / g_random_double_range (5.0, 10.0);
-
-      hyscan_sonar_model_tvg_set_linear_db (sonar_model,
-                                            frames.tvg_set_linear_db_frame.source,
-                                            frames.tvg_set_linear_db_frame.gain0,
-                                            frames.tvg_set_linear_db_frame.step);
-      break;
-
-    case 3:
-      /* TVG: SET LOGARITHMIC */
-      frames.tvg_set_logarithmic_frame.test = TRUE;
-      frames.tvg_set_logarithmic_frame.source = source_type;
-      hyscan_tvg_control_get_gain_range (HYSCAN_TVG_CONTROL (sonar_control),
-                                         frames.tvg_set_logarithmic_frame.source,
-                                         &min_val, &max_val);
-      frames.tvg_set_logarithmic_frame.gain0 = g_random_double_range (min_val, max_val);
-      frames.tvg_set_logarithmic_frame.beta = g_random_double ();
-      frames.tvg_set_logarithmic_frame.alpha = g_random_double ();
-
-      hyscan_sonar_model_tvg_set_logarithmic (sonar_model,
-                                              frames.tvg_set_logarithmic_frame.source,
-                                              frames.tvg_set_logarithmic_frame.gain0,
-                                              frames.tvg_set_logarithmic_frame.beta,
-                                              frames.tvg_set_logarithmic_frame.alpha);
-      break;
+      g_free (port_name);
     }
 
-  /* TVG: SET ENABLE */
-  frames.tvg_set_enable_frame.test = TRUE;
-  frames.tvg_set_enable_frame.source = source_type;
-  frames.tvg_set_enable_frame.enable = g_random_boolean ();
+  for (i = 1; i <= SENSOR_N_PORTS; ++i)
+    {
+      gchar *port_name = g_strdup_printf ("udp.%d", i);
+      UDPIPPortInfo *udp_port = g_hash_table_lookup (app_data->ports, port_name);
 
-  hyscan_sonar_model_tvg_set_enable (sonar_model,
-                                     frames.tvg_set_enable_frame.source,
-                                     frames.tvg_set_enable_frame.enable);
+      for (j = 0; j <= SENSOR_N_IP_ADDRESSES; ++j)
+        {
+          g_free (udp_port->ip_address_names[j]);
+        }
+      g_free (port_name);
+    }
 
-  /* SONAR: SET RECEIVE TIME */
-  frames.sonar_set_receive_time_frame.test = TRUE;
-  frames.sonar_set_receive_time_frame.source = source_type;
-  max_val = hyscan_sonar_control_get_max_receive_time (sonar_control, frames.sonar_set_receive_time_frame.source);
-  frames.sonar_set_receive_time_frame.receive_time = g_random_double_range (0.0, max_val);
+  g_hash_table_unref (app_data->ports);
 
-  hyscan_sonar_model_set_receive_time (sonar_model,
-                                       frames.sonar_set_receive_time_frame.source,
-                                       frames.sonar_set_receive_time_frame.receive_time);
+  for (i = 0; i < SONAR_N_SOURCES; ++i)
+    {
+      SourceInfo *info = source_info_by_source_type (app_data, source_type_by_index (i));
 
-  /* SONAR: SET POSITION */
-  frames.sonar_set_position_frame.test = TRUE;
-  frames.sonar_set_position_frame.source = source_type;
-  frames.sonar_set_position_frame.position = random_antenna_position ();
+      for (j = 0; j <= GENERATOR_N_PRESETS; ++j)
+        {
+          g_free (info->generator.preset_names[j]);
+        }
+    }
+}
 
-  hyscan_sonar_model_sonar_set_position (sonar_model,
-                                         frames.sonar_set_position_frame.source,
-                                         frames.sonar_set_position_frame.position);
+static void
+free_frames_data (ApplicationData *app_data)
+{
+  int i;
 
-  /* SONAR: SET SYNC */
-  frames.sonar_set_sync_type_frame.test = TRUE;
-  frames.sonar_set_sync_type_frame.sync_type = random_sync ();
+  /* Освобождение памяти, занятой параметрами источников. */
+  g_hash_table_unref (app_data->sources_frames);
 
-  hyscan_sonar_model_set_sync_type (sonar_model,
-                                    frames.sonar_set_sync_type_frame.sync_type);
+  /* Освобождение памяти, занятой параметрами датчиков. */
+  for (i = 1; i <= SENSOR_N_PORTS; ++i)
+    {
+      SensorFrames *frames;
+      gchar *name;
 
-  /* SONAR: START */
-  frames.sonar_start_frame.test = TRUE;
-  frames.sonar_start_frame.track_type = random_track_type ();
-  hyscan_sonar_model_set_track_type (sonar_model, frames.sonar_start_frame.track_type);
-  hyscan_sonar_model_sonar_start (sonar_model);
+      name = g_strdup_printf ("virtual.%d", i);
+      frames = g_hash_table_lookup (app_data->sensors_frames, name);
+      g_free (frames->virtual_port_frame.name);
+      g_free (frames->set_enable_frame.name);
+      g_free (frames->set_position_frame.name);
+      g_free (name);
 
+      name = g_strdup_printf ("uart.%d", i);
+      frames = g_hash_table_lookup (app_data->sensors_frames, name);
+      g_free (frames->uart_port_frame.name);
+      g_free (frames->set_enable_frame.name);
+      g_free (frames->set_position_frame.name);
+      g_free (name);
+
+      name = g_strdup_printf ("udp.%d", i);
+      frames = g_hash_table_lookup (app_data->sensors_frames, name);
+      g_free (frames->udp_port_frame.name);
+      g_free (frames->set_enable_frame.name);
+      g_free (frames->set_position_frame.name);
+      g_free (name);
+    }
+  g_hash_table_unref (app_data->sensors_frames);
+}
+
+static gboolean
+test_source (ApplicationData *app_data)
+{
+  do_test (app_data, TEST_START);
   return G_SOURCE_REMOVE;
 }
 
-int main (int argc, char **argv)
+static void
+complete_test (ApplicationData *app_data,
+               int              test_result)
 {
+  app_data->result = test_result;
+  g_main_loop_quit (app_data->main_loop);
+}
+
+static void
+do_test (ApplicationData *app_data,
+         int              test_id)
+{
+  app_data->test_id = test_id;
+  test (app_data);
+}
+
+int
+main (int    argc,
+      char **argv)
+{
+  ApplicationData app_data;
+  HyScanSonarBox *mock_sonar;
+  int i;
+
   g_random_set_seed ((guint32) (g_get_monotonic_time () % G_MAXUINT32));
 
+  /* Параметры источников данных. */
+  app_data.sources_frames = g_hash_table_new_full (NULL, NULL, NULL, g_free);
+  for (i = 0; i < SONAR_N_SOURCES; ++i)
+    {
+      HyScanSourceType source_type = source_type_by_index (i);
+      g_hash_table_insert (app_data.sources_frames, GINT_TO_POINTER (source_type), g_new0 (SourceFrames, 1));
+    }
+  /* Параметры датчиков. */
+  app_data.sensors_frames = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+  for (i = 1; i <= SENSOR_N_PORTS; ++i)
+    {
+      g_hash_table_insert (app_data.sensors_frames, g_strdup_printf ("virtual.%d", i), g_new0 (SensorFrames, 1));
+      g_hash_table_insert (app_data.sensors_frames, g_strdup_printf ("uart.%d", i), g_new0 (SensorFrames, 1));
+      g_hash_table_insert (app_data.sensors_frames, g_strdup_printf ("udp.%d", i), g_new0 (SensorFrames, 1));
+    }
+
   /* Инициализация виртуального гидролокатора. */
-  sonar_box = create_sonar ();
-  init_servers (sonar_box);
+  mock_sonar = make_mock_sonar (&app_data);
+  init_servers (&app_data, mock_sonar);
 
   /* Управление виртуальным гидролокатором. */
-  sonar_control = hyscan_sonar_control_new (HYSCAN_PARAM (sonar_box), 0, 0, NULL);
-
-  /* Асинхронное управление гидролокатором. */
-  sonar_model = g_object_new (HYSCAN_TYPE_SONAR_MODEL,
-                              "sonar-control", sonar_control,
-                              NULL);
-  g_signal_connect (sonar_model, "sonar-params-updated", G_CALLBACK (on_sonar_model_params_updated), NULL);
+  app_data.sonar_control = hyscan_sonar_control_new (HYSCAN_PARAM (mock_sonar), 0, 0, NULL);
+  /* Модель управления гидролокатором. */
+  app_data.sonar_model = hyscan_sonar_model_new (app_data.sonar_control);
+  g_signal_connect_swapped (app_data.sonar_model,
+                            "sonar-params-changed",
+                            G_CALLBACK (on_sonar_params_changed),
+                            &app_data);
 
   /* Создание MainLoop. */
-  main_loop = g_main_loop_new (NULL, TRUE);
+  app_data.main_loop = g_main_loop_new (NULL, TRUE);
 
-  n_test_repeats = 0;
-  g_idle_add (test_entry, NULL);
+  /* Точка входа в тест. */
+  g_idle_add ((GSourceFunc) test_source, &app_data);
 
-  g_main_loop_run (main_loop);
+  /* Запуск MainLoop. */
+  g_main_loop_run (app_data.main_loop);
 
-  /* MainLoop завершен. Освобождение занятых ресурсов. */
-  g_main_loop_unref (main_loop);
-  g_object_unref (sonar_model);
-  g_object_unref (sonar_control);
+  /* Освобождение занятых ресурсов. */
+  g_main_loop_unref (app_data.main_loop);
+  g_object_unref (app_data.sonar_model);
+  g_object_unref (app_data.sonar_control);
 
-  g_object_unref (server.sensor);
-  g_object_unref (server.generator);
-  g_object_unref (server.tvg);
-  g_object_unref (server.sonar);
+  g_object_unref (app_data.server.sensor);
+  g_object_unref (app_data.server.generator);
+  g_object_unref (app_data.server.tvg);
+  g_object_unref (app_data.server.sonar);
 
-  g_object_unref (sonar_box);
+  g_object_unref (mock_sonar);
 
-  {
-    guint i, j;
-
-    for (i = 0; i < SENSOR_N_PORTS; i++)
-      {
-        gchar *name = g_strdup_printf ("uart.%d", i + 1);
-        UARTPortInfo *port = g_hash_table_lookup (ports, name);
-
-        for (j = 0; j <= SENSOR_N_UART_DEVICES; j++)
-          g_free (port->uart_device_names[j]);
-        for (j = 0; j <= SENSOR_N_UART_MODES; j++)
-          g_free (port->uart_mode_names[j]);
-
-        g_free (name);
-      }
-
-    for (i = 0; i < SENSOR_N_PORTS; i++)
-      {
-        gchar *name = g_strdup_printf ("udp.%d", i + 1);
-        UDPIPPortInfo *port = g_hash_table_lookup (ports, name);
-
-        for (j = 0; j <= SENSOR_N_IP_ADDRESSES; j++)
-          g_free (port->ip_address_names[j]);
-
-        g_free (name);
-      }
-
-    g_hash_table_unref (ports);
-
-    for (i = 0; i < SONAR_N_SOURCES; i++)
-      {
-        HyScanSourceType source = source_type_by_index (i);
-        SourceInfo *info = source_info_by_source_type (source);
-
-        for (j = 0; j <= GENERATOR_N_PRESETS; j++)
-          g_free (info->generator.preset_names[j]);
-      }
-  }
+  free_servers_data (&app_data);
+  free_frames_data (&app_data);
 
   xmlCleanupParser ();
 
-  return test_result;
+  return app_data.result;
 }

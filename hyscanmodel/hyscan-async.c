@@ -209,22 +209,21 @@ hyscan_async_thread_func (gpointer object)
         }
       else
         {
+          /* Список запросов. */
           GList *query_item = priv->queries;
-          priv->queries_result = TRUE;
+          /* Результат выполнения списка запросов. */
+          gboolean queries_result = TRUE;
 
-          do
+          /* В цикле выполняются запросы до завершения списка или до первой ошибки. */
+          for (query_item = priv->queries; query_item != NULL && queries_result; query_item = g_list_next (query_item))
             {
               HyScanQuery *query = (HyScanQuery *) query_item->data;
-              /* Если одна из команд завершилась с ошибкой, остальные команды не выполняются. */
-              if (!(*query->command) (query->object, query->data))
-                {
-                  priv->queries_result = FALSE;
-                  break;
-                }
+              if (query != NULL && query->command != NULL)
+                queries_result = (*query->command) (query->object, query->data);
             }
-          while (NULL != (query_item = g_list_next (query_item)));
 
           priv->queries_completed = TRUE;
+          priv->queries_result = queries_result;
         }
 
       g_mutex_unlock (&priv->mutex);
