@@ -1277,7 +1277,8 @@ create_sonar (void)
           gchar *preset_name;
           preset_name = g_strdup_printf ("%s.preset.%d", hyscan_channel_get_name_by_types (source, FALSE, 1), j + 1);
 
-          info->generator.preset_ids[j] = hyscan_sonar_schema_generator_add_preset (schema, source, preset_name);
+          info->generator.preset_ids[j] = hyscan_sonar_schema_generator_add_preset (schema, source,
+                                                                                    preset_name, preset_name);
           info->generator.preset_names[j] = preset_name;
         }
 
