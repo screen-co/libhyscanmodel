@@ -1,3 +1,13 @@
+/**
+ * \file hyscan-connector.c
+ *
+ * \brief Класс асихронного подключения к БД и ГЛ.
+ * \author Vladimir Maximov (vmakxs@gmail.com)
+ * \date 2018
+ * \license Проприетарная лицензия ООО "Экран"
+ *
+ */
+
 #include "hyscan-connector.h"
 #include "hyscan-db-profile.h"
 #include "hyscan-sonar-profile.h"
@@ -134,7 +144,7 @@ hyscan_connector_connect_db (gpointer connector,
   /* Профиль БД. */
   profile = hyscan_db_profile_new ();
   /* Десериализация. */
-  if (hyscan_db_profile_read_from_file (profile, priv->db_profile))
+  if (hyscan_serializable_read (HYSCAN_SERIALIZABLE (profile), priv->db_profile))
     {
       priv->db = hyscan_db_new (hyscan_db_profile_get_uri (profile));
     }
@@ -166,7 +176,7 @@ hyscan_connector_connect_sonar (gpointer connector,
   /* Профиль гидролокатора. */
   sonar_profile = hyscan_sonar_profile_new ();
   /* Десериализация. */
-  if (!hyscan_sonar_profile_read_from_file (sonar_profile, priv->sonar_profile))
+  if (!hyscan_serializable_read (HYSCAN_SERIALIZABLE (sonar_profile), priv->sonar_profile))
     goto exit;
 
   /* Загрузка драйвера гидролокатора. */

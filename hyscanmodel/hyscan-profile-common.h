@@ -1,3 +1,13 @@
+/**
+ * \file hyscan-profile-common.h
+ *
+ * \brief Заголовочный файл модуля ф-й общего назначения, для работы с профилями.
+ * \author Vladimir Maximov (vmakxs@gmail.com)
+ * \date 2018
+ * \license Проприетарная лицензия ООО "Экран"
+ *
+ */
+
 #ifndef __HYSCAN_PROFILE_COMMON_H__
 #define __HYSCAN_PROFILE_COMMON_H__
 

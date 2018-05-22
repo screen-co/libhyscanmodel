@@ -5,9 +5,12 @@ set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
      hyscan-db-info.c
      hyscan-db-profile.c
      hyscan-profile-common.c
+     hyscan-sensors-data.c
+     hyscan-sensors-profile.c
      hyscan-sonar-control-model.c
      hyscan-sonar-model.c
-     hyscan-sonar-profile.c)
+     hyscan-sonar-profile.c
+     hyscan-serializable.c)
 
 add_library (${HYSCAN_MODEL_LIBRARY} SHARED ${HYSCAN_MODEL_LIBRARY_SOURCE_FILES})
 
@@ -39,9 +42,12 @@ set (HYSCAN_MODEL_LIBRARY_INSTALL_FILES
      hyscan-db-info.h
      hyscan-db-profile.h
      hyscan-profile-common.h
+     hyscan-sensors-data.h
+     hyscan-sensors-profile.h
      hyscan-sonar-control-model.h
      hyscan-sonar-model.h
-     hyscan-sonar-profile.h)
+     hyscan-sonar-profile.h
+     hyscan-serializable.h)
 
 install (FILES ${HYSCAN_MODEL_LIBRARY_INSTALL_FILES}
          COMPONENT development

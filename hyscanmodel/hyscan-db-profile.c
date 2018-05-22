@@ -1,7 +1,7 @@
 /*
  * \file hyscan-db-profile.c
  *
- * \brief Исходный файл класса HyScanDBProfile, выполняющего список запросов в отдельном потоке.
+ * \brief Исходный файл класса HyScanDBProfile - профиля БД.
  * \author Vladimir Maximov (vmakxs@gmail.com)
  * \date 2018
  * \license Проприетарная лицензия ООО "Экран"
@@ -29,18 +29,25 @@ struct _HyScanDBProfilePrivate
   gchar *uri;    /* Идентификатор БД.*/
 };
 
-static void   hyscan_db_profile_set_property   (GObject           *object,
-                                                guint              prop_id,
-                                                const GValue      *value,
-                                                GParamSpec        *pspec);
-static void   hyscan_db_profile_get_property   (GObject           *object,
-                                                guint              prop_id,
-                                                GValue            *value,
-                                                GParamSpec        *pspec);
-static void   hyscan_db_profile_finalize       (GObject           *object);
-static void   hyscan_db_profile_clear          (HyScanDBProfile   *profile);
+static void   hyscan_db_profile_interface_init  (HyScanSerializableInterface  *iface);
+static void   hyscan_db_profile_set_property    (GObject                      *object,
+                                                 guint                         prop_id,
+                                                 const GValue                 *value,
+                                                 GParamSpec                   *pspec);
+static void   hyscan_db_profile_get_property    (GObject                      *object,
+                                                 guint                         prop_id,
+                                                 GValue                       *value,
+                                                 GParamSpec                   *pspec);
+static void   hyscan_db_profile_finalize        (GObject                      *object);
+static void   hyscan_db_profile_clear           (HyScanDBProfile              *profile);
+gboolean      hyscan_db_profile_read            (HyScanSerializable           *serializable,
+                                                 const gchar                  *name);
+gboolean      hyscan_db_profile_write           (HyScanSerializable           *serializable,
+                                                 const gchar                  *name);
 
-G_DEFINE_TYPE_WITH_PRIVATE (HyScanDBProfile, hyscan_db_profile, G_TYPE_OBJECT)
+G_DEFINE_TYPE_WITH_CODE (HyScanDBProfile, hyscan_db_profile, G_TYPE_OBJECT,
+                         G_ADD_PRIVATE (HyScanDBProfile)
+                         G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_SERIALIZABLE, hyscan_db_profile_interface_init));
 
 static void
 hyscan_db_profile_class_init (HyScanDBProfileClass *klass)
@@ -160,20 +167,17 @@ hyscan_db_profile_new_full (const gchar *name,
 
 /* Десериализация из INI-файла. */
 gboolean
-hyscan_db_profile_read_from_file (HyScanDBProfile *profile,
-                                  const gchar     *filename)
+hyscan_db_profile_read (HyScanSerializable *serializable,
+                        const gchar        *name)
 {
-  HyScanDBProfilePrivate *priv;
+  HyScanDBProfile *profile = HYSCAN_DB_PROFILE(serializable);
+  HyScanDBProfilePrivate *priv = profile->priv;
   GKeyFile *key_file;
   gboolean result = TRUE;
 
-  g_return_val_if_fail (HYSCAN_IS_DB_PROFILE (profile), FALSE);
-
-  priv = profile->priv;
-
   key_file = g_key_file_new ();
 
-  if (!g_key_file_load_from_file (key_file, filename, G_KEY_FILE_NONE, NULL))
+  if (!g_key_file_load_from_file (key_file, name, G_KEY_FILE_NONE, NULL))
     {
       g_warning ("HyScanDBProfile: there is a problem parsing the file.");
       result = FALSE;
@@ -208,17 +212,14 @@ exit:
 
 /* Сериализация в INI-файл. */
 gboolean
-hyscan_db_profile_write_to_file (HyScanDBProfile *profile,
-                                 const gchar     *filename)
+hyscan_db_profile_write (HyScanSerializable *serializable,
+                         const gchar        *name)
 {
-  HyScanDBProfilePrivate *priv;
+  HyScanDBProfile *profile = HYSCAN_DB_PROFILE(serializable);
+  HyScanDBProfilePrivate *priv = profile->priv;
   GKeyFile *key_file;
   GError *gerror = NULL;
   gboolean result;
-
-  g_return_val_if_fail (HYSCAN_IS_DB_PROFILE (profile), FALSE);
-
-  priv = profile->priv;
 
   key_file = g_key_file_new ();
 
@@ -238,7 +239,7 @@ hyscan_db_profile_write_to_file (HyScanDBProfile *profile,
                          priv->name != NULL ? priv->name : HYSCAN_DB_PROFILE_UNNAMED_VALUE);
 
   /* Запись в файл. */
-  if (!(result = g_key_file_save_to_file (key_file, filename, &gerror)))
+  if (!(result = g_key_file_save_to_file (key_file, name, &gerror)))
     {
       g_warning ("HyScanDBProfile: couldn't write data to file. %s", gerror->message);
       g_error_free (gerror);
@@ -287,4 +288,11 @@ hyscan_db_profile_set_uri (HyScanDBProfile *profile,
 
   g_free (profile->priv->uri);
   profile->priv->uri = g_strdup (uri);
+}
+
+static void
+hyscan_db_profile_interface_init (HyScanSerializableInterface *iface)
+{
+  iface->read = hyscan_db_profile_read;
+  iface->write = hyscan_db_profile_write;
 }

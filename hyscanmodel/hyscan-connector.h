@@ -1,3 +1,14 @@
+/**
+ * \file hyscan-connector.h
+ *
+ * \brief Класс асихронного подключения к БД и ГЛ.
+ * \author Vladimir Maximov (vmakxs@gmail.com)
+ * \date 2018
+ * \license Проприетарная лицензия ООО "Экран"
+ *
+ * \defgroup HyScanConnector HyScanConnector - класс асихронного подключения к БД и ГЛ.
+ */
+
 #ifndef __HYSCAN_CONNECTOR_H__
 #define __HYSCAN_CONNECTOR_H__
 

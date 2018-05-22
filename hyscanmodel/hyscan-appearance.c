@@ -1,3 +1,12 @@
+/**
+ * \file hyscan-appearance.c
+ *
+ * \brief Модель внешнего вида приложения.
+ * \author Vladimir Maximov (vmakxs@gmail.com)
+ * \date 2018
+ * \license Проприетарная лицензия ООО "Экран"
+ */
+
 #include "hyscan-appearance.h"
 #include <hyscan-tile-color.h>
 #include <memory.h>

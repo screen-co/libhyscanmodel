@@ -1,3 +1,13 @@
+/**
+ * \file hyscan-sonar-profile.c
+ *
+ * \brief Исходный файл класса HyScanSonarProfile - профиля ГЛ.
+ * \author Vladimir Maximov (vmakxs@gmail.com)
+ * \date 2018
+ * \license Проприетарная лицензия ООО "Экран"
+ *
+ */
+
 #include "hyscan-sonar-profile.h"
 
 #define HYSCAN_SONAR_PROFILE_GROUP_NAME "sonar"
@@ -26,18 +36,27 @@ struct _HyScanSonarProfilePrivate
   gchar  *config;      /* Конфигурация локатора. */
 };
 
-static void   hyscan_sonar_profile_set_property   (GObject              *object,
-                                                   guint                 prop_id,
-                                                   const GValue         *value,
-                                                   GParamSpec           *pspec);
-static void   hyscan_sonar_profile_get_property   (GObject              *object,
-                                                   guint                 prop_id,
-                                                   GValue               *value,
-                                                   GParamSpec           *pspec);
-static void   hyscan_sonar_profile_finalize       (GObject              *object);
-static void   hyscan_sonar_profile_clear          (HyScanSonarProfile   *profile);
+static void   hyscan_sonar_profile_interface_init  (HyScanSerializableInterface  *iface);
+static void   hyscan_sonar_profile_set_property    (GObject                      *object,
+                                                    guint                         prop_id,
+                                                    const GValue                 *value,
+                                                    GParamSpec                   *pspec);
+static void   hyscan_sonar_profile_get_property    (GObject                      *object,
+                                                    guint                         prop_id,
+                                                    GValue                       *value,
+                                                    GParamSpec                   *pspec);
+static void   hyscan_sonar_profile_finalize        (GObject                      *object);
+static void   hyscan_sonar_profile_clear           (HyScanSonarProfile           *profile);
 
-G_DEFINE_TYPE_WITH_PRIVATE (HyScanSonarProfile, hyscan_sonar_profile, G_TYPE_OBJECT)
+gboolean      hyscan_sonar_profile_read            (HyScanSerializable           *serializable,
+                                                    const gchar                  *name);
+gboolean      hyscan_sonar_profile_write           (HyScanSerializable           *serializable,
+                                                    const gchar                  *name);
+
+G_DEFINE_TYPE_WITH_CODE (HyScanSonarProfile, hyscan_sonar_profile, G_TYPE_OBJECT,
+                         G_ADD_PRIVATE (HyScanSonarProfile)
+                         G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_SERIALIZABLE, hyscan_sonar_profile_interface_init));
+
 
 static void
 hyscan_sonar_profile_class_init (HyScanSonarProfileClass *klass)
@@ -216,20 +235,17 @@ hyscan_sonar_profile_new_full (const gchar *name,
 
 /* Десериализация из INI-файла. */
 gboolean
-hyscan_sonar_profile_read_from_file (HyScanSonarProfile *profile,
-                                     const gchar        *filename)
+hyscan_sonar_profile_read (HyScanSerializable *serializable,
+                           const gchar        *name)
 {
-  HyScanSonarProfilePrivate *priv;
+  HyScanSonarProfile *profile = HYSCAN_SONAR_PROFILE (serializable);
+  HyScanSonarProfilePrivate *priv = profile->priv;
   GKeyFile *key_file;
   gboolean result = TRUE;
 
-  g_return_val_if_fail (HYSCAN_IS_SONAR_PROFILE (profile), FALSE);
-
-  priv = profile->priv;
-
   key_file = g_key_file_new ();
 
-  if (!g_key_file_load_from_file (key_file, filename, G_KEY_FILE_NONE, NULL))
+  if (!g_key_file_load_from_file (key_file, name, G_KEY_FILE_NONE, NULL))
     {
       g_warning ("HyScanSonarProfile: there is a problem parsing the file.");
       result = FALSE;
@@ -299,17 +315,14 @@ exit:
 
 /* Сериализация в INI-файл. */
 gboolean
-hyscan_sonar_profile_write_to_file (HyScanSonarProfile *profile,
-                                    const gchar        *filename)
+hyscan_sonar_profile_write (HyScanSerializable *serializable,
+                            const gchar        *name)
 {
-  HyScanSonarProfilePrivate *priv;
+  HyScanSonarProfile *profile = HYSCAN_SONAR_PROFILE (serializable);
+  HyScanSonarProfilePrivate *priv = profile->priv;
   GKeyFile *key_file;
   GError *gerror = NULL;
   gboolean result;
-
-  g_return_val_if_fail (HYSCAN_IS_SONAR_PROFILE (profile), FALSE);
-
-  priv = profile->priv;
 
   key_file = g_key_file_new ();
 
@@ -355,10 +368,10 @@ hyscan_sonar_profile_write_to_file (HyScanSonarProfile *profile,
     }
 
   /* Запись в файл. */
-  if (!(result = g_key_file_save_to_file (key_file, filename, &gerror)))
+  if (!(result = g_key_file_save_to_file (key_file, name, &gerror)))
     {
       g_warning ("HyScanSonarProfile: couldn't write data to file %s. Error: %s",
-                 filename, gerror->message);
+                 name, gerror->message);
       g_error_free (gerror);
     }
 
@@ -458,3 +471,11 @@ hyscan_sonar_profile_set_sonar_config (HyScanSonarProfile *profile,
   g_free (profile->priv->config);
   profile->priv->config = g_strdup (config);
 }
+
+static void
+hyscan_sonar_profile_interface_init (HyScanSerializableInterface *iface)
+{
+  iface->read = hyscan_sonar_profile_read;
+  iface->write = hyscan_sonar_profile_write;
+}
+

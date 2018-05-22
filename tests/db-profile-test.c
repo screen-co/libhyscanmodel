@@ -12,7 +12,7 @@ int main (int argc, char **argv)
 
 
   p1 = hyscan_db_profile_new_full ("testname", "testuri");
-  if (!hyscan_db_profile_write_to_file (p1, TEST_FILE_NAME))
+  if (!hyscan_serializable_write (HYSCAN_SERIALIZABLE (p1), TEST_FILE_NAME))
     {
       g_warning ("Couldn't write test profile.");
       res = EXIT_FAILURE;
@@ -20,8 +20,8 @@ int main (int argc, char **argv)
     }
 
   p2 = hyscan_db_profile_new ();
-  hyscan_db_profile_read_from_file (p2, TEST_FILE_NAME);
-  if (!hyscan_db_profile_write_to_file (p1, TEST_FILE_NAME))
+  hyscan_serializable_read (HYSCAN_SERIALIZABLE (p2), TEST_FILE_NAME);
+  if (!hyscan_serializable_write (HYSCAN_SERIALIZABLE (p1), TEST_FILE_NAME))
     {
       g_warning ("Couldn't read test profile.");
       res = EXIT_FAILURE;

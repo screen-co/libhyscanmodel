@@ -1,8 +1,21 @@
+/**
+ * \file hyscan-sonar-profile.h
+ *
+ * \brief Заголовочный файл класса HyScanSonarProfile - профиля ГЛ.
+ * \author Vladimir Maximov (vmakxs@gmail.com)
+ * \date 2018
+ * \license Проприетарная лицензия ООО "Экран"
+ *
+ * \defgroup HyScanSonarProfile HyScanSonarProfile - профиль ГЛ.
+ *
+ */
+
 #ifndef __HYSCAN_SONAR_PROFILE_H__
 #define __HYSCAN_SONAR_PROFILE_H__
 
 #include <glib-object.h>
 #include <hyscan-api.h>
+#include <hyscan-serializable.h>
 
 G_BEGIN_DECLS
 
@@ -53,16 +66,6 @@ HyScanSonarProfile*   hyscan_sonar_profile_new_full            (const gchar     
                                                                 const gchar          *driver_name,
                                                                 const gchar          *uri,
                                                                 const gchar          *config);
-
-/* Десериализация из INI-файла. */
-HYSCAN_API
-gboolean              hyscan_sonar_profile_read_from_file      (HyScanSonarProfile   *profile,
-                                                                const gchar          *filename);
-
-/* Сериализация в INI-файл. */
-HYSCAN_API
-gboolean              hyscan_sonar_profile_write_to_file       (HyScanSonarProfile   *profile,
-                                                                const gchar          *filename);
 
 /* Получает имя локатора. */
 HYSCAN_API

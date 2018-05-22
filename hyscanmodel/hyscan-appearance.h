@@ -1,3 +1,14 @@
+/**
+ * \file hyscan-appearance.h
+ *
+ * \brief Модель внешнего вида приложения.
+ * \author Vladimir Maximov (vmakxs@gmail.com)
+ * \date 2018
+ * \license Проприетарная лицензия ООО "Экран"
+ *
+ * \defgroup HyScanAppearance HyScanAppearance - модель внешнего вида приложения.
+ */
+
 #ifndef __HYSCAN_APPEARANCE_H__
 #define __HYSCAN_APPEARANCE_H__
 

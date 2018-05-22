@@ -15,6 +15,7 @@
 
 #include <glib-object.h>
 #include <hyscan-api.h>
+#include <hyscan-serializable.h>
 
 G_BEGIN_DECLS
 
@@ -62,16 +63,6 @@ HyScanDBProfile*   hyscan_db_profile_new                 (void);
 HYSCAN_API
 HyScanDBProfile*   hyscan_db_profile_new_full            (const gchar       *name,
                                                           const gchar       *uri);
-
-/* Десериализация из INI-файла. */
-HYSCAN_API
-gboolean           hyscan_db_profile_read_from_file      (HyScanDBProfile   *profile,
-                                                          const gchar       *filename);
-
-/* Сериализация в INI-файл. */
-HYSCAN_API
-gboolean           hyscan_db_profile_write_to_file       (HyScanDBProfile   *profile,
-                                                          const gchar       *filename);
 
 /* Получает имя системы хранения. */
 HYSCAN_API

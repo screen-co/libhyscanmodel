@@ -1,3 +1,13 @@
+/**
+ * \file hyscan-profile-common.c
+ *
+ * \brief Исходный файл модуля ф-й общего назначения, для работы с профилями.
+ * \author Vladimir Maximov (vmakxs@gmail.com)
+ * \date 2018
+ * \license Проприетарная лицензия ООО "Экран"
+ *
+ */
+
 #include "hyscan-profile-common.h"
 
 #define HYSCAN_CONFIG_DIRECTORY_NAME "HyScan"
