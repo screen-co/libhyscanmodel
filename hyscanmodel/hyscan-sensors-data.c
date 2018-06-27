@@ -257,6 +257,7 @@ hyscan_sensors_data_get_virtual_sensor (GHashTable  *sensors,
   return TRUE;
 }
 
+/* Задаёт датчики для гидролокатора. */
 void
 hyscan_sensors_data_set_for_sonar (GHashTable       *sensors,
                                    HyScanSonarModel *sonar_model)
