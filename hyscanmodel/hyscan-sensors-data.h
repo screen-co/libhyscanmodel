@@ -10,7 +10,7 @@
 
 #include <glib.h>
 #include <hyscan-api.h>
-#include <hyscan-sensor-control.h>
+#include "hyscan-sonar-model.h"
 
 /* Значение хэш-таблицы датчиков. */
 typedef struct
@@ -54,7 +54,7 @@ typedef struct
 
 /* Создаёт хранилище данных датчиков. */
 HYSCAN_API
-GHashTable*           hyscan_sensors_data_new              (void);
+GHashTable*           hyscan_sensors_data_new                   (void);
 
 /* Получает тип порта датчика. */
 HYSCAN_API
@@ -95,6 +95,11 @@ gboolean              hyscan_sensors_data_get_virtual_sensor    (GHashTable     
                                                                  const gchar               *sensor,
                                                                  guint                     *channel,
                                                                  gint64                    *time_offset);
+
+/* Задаёт датчики для гидролокатора. */
+HYSCAN_API
+void                  hyscan_sensors_data_set_for_sonar        (GHashTable                 *sensors,
+                                                                HyScanSonarModel           *sonar_model);
 
 /* Задаёт состояние датчика. */
 HYSCAN_API

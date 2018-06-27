@@ -257,6 +257,99 @@ hyscan_sensors_data_get_virtual_sensor (GHashTable  *sensors,
   return TRUE;
 }
 
+void
+hyscan_sensors_data_set_for_sonar (GHashTable       *sensors,
+                                   HyScanSonarModel *sonar_model)
+{
+  HyScanSonarControl *sonar_control;
+  HyScanSensorControl *sensor_control;
+  gchar **ports;
+  guint nports, i;
+
+  if (sensors == NULL)
+    {
+      g_warning ("hyscan_sensors_data_set_for_sonar(): sensors is null");
+      return;
+    }
+
+  if (sonar_model == NULL)
+    {
+      g_warning ("hyscan_sensors_data_set_for_sonar(): sonar model is null");
+      return;
+    }
+
+  g_hash_table_remove_all (sensors);
+
+  sonar_control = hyscan_sonar_model_get_sonar_control (sonar_model);
+  sensor_control = HYSCAN_SENSOR_CONTROL (sonar_control);
+
+  ports = hyscan_sensor_control_list_ports (sensor_control);
+  nports = g_strv_length (ports);
+  for (i = 0; i < nports; ++i)
+    {
+      const gchar *port;
+      HyScanSensorPortType port_type;
+
+      port = ports[i];
+      port_type = hyscan_sensor_control_get_port_type (sensor_control, port);
+
+      switch (port_type)
+      {
+      case HYSCAN_SENSOR_PORT_UART:
+        {
+          HyScanUARTPortPrm prm;
+          gboolean state;
+          /* Чтение необходимых параметров из схемы и модели. */
+          prm.modes = hyscan_sensor_control_list_uart_modes (sensor_control, port);
+          prm.devices = hyscan_sensor_control_list_uart_devices (sensor_control, port);
+          hyscan_sonar_model_sensor_get_uart_params (sonar_model, port, &prm.channel, &prm.time_offset,
+                                                     &prm.protocol, &prm.device, &prm.mode);
+          state = hyscan_sonar_model_sensor_is_enabled (sonar_model, port);
+          /* Задание прочитанных параметров в хэш-таблицу. */
+          hyscan_sensors_data_set_uart_sensor (sensors, port, prm.channel, prm.time_offset,
+                                               prm.protocol, prm.device, prm.mode, prm.devices, prm.modes);
+          hyscan_sensors_data_set_state(sensors, port, state);
+        }
+        break;
+
+      case HYSCAN_SENSOR_PORT_UDP_IP:
+        {
+          HyScanUDPPortPrm prm;
+          gboolean state;
+          /* Чтение необходимых параметров из схемы и модели. */
+          prm.addresses = hyscan_sensor_control_list_ip_addresses (sensor_control, port);
+          hyscan_sonar_model_sensor_get_udp_ip_params (sonar_model, port, &prm.channel, &prm.time_offset,
+                                                       &prm.protocol, &prm.addr, &prm.port);
+          state = hyscan_sonar_model_sensor_is_enabled (sonar_model, port);
+          /* Задание прочитанных параметров в хэш-таблицу. */
+          hyscan_sensors_data_set_udp_sensor (sensors, port, prm.channel, prm.time_offset,
+                                              prm.protocol, prm.addr, prm.port, prm.addresses);
+          hyscan_sensors_data_set_state(sensors, port, state);
+        }
+        break;
+
+      case HYSCAN_SENSOR_PORT_VIRTUAL:
+        {
+          HyScanVirtualPortPrm prm;
+          gboolean state;
+          /* Чтение необходимых параметров из схемы и модели. */
+          hyscan_sonar_model_sensor_get_virtual_params (sonar_model, port, &prm.channel, &prm.time_offset);
+          state = hyscan_sonar_model_sensor_is_enabled (sonar_model, port);
+          /* Задание прочитанных параметров в хэш-таблицу. */
+          hyscan_sensors_data_set_virtual_sensor (sensors, port, prm.channel, prm.time_offset);
+          hyscan_sensors_data_set_state(sensors, port, state);
+        }
+        break;
+
+      default:
+        g_message ("hyscan_sensors_data_set_for_sonar(): invalid port type");
+      }
+    }
+
+  g_strfreev (ports);
+  g_object_unref (sonar_control);
+}
+
 /* Задаёт состояние датчика. */
 void
 hyscan_sensors_data_set_state (GHashTable  *sensors,
