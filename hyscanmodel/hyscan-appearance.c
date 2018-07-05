@@ -32,7 +32,7 @@ struct _HyScanAppearancePrivate
   gchar                  *colormap_id;
 
   guint32                 substrate;
-  HyScanAppearanceLevels  levels;
+  GHashTable             *levels;
 };
 
 /* Индексы сигналов в массиве идентификаторов сигналов. */
@@ -107,6 +107,7 @@ hyscan_appearance_finalize (GObject *object)
   HyScanAppearancePrivate *priv = self->priv;
 
   g_hash_table_unref (priv->default_colormaps);
+  g_hash_table_unref (priv->levels);
   g_free (priv->colormap_id);
 
   G_OBJECT_CLASS (hyscan_appearance_parent_class)->finalize (object);
@@ -118,7 +119,7 @@ hyscan_appearance_colormaps_init (HyScanAppearance *appearance)
   HyScanAppearancePrivate *priv = appearance->priv;
   const gsize length = 256;
   HyScanColormapInfo *white_cm;
-  HyScanColormapInfo *yellow_cm; 
+  HyScanColormapInfo *yellow_cm;
   HyScanColormapInfo *green_cm;
   gsize i;
 
@@ -161,9 +162,16 @@ static void
 hyscan_appearance_levels_init (HyScanAppearance *appearance)
 {
   HyScanAppearancePrivate *priv = appearance->priv;
-  priv->levels.black = 0.0;
-  priv->levels.white = 0.3;
-  priv->levels.gamma = 1.0;
+  HyScanAppearanceLevels *fallback = g_new0 (HyScanAppearanceLevels, 1);
+
+  priv->levels = g_hash_table_new_full (g_direct_hash, g_direct_equal,
+                                        NULL, g_free);
+
+  fallback->black = 0.0;
+  fallback->white = 0.2;
+  fallback->gamma = 1.0;
+
+  g_hash_table_insert (priv->levels, GINT_TO_POINTER (HYSCAN_SOURCE_INVALID), fallback);
 }
 
 static void
@@ -204,7 +212,7 @@ hyscan_appearance_get_colormap (HyScanAppearance *appearance,
         *name = g_strdup (cinf->name);
       if (background != NULL)
         *background = cinf->background;
-      if (colormap != NULL) 
+      if (colormap != NULL)
         {
           *colormap = g_new (guint32, cinf->length);
           memcpy (*colormap, cinf->colormap, cinf->length * sizeof (guint32));
@@ -279,22 +287,33 @@ hyscan_appearance_get_substrate (HyScanAppearance *appearance,
 
 void
 hyscan_appearance_get_levels (HyScanAppearance *appearance,
+                              HyScanSourceType  source,
                               gdouble          *black,
                               gdouble          *gamma,
                               gdouble          *white)
 {
   HyScanAppearancePrivate *priv;
+  HyScanAppearanceLevels *levels;
 
   g_return_if_fail (HYSCAN_IS_APPEARANCE (appearance));
 
   priv = appearance->priv;
 
+  levels = g_hash_table_lookup (priv->levels, GINT_TO_POINTER (source));
+
+  if (levels == NULL)
+    {
+      levels = g_hash_table_lookup (priv->levels, GINT_TO_POINTER (HYSCAN_SOURCE_INVALID));
+      if (levels == NULL)
+        return;
+    }
+
   if (black != NULL)
-    *black = priv->levels.black;
+    *black = levels->black;
   if (gamma != NULL)
-    *gamma = priv->levels.gamma;
+    *gamma = levels->gamma;
   if (white != NULL)
-    *white = priv->levels.white;
+    *white = levels->white;
 }
 
 void
@@ -317,11 +336,14 @@ hyscan_appearance_set_substrate (HyScanAppearance *appearance,
 
 void
 hyscan_appearance_set_levels (HyScanAppearance *appearance,
+                              HyScanSourceType  source,
                               gdouble           black,
                               gdouble           gamma,
                               gdouble           white)
 {
   HyScanAppearancePrivate *priv;
+  HyScanAppearanceLevels *levels;
+
 
   g_return_if_fail (HYSCAN_IS_APPEARANCE (appearance));
 
@@ -330,13 +352,22 @@ hyscan_appearance_set_levels (HyScanAppearance *appearance,
   white = CLAMP (white, 10e-3, 1.0);
   black = CLAMP (black, 0.0, 1.0 - 10e-3);
 
-  if (priv->levels.black != black || priv->levels.gamma != gamma || priv->levels.white != white)
+  levels = g_hash_table_lookup (priv->levels, GINT_TO_POINTER (source));
+
+  if (levels == NULL)
+    {
+      levels = g_new0 (HyScanAppearanceLevels, 1);
+
+      g_hash_table_insert (priv->levels, GINT_TO_POINTER (source), levels);
+    }
+
+  if (levels->black != black || levels->gamma != gamma || levels->white != white)
     {
       white = black < white ? white : black + 10e-3;
 
-      priv->levels.black = black;
-      priv->levels.white = white;
-      priv->levels.gamma = gamma > 0.0 ? gamma : 10e-3;
+      levels->black = black;
+      levels->white = white;
+      levels->gamma = gamma > 0.0 ? gamma : 10e-3;
 
       g_signal_emit (appearance, hyscan_appearance_signals[SIGNAL_LEVELS_CHANGED], 0);
     }

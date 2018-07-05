@@ -14,6 +14,7 @@
 
 #include <glib-object.h>
 #include <hyscan-api.h>
+#include <hyscan-types.h>
 
 G_BEGIN_DECLS
 
@@ -81,6 +82,7 @@ void               hyscan_appearance_get_substrate     (HyScanAppearance  *appea
 
 HYSCAN_API
 void               hyscan_appearance_get_levels        (HyScanAppearance  *appearance,
+                                                        HyScanSourceType   source,
                                                         gdouble           *black,
                                                         gdouble           *gamma,
                                                         gdouble           *white);
@@ -91,6 +93,7 @@ void               hyscan_appearance_set_substrate     (HyScanAppearance  *appea
 
 HYSCAN_API
 void               hyscan_appearance_set_levels        (HyScanAppearance  *appearance,
+                                                        HyScanSourceType   source,
                                                         gdouble            black,
                                                         gdouble            gamma,
                                                         gdouble            white);
