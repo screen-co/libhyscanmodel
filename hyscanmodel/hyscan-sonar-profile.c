@@ -105,7 +105,7 @@ hyscan_sonar_profile_class_init (HyScanSonarProfileClass *klass)
                                    g_param_spec_string ("config",
                                                         "Confif",
                                                         "Config",
-                                                        NULL, 
+                                                        NULL,
                                                         G_PARAM_READWRITE));
 }
 
@@ -259,47 +259,50 @@ hyscan_sonar_profile_read (HyScanSerializable *serializable,
                                       HYSCAN_SONAR_PROFILE_GROUP_NAME,
                                       HYSCAN_SONAR_PROFILE_NAME_KEY,
                                       NULL);
-  if (priv->name == NULL)
-    {
-      g_warning ("HyScanDBProfile: %s", "name not found.");
-      result = FALSE;
-      goto exit;
-    }
+
+  /* Чтение строки с адресом локатора. */
+  priv->uri = g_key_file_get_string (key_file,
+                                     HYSCAN_SONAR_PROFILE_GROUP_NAME,
+                                     HYSCAN_SONAR_PROFILE_URI_KEY,
+                                     NULL);
 
   /* Чтение строки с путём к драйверу. */
   priv->driver_path = g_key_file_get_string (key_file,
                                              HYSCAN_SONAR_PROFILE_GROUP_NAME,
                                              HYSCAN_SONAR_PROFILE_DRV_PATH_KEY,
                                              NULL);
-  if (priv->name == NULL)
-    {
-      g_warning ("HyScanDBProfile: %s", "uri not found.");
-      result = FALSE;
-      goto exit;
-    }
-
   /* Чтение строки с идентификатором системы хранения. */
   priv->driver_name = g_key_file_get_string (key_file,
                                              HYSCAN_SONAR_PROFILE_GROUP_NAME,
                                              HYSCAN_SONAR_PROFILE_DRV_NAME_KEY,
                                              NULL);
-  if (priv->driver_name == NULL)
+  if (priv->name == NULL)
     {
-      g_warning ("HyScanDBProfile: %s", "driver name not found.");
+      g_warning ("HyScanSonarProfile: %s", "name not found.");
       result = FALSE;
-      goto exit;
     }
-
-  /* Чтение строки с идентификатором системы хранения. */
-  priv->uri = g_key_file_get_string (key_file,
-                                     HYSCAN_SONAR_PROFILE_GROUP_NAME,
-                                     HYSCAN_SONAR_PROFILE_URI_KEY,
-                                     NULL);
   if (priv->uri == NULL)
     {
-      g_warning ("HyScanDBProfile: %s", "uri not found.");
+      g_warning ("HyScanSonarProfile: %s", "sonar uri not found.");
       result = FALSE;
-      goto exit;
+    }
+
+  /* Если не заданы driver_path и driver_name,
+   * подключение с помощью sonarclient.
+   * Но если задано только одно из этих полей, то это ошибка. */
+
+  if ((priv->driver_path == NULL) != (priv->driver_name == NULL))
+    {
+      if (priv->driver_path == NULL)
+        {
+          g_warning ("HyScanSonarProfile: %s", "driver uri not found.");
+          result = FALSE;
+        }
+      if (priv->driver_name == NULL)
+        {
+          g_warning ("HyScanSonarProfile: %s", "driver name not found.");
+          result = FALSE;
+        }
     }
 
   /* Чтение строки с идентификатором системы хранения. */

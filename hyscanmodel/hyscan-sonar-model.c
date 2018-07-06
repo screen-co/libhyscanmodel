@@ -474,7 +474,7 @@ hyscan_sonar_model_update_before_start (HyScanSonarModel *model)
 /*
  * Задаёт докустимые значения параметров.
  *
- * Исходя из принципа  stateless,  пользователь  запрашивает только  те  параметры, 
+ * Исходя из принципа stateless,  пользователь  запрашивает только  те  параметры,
  * которые  были  предварительно  им  заданы, при  этом,  API  позволяет  запросить
  * значения любых параметров (захотел - получил), в том числе и тех, которые ещё не
  * настраивались - в  этом  случае  возвращаемые  значения не будут соответствовать
@@ -926,12 +926,14 @@ hyscan_sonar_model_update_sensors (HyScanSonarModel *model)
     return TRUE;
 
   /* Поиск изменений в параметрах датчиков. */
-  for (port = model->priv->ports; *port != NULL; ++port) {
-    if (!hyscan_sonar_model_update_sensor_params (model, *port)) {
-      g_warning ("Couldn't update sensor params.");
-      return FALSE;
+  for (port = model->priv->ports; *port != NULL; ++port)
+    {
+      if (!hyscan_sonar_model_update_sensor_params (model, *port))
+        {
+          g_warning ("Couldn't update sensor params.");
+          return FALSE;
+        }
     }
-  }
 
   return TRUE;
 }

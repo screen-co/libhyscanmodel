@@ -12,6 +12,7 @@
 #include "hyscan-db-profile.h"
 #include "hyscan-sonar-profile.h"
 #include <hyscan-sonar-driver.h>
+#include <hyscan-sonar-client.h>
 
 enum
 {
@@ -28,7 +29,6 @@ struct _HyScanConnectorPrivate
   HyScanDB           *db;            /* БД. */
   HyScanSonarControl *sonar_control; /* Интерфейс управления гидролокатором. */
 
-  HyScanSonarDriver  *driver;
   HyScanParam        *sonar;
 };
 
@@ -124,7 +124,6 @@ hyscan_connector_clear (HyScanConnector *connector)
 
   g_clear_object (&priv->db);
   g_clear_object (&priv->sonar);
-  g_clear_object (&priv->driver);
   g_clear_object (&priv->sonar_control);
 }
 
@@ -161,6 +160,10 @@ hyscan_connector_connect_sonar (gpointer connector,
 {
   HyScanConnectorPrivate *priv;
   HyScanSonarProfile *sonar_profile;
+  const gchar * driver_path = NULL;
+  const gchar * driver_name = NULL;
+  const gchar * sonar_uri = NULL;
+  const gchar * sonar_config = NULL;
 
   priv = HYSCAN_CONNECTOR (connector)->priv;
 
@@ -179,25 +182,48 @@ hyscan_connector_connect_sonar (gpointer connector,
   if (!hyscan_serializable_read (HYSCAN_SERIALIZABLE (sonar_profile), priv->sonar_profile))
     goto exit;
 
-  /* Загрузка драйвера гидролокатора. */
-  priv->driver = hyscan_sonar_driver_new (hyscan_sonar_profile_get_driver_path (sonar_profile),
-                                          hyscan_sonar_profile_get_driver_name (sonar_profile));
-  if (priv->driver == NULL)
-    {
-      g_message ("HyScanConnector: couldn't load sonar driver %s",
-                 hyscan_sonar_profile_get_driver_name (sonar_profile));
-      goto exit;
-    }
+  driver_path = hyscan_sonar_profile_get_driver_path (sonar_profile);
+  driver_name = hyscan_sonar_profile_get_driver_name (sonar_profile);
+  sonar_uri = hyscan_sonar_profile_get_sonar_uri (sonar_profile);
+  sonar_config = hyscan_sonar_profile_get_sonar_config (sonar_profile);
 
-  /* Соединение с гидролокатором. */
-  priv->sonar = hyscan_sonar_discover_connect (HYSCAN_SONAR_DISCOVER (priv->driver),
-                                               hyscan_sonar_profile_get_sonar_uri (sonar_profile),
-                                               hyscan_sonar_profile_get_sonar_config (sonar_profile));
-  if (priv->sonar == NULL)
+  /* Загрузка драйвера гидролокатора. */
+  if (driver_path == NULL && driver_name == NULL)
     {
-      g_message ("HyScanConnector: couldn't connect sonar '%s'.",
-                 hyscan_sonar_profile_get_sonar_uri (sonar_profile));
-      goto exit;
+      HyScanSonarClient *client = hyscan_sonar_client_new (sonar_uri);
+
+      if (client == NULL)
+        {
+          g_message ("can't connect to sonar '%s'", sonar_uri);
+          goto exit;
+        }
+      if (!hyscan_sonar_client_set_master (client))
+        {
+          g_message ("can't setup master connection to '%s'", sonar_uri);
+          goto exit;
+        }
+
+      priv->sonar = HYSCAN_PARAM (client);
+    }
+  else
+    {
+      HyScanSonarDriver *driver = hyscan_sonar_driver_new (driver_path, driver_name);
+      if (driver == NULL)
+        {
+          g_message ("HyScanConnector: couldn't load sonar driver %s",
+                     hyscan_sonar_profile_get_driver_name (sonar_profile));
+          goto exit;
+        }
+
+      /* Соединение с гидролокатором. */
+      priv->sonar = hyscan_sonar_discover_connect (HYSCAN_SONAR_DISCOVER (driver),
+                                                   sonar_uri, sonar_config);
+      if (priv->sonar == NULL)
+        {
+          g_message ("HyScanConnector: couldn't connect sonar '%s'.",
+                     hyscan_sonar_profile_get_sonar_uri (sonar_profile));
+          goto exit;
+        }
     }
 
   /* Создание интерфейса управления гидролокатором. */

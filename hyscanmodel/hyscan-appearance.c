@@ -344,7 +344,6 @@ hyscan_appearance_set_levels (HyScanAppearance *appearance,
   HyScanAppearancePrivate *priv;
   HyScanAppearanceLevels *levels;
 
-
   g_return_if_fail (HYSCAN_IS_APPEARANCE (appearance));
 
   priv = appearance->priv;
