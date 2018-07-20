@@ -73,6 +73,7 @@ gchar            **hyscan_appearance_get_colormaps_ids (HyScanAppearance  *appea
 HYSCAN_API
 const gchar       *hyscan_appearance_get_colormap_id   (HyScanAppearance  *appearance);
 
+HYSCAN_API
 void               hyscan_appearance_set_colormap_id   (HyScanAppearance  *appearance,
                                                         const gchar       *id);
 
