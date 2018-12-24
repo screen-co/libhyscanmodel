@@ -49,7 +49,7 @@ add_definitions (${GLIB2_CFLAGS} ${LIBXML2_CFLAGS})
 link_directories (${GLIB2_LIBRARY_DIRS} ${LIBXML2_LIBRARY_DIRS})
 
 if (HYSCAN_USE_SYS_LIBS)
-  pkg_check_modules (HYSCAN REQUIRED "hyscancontrol-${HYSCAN_MAJOR_VERSION}")
+  pkg_check_modules (HYSCAN REQUIRED "hyscancore-${HYSCAN_MAJOR_VERSION}")
 
   link_directories (${HYSCAN_LIBRARY_DIRS})
   add_definitions (${HYSCAN_CFLAGS})
@@ -59,21 +59,18 @@ else ()
   include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/../libhyscanmath/hyscanmath")
   include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/../libhyscandb/hyscandb")
   include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/../libhyscancore/hyscancore")
-  include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/../libhyscancontrol/hyscancontrol")
 
   link_directories ("${CMAKE_CURRENT_SOURCE_DIR}/../libhyscantypes/bin")
   link_directories ("${CMAKE_CURRENT_SOURCE_DIR}/../libhyscancache/bin")
   link_directories ("${CMAKE_CURRENT_SOURCE_DIR}/../libhyscanmath/bin")
   link_directories ("${CMAKE_CURRENT_SOURCE_DIR}/../libhyscandb/bin")
   link_directories ("${CMAKE_CURRENT_SOURCE_DIR}/../libhyscancore/bin")
-  link_directories ("${CMAKE_CURRENT_SOURCE_DIR}/../libhyscancontrol/bin")
 
   set (HYSCAN_LIBRARIES "hyscantypes-${HYSCAN_MAJOR_VERSION}"
                         "hyscancache-${HYSCAN_MAJOR_VERSION}"
                         "hyscanmath-${HYSCAN_MAJOR_VERSION}"
                         "hyscandb-${HYSCAN_MAJOR_VERSION}"
-                        "hyscancore-${HYSCAN_MAJOR_VERSION}"
-                        "hyscancontrol-${HYSCAN_MAJOR_VERSION}")
+                        "hyscancore-${HYSCAN_MAJOR_VERSION}")
 endif ()
 
 include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/hyscanmodel")

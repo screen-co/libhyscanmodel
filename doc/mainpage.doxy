@@ -1,8 +1,0 @@
-/** \mainpage Библиотека HyScan
- *
- * Уровень бизнес-логики.
- *
- * - \link HyScanDBInfo \endlink - асинхронный мониторинг БД;
- * - \link HyScanAsync \endlink - асинхронное выполнение заданий.
- *
- */
