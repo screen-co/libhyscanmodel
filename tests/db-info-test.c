@@ -1,3 +1,36 @@
+/* db-info-test.c
+ *
+ * Copyright 2017-2018 Screen LLC, Andrei Fadeev <andrei@webcontrol.ru>
+ *
+ * This file is part of HyScanModel.
+ *
+ * HyScanModel is dual-licensed: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * HyScanModel is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this library. If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Alternatively, you can license this code under a commercial license.
+ * Contact the Screen LLC in this case - info@screen-co.ru
+ */
+
+/* HyScanModel имеет двойную лицензию.
+ *
+ * Во-первых, вы можете распространять HyScanModel на условиях Стандартной
+ * Общественной Лицензии GNU версии 3, либо по любой более поздней версии
+ * лицензии (по вашему выбору). Полные положения лицензии GNU приведены в
+ * <http://www.gnu.org/licenses/>.
+ *
+ * Во-вторых, этот программный код можно использовать по коммерческой
+ * лицензии. Для этого свяжитесь с ООО Экран - info@screen-co.ru.
+ */
 
 #include <hyscan-data-writer.h>
 #include <hyscan-db-info.h>
@@ -5,7 +38,9 @@
 #include <libxml/parser.h>
 #include <string.h>
 
-#define SOURCE_DATA "0123456789"
+#define USEC_PER_DAY  86400000000L
+#define SONAR_INFO    "<schemalist><schema id=\"info\"><key id=\"id\" name=\"ID\" type=\"integer\"/></schema></schemalist>"
+#define SOURCE_DATA   "0123456789"
 
 gdouble timeout = 3.0;
 guint   n_projects = 8;
@@ -19,12 +54,13 @@ HyScanDB *db;
 
 guint cur_step = 1;
 guint sub_step = 1;
+gint64 start_time = 0;
 
 gint sources[] = { HYSCAN_SOURCE_SIDE_SCAN_STARBOARD, HYSCAN_SOURCE_SIDE_SCAN_PORT,
                    HYSCAN_SOURCE_SIDE_SCAN_STARBOARD_HI, HYSCAN_SOURCE_SIDE_SCAN_PORT_HI,
                    HYSCAN_SOURCE_ECHOSOUNDER, HYSCAN_SOURCE_PROFILER,
                    HYSCAN_SOURCE_LOOK_AROUND_STARBOARD, HYSCAN_SOURCE_LOOK_AROUND_PORT,
-                   HYSCAN_SOURCE_FORWARD_LOOK, HYSCAN_SOURCE_SAS, HYSCAN_SOURCE_SAS_V2,
+                   HYSCAN_SOURCE_FORWARD_LOOK, HYSCAN_SOURCE_SAS,
                    HYSCAN_SOURCE_NMEA_ANY, HYSCAN_SOURCE_NMEA_GGA,
                    HYSCAN_SOURCE_NMEA_RMC, HYSCAN_SOURCE_NMEA_DPT };
 
@@ -33,67 +69,23 @@ void
 create_source (HyScanDataWriter *writer,
                HyScanSourceType  source)
 {
-  HyScanDataWriterData data;
-  HyScanRawDataInfo raw_info;
-  HyScanAcousticDataInfo acoustic_info;
+  HyScanAcousticDataInfo info;
+  HyScanBuffer *data;
 
-  data.time = 0;
-  data.size = sizeof (SOURCE_DATA);
-  data.data = SOURCE_DATA;
+  memset (&info, 0, sizeof (info));
+  info.data_type = HYSCAN_DATA_BLOB;
+  info.data_rate = 1.0;
 
-  memset (&raw_info, 0, sizeof (raw_info));
-  raw_info.data.type = HYSCAN_DATA_BLOB;
-  raw_info.data.rate = 1.0;
-
-  memset (&acoustic_info, 0, sizeof (acoustic_info));
-  acoustic_info.data.type = HYSCAN_DATA_BLOB;
-  acoustic_info.data.rate = 1.0;
+  data = hyscan_buffer_new ();
+  hyscan_buffer_wrap_data (data, HYSCAN_DATA_BLOB, SOURCE_DATA, sizeof (SOURCE_DATA));
 
   if (hyscan_source_is_sensor (source))
     {
-      hyscan_data_writer_sensor_add_data (writer, "sensor", source, 1, &data);
+      hyscan_data_writer_sensor_add_data (writer, "sensor", source, 1, 0, data);
     }
   else
     {
-      if (source % 2)
-        hyscan_data_writer_raw_add_data (writer, source, 1, &raw_info, &data);
-      else
-        hyscan_data_writer_acoustic_add_data (writer, source, &acoustic_info, &data);
-    }
-}
-
-/* Функция проверяет канал данных. */
-void
-check_source (HyScanTrackInfo  *track_info,
-              HyScanSourceType  source,
-              gboolean          active)
-{
-  HyScanSourceInfo *source_info;
-
-  source_info = g_hash_table_lookup (track_info->sources, GINT_TO_POINTER (source));
-  if (source_info == NULL)
-    g_error ("%s: %s source error", track_info->name, hyscan_channel_get_name_by_types (source, FALSE, 1));
-
-  if (source_info->active != active)
-    g_error ("%s: %s activity error", track_info->name, hyscan_channel_get_name_by_types (source, FALSE, 1));
-
-  if (hyscan_source_is_sensor (source))
-    {
-      if (!source_info->raw || source_info->computed)
-        g_error ("%s: %s sensor type error", track_info->name, hyscan_channel_get_name_by_types (source, FALSE, 1));
-    }
-  else
-    {
-      if (source % 2)
-        {
-          if (!source_info->raw)
-            g_error ("%s: %s raw type error", track_info->name, hyscan_channel_get_name_by_types (source, FALSE, 1));
-        }
-      else
-        {
-          if (!source_info->computed)
-            g_error ("%s: %s computed type error", track_info->name, hyscan_channel_get_name_by_types (source, FALSE, 1));
-        }
+      hyscan_data_writer_acoustic_add_data (writer, source, 1, FALSE, 0, &info, data);
     }
 }
 
@@ -104,6 +96,8 @@ db_info_test (gpointer data)
   GMainLoop *loop = data;
   gchar *project_name;
   gchar *track_name;
+  gint64 ctime;
+  gint64 mtime;
   guint i;
 
   /* Завершаем работу, если прошли все этапы теста. */
@@ -123,13 +117,17 @@ db_info_test (gpointer data)
 
   project_name = g_strdup_printf ("project-%d", cur_step);
   track_name = g_strdup_printf ("track-%d", sub_step);
+  ctime = start_time + ((cur_step * n_tracks + sub_step) * USEC_PER_DAY);
 
   /* Создаём галс и каналы данных в нём. */
-  hyscan_data_writer_set_project (writer, project_name);
   hyscan_data_writer_set_operator_name (writer, project_name);
-
-  if (!hyscan_data_writer_start (writer, track_name, HYSCAN_TRACK_CALIBRATION + (sub_step % 3)))
+  if (!hyscan_data_writer_start (writer, project_name, track_name, HYSCAN_TRACK_CALIBRATION + (sub_step % 3), ctime))
     g_error ("can't create track %s.%s", project_name, track_name);
+
+  /* Время изменения проекта. */
+
+
+
 
   for (i = 0; i < sub_step; i++)
     create_source (writer, sources[i]);
@@ -166,6 +164,10 @@ projects_changed (HyScanDBInfo *db_info)
       project_info = g_hash_table_lookup (projects, project_name);
       if ((project_info == NULL) || (g_strcmp0 (project_info->name, project_name) != 0))
         g_error ("%s: list error", project_name);
+
+      /* Проверяем что информация о проекте считана правильно. */
+      if (project_info->error)
+        g_error ("%s: info error", project_info->name);
 
       if (cur_step == i)
         {
@@ -206,25 +208,42 @@ tracks_changed (HyScanDBInfo *info)
     {
       HyScanTrackInfo *track_info;
       gchar *track_name;
+      guint n_sources;
 
       track_name = g_strdup_printf ("track-%d", i);
       track_info = g_hash_table_lookup (tracks, track_name);
       if ((track_info == NULL) || (g_strcmp0 (track_info->name, track_name) != 0))
         g_error ("%s: list error", track_name);
+      g_free (track_name);
+
+      /* Проверяем что информация о галсе считана правильно. */
+      if (track_info->error)
+        g_error ("%s: info error", track_info->name);
 
        /* Проверка флага активности записи. */
       if (track_info->active && (i != n_tracks))
-        g_error ("%s: activity error", track_name);
-
-      g_free (track_name);
+        g_error ("%s: activity error", track_info->name);
 
       /* Ждём, если еще не все каналы данных обнаружены. */
-      if (i != g_hash_table_size (track_info->sources))
+      for (j = 0, n_sources = 0; j < HYSCAN_SOURCE_LAST; j++)
+        n_sources += (track_info->sources[j] ? 1 : 0);
+      if (n_sources != i)
         goto exit;
+
+      /* Проверка имени оператора. */
+      if (g_strcmp0 (track_info->operator_name, project_name) != 0)
+        g_error ("%s: operator name error", track_info->name);
+
+      /* Проверка информации о гидролокаторе. */
+      if (!hyscan_data_schema_has_key (track_info->sonar_info, "/id"))
+        g_error ("%s: sonar info error", track_info->name);
 
       /* Проверка списка источников данных. */
       for (j = 0; j < i; j++)
-        check_source (track_info, sources[j], (i == n_tracks));
+        {
+          if (!track_info->sources[sources[j]])
+            g_error ("%s: %s source error", track_info->name, hyscan_channel_get_name_by_types (sources[j], FALSE, 1));
+        }
     }
 
   /* Следующий шаг теста. */
@@ -293,13 +312,20 @@ main (int    argc,
   /* Таймер операций. */
   timer = g_timer_new ();
 
+  /* Дата и время запуска. */
+  start_time = g_get_real_time ();
+  start_time /= USEC_PER_DAY;
+  start_time *= USEC_PER_DAY;
+
   /* Открываем базу данных. */
   db = hyscan_db_new (db_uri);
   if (db == NULL)
     g_error ("can't open db at: %s", db_uri);
 
   /* Объект записи данных. */
-  writer = hyscan_data_writer_new (db);
+  writer = hyscan_data_writer_new ();
+  hyscan_data_writer_set_db (writer, db);
+  hyscan_data_writer_set_sonar_info (writer, SONAR_INFO);
 
   /* Информация о базе данных. */
   db_info = hyscan_db_info_new (db);
@@ -327,8 +353,6 @@ main (int    argc,
   g_object_unref (db_info);
   g_object_unref (db);
   g_free (db_uri);
-
-  xmlCleanupParser ();
 
   return 0;
 }

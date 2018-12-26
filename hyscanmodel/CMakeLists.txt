@@ -1,5 +1,5 @@
 set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
-     # hyscan-db-info.c
+     hyscan-db-info.c
      hyscan-hw-profile-device.c
      hyscan-hw-profile.c
      # hyscan-appearance.c
@@ -39,7 +39,7 @@ install (FILES "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/hyscanmodel-${HYSCAN_MAJOR_VER
          PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
 
 set (HYSCAN_MODEL_LIBRARY_INSTALL_FILES
-     # hyscan-db-info.h
+     hyscan-db-info.h
      # hyscan-appearance.h
      # hyscan-async.h
      # hyscan-connector.h

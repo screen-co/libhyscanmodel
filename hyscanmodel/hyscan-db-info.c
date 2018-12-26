@@ -1,15 +1,75 @@
-/*
- * \file hyscan-db-info.c
+/* hyscan-db-info.c
  *
- * \brief Исходный файл класса асинхронного мониторинга базы данных
- * \author Andrei Fadeev (andrei@webcontrol.ru)
- * \date 2017
- * \license Проприетарная лицензия ООО "Экран"
+ * Copyright 2017-2018 Screen LLC, Andrei Fadeev <andrei@webcontrol.ru>
  *
+ * This file is part of HyScanModel.
+ *
+ * HyScanModel is dual-licensed: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * HyScanModel is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this library. If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Alternatively, you can license this code under a commercial license.
+ * Contact the Screen LLC in this case - <info@screen-co.ru>.
+ */
+
+/* HyScanModel имеет двойную лицензию.
+ *
+ * Во-первых, вы можете распространять HyScanModel на условиях Стандартной
+ * Общественной Лицензии GNU версии 3, либо по любой более поздней версии
+ * лицензии (по вашему выбору). Полные положения лицензии GNU приведены в
+ * <http://www.gnu.org/licenses/>.
+ *
+ * Во-вторых, этот программный код можно использовать по коммерческой
+ * лицензии. Для этого свяжитесь с ООО Экран - <info@screen-co.ru>.
+ */
+
+/**
+ * SECTION: hyscan-db-info
+ * @Short_description: класс асинхронного мониторинга базы данных
+ * @Title: HyScanDBInfo
+ *
+ * Класс предназначен для асинхронного отслеживания изменений в базе данных и
+ * получения информации о проектах, галсах и источниках данных в них. Отправка
+ * уведомлений об изменениях производится из основного цикла GMainLoop, таким
+ * образом для корректной работы класса требуется вызвать функции
+ * g_main_loop_run или gtk_main.
+ *
+ * Создание объекта производится с помощью функции #hyscan_db_info_new.
+ *
+ * Основные функции класса работают в неблокирующем режиме, однако возможна
+ * ситуация когда список проектов и галсов ещё не полностью считан из базы
+ * данных. Рекомендуется получать списки проектов и галсов при получении
+ * сигналов об изменениях.
+ *
+ * Получить текущий список проектов можно при помощи функции
+ * #hyscan_db_info_get_projects. Функции #hyscan_db_info_set_project и
+ * #hyscan_db_info_get_project используются для установки и чтения названия
+ * текущего проекта, для которого отслеживаются изменения. Получить список
+ * галсов можно при помощи функции #hyscan_db_info_get_tracks.
+ *
+ * Функция #hyscan_db_info_refresh используется для принудительного обновления
+ * списка проектов, галсов и информации о них.
+ *
+ * Вспомогательные функции #hyscan_db_info_get_project_info и
+ * #hyscan_db_info_get_track_info используются для получения информации о
+ * проекте и галсе. Для их работы не требуется создавать экземпляр класса и они
+ * блокируют выполнение программы на время работы с базой данных. Эти функции
+ * могут быть полезны при создании программ не предъявляющих жёстких требований
+ * к отзывчивости.
  */
 
 #include "hyscan-db-info.h"
-#include "hyscan-core-schemas.h"
+#include <hyscan-core-schemas.h>
+#include <string.h>
 
 enum
 {
@@ -48,7 +108,7 @@ struct _HyScanDBInfoPrivate
   GHashTable                  *tracks;                 /* Списк галсов. */
 
   GHashTable                  *actives;                /* Списк "активных" объектов базы данных. */
-  gint                         refresh;                /* Признак необходимости обновления списков. */
+  gboolean                     refresh;                /* Признак необходимости обновления списков. */
 
   guint                        alerter;                /* Идентификатор обработчика сигнализирующего об изменениях. */
   GThread                     *informer;               /* Поток отслеживания изменений. */
@@ -71,12 +131,6 @@ static HyScanTrackInfo *
                                                         gint32                 project_id,
                                                         const gchar           *track_name,
                                                         GHashTable            *actives);
-
-static HyScanProjectInfo *
-                   hyscan_db_info_copy_project_info    (HyScanProjectInfo     *info);
-
-static HyScanTrackInfo *
-                   hyscan_db_info_copy_track_info      (HyScanTrackInfo       *info);
 
 static void        hyscan_db_info_add_active_id        (GHashTable            *actives,
                                                         HyScanDB              *db,
@@ -105,11 +159,23 @@ hyscan_db_info_class_init (HyScanDBInfoClass *klass)
     g_param_spec_object ("db", "DB", "HyScan DB", HYSCAN_TYPE_DB,
                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY));
 
+  /**
+   * HyScanDBInfo::projects-changed:
+   * @info: указатель на #HyScanDBInfo
+   *
+   * Сигнал посылается при изменении списка проектов.
+   */
   hyscan_db_info_signals[SIGNAL_PROJECTS_CHANGED] =
     g_signal_new ("projects-changed", HYSCAN_TYPE_DB_INFO, G_SIGNAL_RUN_LAST, 0, NULL, NULL,
                   g_cclosure_marshal_VOID__VOID,
                   G_TYPE_NONE, 0);
 
+  /**
+   * HyScanDBInfo::tracks-changed:
+   * @info: указатель на #HyScanDBInfo
+   *
+   * Сигнал посылается при изменении списка галсов.
+   */
   hyscan_db_info_signals[SIGNAL_TRACKS_CHANGED] =
     g_signal_new ("tracks-changed", HYSCAN_TYPE_DB_INFO, G_SIGNAL_RUN_LAST, 0, NULL, NULL,
                   g_cclosure_marshal_VOID__VOID,
@@ -170,7 +236,7 @@ hyscan_db_info_object_finalize (GObject *object)
   if (priv->alerter > 0)
     g_source_remove (priv->alerter);
 
-  g_atomic_int_set (&priv->shutdown, 1);
+  g_atomic_int_set (&priv->shutdown, TRUE);
   g_clear_pointer (&priv->informer, g_thread_join);
 
   g_clear_pointer (&priv->projects, g_hash_table_unref);
@@ -194,51 +260,6 @@ hyscan_db_info_free_monitor (gpointer data)
 
   hyscan_db_close (info->db, info->id);
   g_free (info);
-}
-
-/* Функция выполняет "глубокое" копирование информации о проекте. */
-static HyScanProjectInfo *
-hyscan_db_info_copy_project_info (HyScanProjectInfo *info)
-{
-  HyScanProjectInfo *new_info;
-
-  new_info = g_new0 (HyScanProjectInfo, 1);
-
-  new_info->name = g_strdup (info->name);
-  new_info->ctime = g_date_time_to_local (info->ctime);
-  new_info->description = g_strdup (info->description);
-
-  return new_info;
-}
-
-/* Функция выполняет "глубокое" копирование информации о галсе. */
-static HyScanTrackInfo *
-hyscan_db_info_copy_track_info (HyScanTrackInfo *info)
-{
-  HyScanTrackInfo *new_info;
-  GHashTable *sources;
-  GHashTableIter iter;
-  gpointer key, value;
-
-  new_info = g_new0 (HyScanTrackInfo, 1);
-
-  new_info->name = g_strdup (info->name);
-  new_info->ctime = g_date_time_to_local (info->ctime);
-  new_info->description = g_strdup (info->description);
-
-  new_info->id = g_strdup (info->id);
-  new_info->type = info->type;
-  new_info->operator_name = g_strdup (info->operator_name);
-  new_info->sonar_info = g_object_ref (info->sonar_info);
-
-  sources = g_hash_table_new_full (NULL, NULL, NULL, g_free);
-  g_hash_table_iter_init (&iter, info->sources);
-  while (g_hash_table_iter_next (&iter, &key, &value))
-    g_hash_table_insert (sources, key, g_memdup (value, sizeof (HyScanSourceInfo)));
-  new_info->sources = sources;
-  new_info->active = info->active;
-
-  return new_info;
 }
 
 /* Функция добавляет идентификатор объекта базы данных в список активных. */
@@ -319,7 +340,7 @@ hyscan_db_info_informer (gpointer data)
       g_timer_start (check_timer);
 
       /* Принудительное обновление. */
-      if (g_atomic_int_compare_and_exchange (&priv->refresh, 1, 0))
+      if (g_atomic_int_compare_and_exchange (&priv->refresh, TRUE, FALSE))
         {
           check_projects = TRUE;
           check_tracks = TRUE;
@@ -345,7 +366,7 @@ hyscan_db_info_informer (gpointer data)
 
           /* Информация о проектах. */
           projects = g_hash_table_new_full (g_str_hash, g_str_equal,
-                                            g_free, (GDestroyNotify)hyscan_db_info_free_project_info);
+                                            g_free, (GDestroyNotify)hyscan_db_info_project_info_free);
           for (i = 0; i < n_projects; i++)
             {
               HyScanProjectInfo *info = NULL;
@@ -357,7 +378,7 @@ hyscan_db_info_informer (gpointer data)
               if (info == NULL)
                 info = hyscan_db_info_get_project_info (priv->db, project_list[i]);
               else
-                info = hyscan_db_info_copy_project_info (info);
+                info = hyscan_db_info_project_info_copy (info);
 
               if (info != NULL)
                 g_hash_table_insert (projects, g_strdup (project_list[i]), info);
@@ -451,7 +472,7 @@ hyscan_db_info_informer (gpointer data)
 
           /* Информация о галсах. */
           tracks = g_hash_table_new_full (g_str_hash, g_str_equal,
-                                          g_free, (GDestroyNotify)hyscan_db_info_free_track_info);
+                                          g_free, (GDestroyNotify)hyscan_db_info_track_info_free);
           for (i = 0; i < n_tracks; i++)
             {
               HyScanTrackInfo *info = NULL;
@@ -463,7 +484,7 @@ hyscan_db_info_informer (gpointer data)
                * то используем эту информацию. Иначе считываем информацию из базы. */
               if ((info != NULL) && !info->active)
                 {
-                  info = hyscan_db_info_copy_track_info (info);
+                  info = hyscan_db_info_track_info_copy (info);
                 }
               else
                 {
@@ -493,7 +514,14 @@ hyscan_db_info_informer (gpointer data)
   return NULL;
 }
 
-/* Функция создаёт новый объект HyScanDBInfo. */
+/**
+ * hyscan_db_info_new:
+ * @db: указатель на #HyScanDB
+ *
+ * Функция создаёт новый объект #HyScanDBInfo.
+ *
+ * Returns: #HyScanDBInfo. Для удаления #g_object_unref.
+ */
 HyScanDBInfo *
 hyscan_db_info_new (HyScanDB *db)
 {
@@ -509,7 +537,15 @@ hyscan_db_info_new (HyScanDB *db)
   return info;
 }
 
-/* Функция устанавливает название проекта для которого будут отслеживаться изменения. */
+/**
+ * hyscan_db_info_set_project:
+ * @info: указатель на #HyScanDBInfo
+ * @project_name: название проекта
+ *
+ * Функция устанавливает название проекта для которого будут отслеживаться
+ * изменения в списке галсов и источниках данных. Реальное изменение
+ * отслеживаемого проекта может происходить с некоторой задержкой.
+ */
 void
 hyscan_db_info_set_project (HyScanDBInfo *info,
                             const gchar  *project_name)
@@ -529,7 +565,15 @@ hyscan_db_info_set_project (HyScanDBInfo *info,
   g_mutex_unlock (&priv->lock);
 }
 
-/* Функция считывает название проекта для которого в данный момент отслеживаются изменения. */
+/**
+ * hyscan_db_info_get_project:
+ * @info: указатель на #HyScanDBInfo
+ *
+ * Функция считывает название проекта для которого в данный момент
+ * отслеживаются изменения.
+ *
+ * Returns: (nullable): Название проекта или %NULL. Для удаления #g_free.
+ */
 gchar *
 hyscan_db_info_get_project (HyScanDBInfo *info)
 {
@@ -547,7 +591,17 @@ hyscan_db_info_get_project (HyScanDBInfo *info)
   return project_name;
 }
 
-/* Функция возвращает список проектов и информацию о них. */
+/**
+ * hyscan_db_info_get_projects:
+ * @info: указатель на #HyScanDBInfo
+ *
+ * Функция возвращает список проектов и информацию о них. Информация
+ * представлена в виде хэш таблицы в которой ключом является название
+ * проекта, а значением указатель на структуру #HyScanProjectInfo.
+ *
+ * Returns: (transfer full) (element-type HyScanProjectInfo):
+ *          Текущий список проектов. Для удаления #g_hash_table_unref.
+ */
 GHashTable *
 hyscan_db_info_get_projects (HyScanDBInfo *info)
 {
@@ -560,22 +614,33 @@ hyscan_db_info_get_projects (HyScanDBInfo *info)
 
   priv = info->priv;
 
-  projects = g_hash_table_new_full (g_str_hash, g_str_equal,
-                                    g_free, (GDestroyNotify)hyscan_db_info_free_project_info);
+  projects = g_hash_table_new_full (g_str_hash, g_str_equal, g_free,
+                                    (GDestroyNotify)hyscan_db_info_project_info_free);
 
   g_mutex_lock (&priv->lock);
   if (priv->projects != NULL)
     {
       g_hash_table_iter_init (&iter, priv->projects);
       while (g_hash_table_iter_next (&iter, &key, &value))
-        g_hash_table_insert (projects, g_strdup (key), hyscan_db_info_copy_project_info (value));
+        g_hash_table_insert (projects, g_strdup (key), hyscan_db_info_project_info_copy (value));
     }
   g_mutex_unlock (&priv->lock);
 
   return projects;
 }
 
-/* Функция возвращает список галсов и информацию о них. */
+/**
+ * hyscan_db_info_get_tracks:
+ * @info: указатель на #HyScanDBInfo
+ *
+ * Функция возвращает список галсов и информацию о них для текущего
+ * отслеживаемого проекта. Информация представлена в виде хэш таблицы в
+ * которой ключом является название галса, а значением указатель на
+ * структуру #HyScanTrackInfo.
+ *
+ * Returns: (transfer full) (element-type HyScanTrackInfo):
+ *          Текущий список галсов. Для удаления #g_hash_table_unref.
+ */
 GHashTable *
 hyscan_db_info_get_tracks (HyScanDBInfo *info)
 {
@@ -588,31 +653,46 @@ hyscan_db_info_get_tracks (HyScanDBInfo *info)
 
   priv = info->priv;
 
-  tracks = g_hash_table_new_full (g_str_hash, g_str_equal,
-                                  g_free, (GDestroyNotify)hyscan_db_info_free_track_info);
+  tracks = g_hash_table_new_full (g_str_hash, g_str_equal, g_free,
+                                  (GDestroyNotify)hyscan_db_info_track_info_free);
 
   g_mutex_lock (&priv->lock);
   if (priv->tracks != NULL)
     {
       g_hash_table_iter_init (&iter, priv->tracks);
       while (g_hash_table_iter_next (&iter, &key, &value))
-        g_hash_table_insert (tracks, g_strdup (key), hyscan_db_info_copy_track_info (value));
+        g_hash_table_insert (tracks, g_strdup (key), hyscan_db_info_track_info_copy (value));
     }
   g_mutex_unlock (&priv->lock);
 
   return tracks;
 }
 
-/* Функция принудительно запускает процесс обновления. */
+/**
+ * hyscan_db_info_refresh:
+ * @info: указатель на #HyScanDBInfo
+ *
+ * Функция принудительно запускает процесс обновления списков проектов,
+ * галсов и информации о них.
+ */
 void
 hyscan_db_info_refresh (HyScanDBInfo *info)
 {
   g_return_if_fail (HYSCAN_IS_DB_INFO (info));
 
-  g_atomic_int_set (&info->priv->refresh, 1);
+  g_atomic_int_set (&info->priv->refresh, TRUE);
 }
 
-/* Функция возвращает информацию о проекте. */
+/**
+ * hyscan_db_info_get_project_info:
+ * @db: указатель на #HyScanDB
+ * @project_name: название проекта
+ *
+ * Функция возвращает информацию о проекте.
+ *
+ * Returns: (nullable): (transfer full): Информация о проекте или %NULL
+ *          Для удаления #hyscan_db_info_project_info_free.
+ */
 HyScanProjectInfo *
 hyscan_db_info_get_project_info (HyScanDB    *db,
                                  const gchar *project_name)
@@ -621,23 +701,42 @@ hyscan_db_info_get_project_info (HyScanDB    *db,
   gint32 project_id;
   gint32 param_id;
 
-  /* Открываем проект. */
   project_id = hyscan_db_project_open (db, project_name);
   if (project_id <= 0)
     return NULL;
 
-  info = g_new0 (HyScanProjectInfo, 1);
+  info = g_slice_new0 (HyScanProjectInfo);
   info->name = g_strdup (project_name);
 
-  /* Дата и время создания проекта. */
-  info->ctime = hyscan_db_project_get_ctime (db, project_id);
-
-  /* Информация о проекте. */
   param_id = hyscan_db_project_param_open (db, project_id, PROJECT_INFO_GROUP);
   if (param_id > 0)
     {
-      info->description = hyscan_db_param_get_string (db, param_id, PROJECT_INFO_OBJECT, "/description");
+      HyScanParamList *list = hyscan_param_list_new ();
+
+      hyscan_param_list_add (list, "/schema/id");
+      hyscan_param_list_add (list, "/schema/version");
+      hyscan_param_list_add (list, "/description");
+      hyscan_param_list_add (list, "/ctime");
+      hyscan_param_list_add (list, "/mtime");
+
+      if ((hyscan_db_param_get (db, param_id, PROJECT_INFO_OBJECT, list)) &&
+          (hyscan_param_list_get_integer (list, "/schema/id") == PROJECT_INFO_SCHEMA_ID) &&
+          (hyscan_param_list_get_integer (list, "/schema/version") == PROJECT_INFO_SCHEMA_VERSION))
+        {
+          gint64 ctime = hyscan_param_list_get_integer (list, "/ctime") / G_USEC_PER_SEC;
+          gint64 mtime = hyscan_param_list_get_integer (list, "/mtime") / G_USEC_PER_SEC;
+
+          info->description = hyscan_param_list_dup_string (list, "/description");
+          info->ctime = g_date_time_new_from_unix_utc (ctime);
+          info->mtime = g_date_time_new_from_unix_utc (mtime);
+        }
+      else
+        {
+          info->error = TRUE;
+        }
+
       hyscan_db_close (db, param_id);
+      g_object_unref (list);
     }
 
   hyscan_db_close (db, project_id);
@@ -652,13 +751,14 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
                                    const gchar *track_name,
                                    GHashTable  *actives)
 {
-  HyScanTrackInfo *track_info;
+  HyScanTrackInfo *info;
+  HyScanParamList *list;
   gchar **channels;
   gint32 track_id;
   gint32 param_id;
   gint32 channel_id;
   guint32 track_mod_counter;
-  guint32 channel_mod_counter;
+  guint n_sources = 0;
   guint i;
 
   /* Открываем галс. */
@@ -677,49 +777,88 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
       return NULL;
     }
 
-  track_info = g_new0 (HyScanTrackInfo, 1);
-  track_info->name = g_strdup (track_name);
-  track_info->sources = g_hash_table_new_full (NULL, NULL, NULL, g_free);
+  list = hyscan_param_list_new ();
 
-  /* Дата и время создания галса. */
-  track_info->ctime = hyscan_db_track_get_ctime (db, track_id);
+  info = g_slice_new0 (HyScanTrackInfo);
+  info->name = g_strdup (track_name);
 
   /* Информация о галсе из галса. */
   param_id = hyscan_db_track_param_open (db, track_id);
   if (param_id > 0)
     {
-      gchar *sonar_info = hyscan_db_param_get_string (db, param_id, NULL, "/sonar");
-      gchar *track_type = hyscan_db_param_get_string (db, param_id, NULL, "/type");
+      hyscan_param_list_add (list, "/schema/id");
+      hyscan_param_list_add (list, "/schema/version");
+      hyscan_param_list_add (list, "/id");
+      hyscan_param_list_add (list, "/ctime");
+      hyscan_param_list_add (list, "/type");
+      hyscan_param_list_add (list, "/operator");
+      hyscan_param_list_add (list, "/sonar");
 
-      track_info->id = hyscan_db_param_get_string (db, param_id, NULL, "/id");
-      track_info->type = hyscan_track_get_type_by_name (track_type);
-      track_info->operator_name = hyscan_db_param_get_string (db, param_id, NULL, "/operator");
-      track_info->sonar_info = hyscan_data_schema_new_from_string (sonar_info, "info");
+      if ((hyscan_db_param_get (db, param_id, NULL, list)) &&
+          (hyscan_param_list_get_integer (list, "/schema/id") == TRACK_SCHEMA_ID) &&
+          (hyscan_param_list_get_integer (list, "/schema/version") == TRACK_SCHEMA_VERSION))
+        {
+          const gchar *track_type = hyscan_param_list_get_string (list, "/type");
+          const gchar *sonar_info = hyscan_param_list_get_string (list, "/sonar");
+          gint64 ctime = hyscan_param_list_get_integer (list, "/ctime") / G_USEC_PER_SEC;
+
+          info->id = hyscan_param_list_dup_string (list, "/id");
+          info->ctime = g_date_time_new_from_unix_utc (ctime);
+          info->type = hyscan_track_get_type_by_name (track_type);
+          info->operator_name = hyscan_param_list_dup_string (list, "/operator");
+          info->sonar_info = hyscan_data_schema_new_from_string (sonar_info, "info");
+        }
+      else
+        {
+          info->error = TRUE;
+        }
 
       hyscan_db_close (db, param_id);
-
-      g_free (track_type);
-      g_free (sonar_info);
     }
 
   /* Информация о галсе из проекта. */
   param_id = hyscan_db_project_param_open (db, project_id, PROJECT_INFO_GROUP);
   if (param_id > 0)
     {
-      track_info->description = hyscan_db_param_get_string (db, param_id, track_name, "/description");
+      hyscan_param_list_clear (list);
+      hyscan_param_list_add (list, "/schema/id");
+      hyscan_param_list_add (list, "/schema/version");
+      hyscan_param_list_add (list, "/mtime");
+      hyscan_param_list_add (list, "/description");
+
+      if ((hyscan_db_param_get (db, param_id, track_name, list)) &&
+          (hyscan_param_list_get_integer (list, "/schema/id") == TRACK_INFO_SCHEMA_ID) &&
+          (hyscan_param_list_get_integer (list, "/schema/version") == TRACK_INFO_SCHEMA_VERSION))
+        {
+          gint64 mtime = hyscan_param_list_get_integer (list, "/mtime") / G_USEC_PER_SEC;
+
+          info->mtime = g_date_time_new_from_unix_utc (mtime);
+          info->description = hyscan_param_list_dup_string (list, "/description");
+        }
+      else
+        {
+          info->error = TRUE;
+        }
+
       hyscan_db_close (db, param_id);
     }
+
+  g_object_unref (list);
 
   /* Список каналов данных. */
   for (i = 0; channels[i] != NULL; i++)
     {
-      HyScanSourceInfo *source_info;
       HyScanSourceType source;
+      HyScanChannelType type;
+      guint channel;
       gboolean active;
-      gboolean raw;
 
       /* Проверяем типы данных. */
-      if (!hyscan_channel_get_types_by_name (channels[i], &source, &raw, NULL))
+      if (!hyscan_channel_get_types_by_name (channels[i], &source, &type, &channel))
+        continue;
+
+      /* Учитываем только первые каналы с данными. */
+      if ((type != HYSCAN_CHANNEL_DATA) || (channel != 1))
         continue;
 
       /* Пытаемся узнать есть ли в нём записанные данные. */
@@ -727,38 +866,23 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
       if (channel_id <= 0)
         continue;
 
-      /* Счётчик изменений в канале данных и признак записи. */
-      channel_mod_counter = hyscan_db_get_mod_count (db, channel_id);
       active = hyscan_db_channel_is_writable (db, channel_id);
 
       /* В канале есть минимум одна запись. */
       if (hyscan_db_channel_get_data_range (db, channel_id, NULL, NULL))
         {
-          source_info = g_hash_table_lookup (track_info->sources, GINT_TO_POINTER (source));
-          if (source_info == NULL)
-            {
-              source_info = g_new0 (HyScanSourceInfo, 1);
-              source_info->type = source;
+          info->sources[source] = TRUE;
+          n_sources += 1;
 
-              g_hash_table_insert (track_info->sources, GINT_TO_POINTER (source), source_info);
-            }
-
-          /* Тип данных канала: сырые или обработанные. */
-          if (raw)
-            source_info->raw = TRUE;
-          else
-            source_info->computed = TRUE;
-
-          /* Признак записи в канал и галс. */
           if (active)
-            source_info->active = track_info->active = TRUE;
+            info->active = TRUE;
         }
 
       /* Ставим на карандаш, если канал открыт на запись. */
-      else
+      else if (active)
         {
-          if (active)
-            hyscan_db_info_add_active_id (actives, db, channel_id, channel_mod_counter);
+          guint32 channel_mod_counter = hyscan_db_get_mod_count (db, channel_id);
+          hyscan_db_info_add_active_id (actives, db, channel_id, channel_mod_counter);
         }
 
       hyscan_db_close (db, channel_id);
@@ -767,24 +891,34 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
   g_strfreev (channels);
 
   /* Если в галсе нет каналов, пропускаем его и добавляем в список проверяемых. */
-  if (g_hash_table_size (track_info->sources) == 0)
+  if (n_sources == 0)
     {
       hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter);
-      hyscan_db_info_free_track_info (track_info);
+      hyscan_db_info_track_info_free (info);
 
       return NULL;
     }
 
   /* Если в галсе есть открытый для записи канал, проверим этот галс позже. */
-  if (track_info->active)
+  if (info->active)
     hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter);
   else
     hyscan_db_close (db, track_id);
 
-  return track_info;
+  return info;
 }
 
-/* Функция возвращает информацию о галсе. */
+/**
+ * hyscan_db_info_get_track_info:
+ * @db: указатель на #HyScanDB
+ * @project_id: идентификатор открытого проекта
+ * @track_name: название галса
+ *
+ * Функция возвращает информацию о галсе.
+ *
+ * Returns: (nullable): (transfer full): Информация о галсе или %NULL
+ *          Для удаления #hyscan_db_info_track_info_free.
+ */
 HyScanTrackInfo *
 hyscan_db_info_get_track_info (HyScanDB    *db,
                                gint32       project_id,
@@ -793,30 +927,94 @@ hyscan_db_info_get_track_info (HyScanDB    *db,
   return hyscan_db_info_get_track_info_int (db, project_id, track_name, NULL);
 }
 
-/* Функция освобождает память занятую структурой HyScanProjectInfo. */
-void
-hyscan_db_info_free_project_info (HyScanProjectInfo *info)
+/**
+ * hyscan_db_info_project_info_copy:
+ * @info: структура #HyScanProjectInfo для копирования
+ *
+ * Функция создаёт копию структуры #HyScanProjectInfo.
+ *
+ * Returns: (transfer full): Новая структура #HyScanProjectInfo.
+ * Для удаления #hyscan_db_info_project_info_free.
+ */
+HyScanProjectInfo *
+hyscan_db_info_project_info_copy (HyScanProjectInfo *info)
 {
-  g_free (info->name);
-  g_free (info->description);
-  g_date_time_unref (info->ctime);
+  HyScanProjectInfo *new_info;
 
-  g_free (info);
+  new_info = g_slice_new0 (HyScanProjectInfo);
+  new_info->name = g_strdup (info->name);
+  new_info->ctime = g_date_time_ref (info->ctime);
+  new_info->mtime = g_date_time_ref (info->mtime);
+  new_info->description = g_strdup (info->description);
+
+  return new_info;
 }
 
-/* Функция освобождает память занятую структурой HyScanTrackInfo. */
+/**
+ * hyscan_db_info_project_info_free:
+ * @info: структура #HyScanProjectInfo для удаления
+ *
+ * Функция удаляет структуру #HyScanProjectInfo.
+ */
 void
-hyscan_db_info_free_track_info (HyScanTrackInfo *info)
+hyscan_db_info_project_info_free (HyScanProjectInfo *info)
 {
-  g_free (info->name);
-  g_free (info->description);
-  g_date_time_unref (info->ctime);
+  g_free ((gchar *)info->name);
+  g_free ((gchar *)info->description);
+  g_clear_pointer (&info->ctime, g_date_time_unref);
+  g_clear_pointer (&info->mtime, g_date_time_unref);
 
-  g_free (info->id);
-  g_free (info->operator_name);
+  g_slice_free (HyScanProjectInfo, info);
+}
+
+/**
+ * hyscan_db_info_track_info_copy:
+ * @info: структура #HyScanTrackInfo для копирования
+ *
+ * Функция создаёт копию структуры #HyScanTrackInfo.
+ *
+ * Returns: (transfer full): Новая структура #HyScanTrackInfo.
+ * Для удаления #hyscan_db_info_track_info_free.
+ */
+HyScanTrackInfo *
+hyscan_db_info_track_info_copy (HyScanTrackInfo *info)
+{
+  HyScanTrackInfo *new_info;
+
+  new_info = g_slice_new0 (HyScanTrackInfo);
+  new_info->id = g_strdup (info->id);
+  new_info->type = info->type;
+  new_info->name = g_strdup (info->name);
+  if (info->ctime != NULL)
+    new_info->ctime = g_date_time_ref (info->ctime);
+  if (info->mtime != NULL)
+    new_info->mtime = g_date_time_ref (info->mtime);
+  new_info->description = g_strdup (info->description);
+  new_info->operator_name = g_strdup (info->operator_name);
+  if (info->sonar_info != NULL)
+    new_info->sonar_info = g_object_ref (info->sonar_info);
+  memcpy (new_info->sources, info->sources, sizeof (info->sources));
+  new_info->active = info->active;
+
+  return new_info;
+}
+
+/**
+ * hyscan_db_info_track_info_free:
+ * @info: структура #HyScanTrackInfo для удаления
+ *
+ * Функция удаляет структуру #HyScanTrackInfo.
+ */
+void
+hyscan_db_info_track_info_free (HyScanTrackInfo *info)
+{
+  g_free ((gchar*)info->id);
+  g_free ((gchar*)info->name);
+  g_free ((gchar*)info->description);
+  g_free ((gchar*)info->operator_name);
+  g_clear_pointer (&info->ctime, g_date_time_unref);
+  g_clear_pointer (&info->mtime, g_date_time_unref);
   g_clear_object (&info->sonar_info);
 
-  g_clear_pointer (&info->sources, g_hash_table_unref);
-
-  g_free (info);
+  g_slice_free (HyScanTrackInfo, info);
 }
