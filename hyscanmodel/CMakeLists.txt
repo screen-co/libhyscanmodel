@@ -1,16 +1,19 @@
 set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
-     hyscan-appearance.c
-     hyscan-async.c
-     hyscan-connector.c
-     hyscan-db-info.c
-     hyscan-db-profile.c
-     hyscan-profile-common.c
-     hyscan-sensors-data.c
-     hyscan-sensors-profile.c
-     hyscan-sonar-control-model.c
-     hyscan-sonar-model.c
-     hyscan-sonar-profile.c
-     hyscan-serializable.c)
+     # hyscan-db-info.c
+     hyscan-hw-profile-device.c
+     hyscan-hw-profile.c
+     # hyscan-appearance.c
+     # hyscan-async.c
+     # hyscan-connector.c
+     # hyscan-db-profile.c
+     # hyscan-profile-common.c
+     # hyscan-sensors-data.c
+     # hyscan-sensors-profile.c
+     # hyscan-sonar-control-model.c
+     # hyscan-sonar-model.c
+     # hyscan-sonar-profile.c
+     # hyscan-serializable.c
+     )
 
 add_library (${HYSCAN_MODEL_LIBRARY} SHARED ${HYSCAN_MODEL_LIBRARY_SOURCE_FILES})
 
@@ -36,18 +39,19 @@ install (FILES "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/hyscanmodel-${HYSCAN_MAJOR_VER
          PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
 
 set (HYSCAN_MODEL_LIBRARY_INSTALL_FILES
-     hyscan-appearance.h
-     hyscan-async.h
-     hyscan-connector.h
-     hyscan-db-info.h
-     hyscan-db-profile.h
-     hyscan-profile-common.h
-     hyscan-sensors-data.h
-     hyscan-sensors-profile.h
-     hyscan-sonar-control-model.h
-     hyscan-sonar-model.h
-     hyscan-sonar-profile.h
-     hyscan-serializable.h)
+     # hyscan-db-info.h
+     # hyscan-appearance.h
+     # hyscan-async.h
+     # hyscan-connector.h
+     # hyscan-db-profile.h
+     # hyscan-profile-common.h
+     # hyscan-sensors-data.h
+     # hyscan-sensors-profile.h
+     # hyscan-sonar-control-model.h
+     # hyscan-sonar-model.h
+     # hyscan-sonar-profile.h
+     # hyscan-serializable.h
+     )
 
 install (FILES ${HYSCAN_MODEL_LIBRARY_INSTALL_FILES}
          COMPONENT development

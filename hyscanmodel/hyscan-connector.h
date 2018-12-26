@@ -12,7 +12,6 @@
 #ifndef __HYSCAN_CONNECTOR_H__
 #define __HYSCAN_CONNECTOR_H__
 
-#include <glib-object.h>
 #include <hyscan-api.h>
 #include <hyscan-db.h>
 #include <hyscan-sonar-control.h>
