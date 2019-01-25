@@ -188,6 +188,9 @@ hyscan_hw_profile_check (HyScanHWProfile *self)
   g_return_val_if_fail (HYSCAN_IS_HW_PROFILE (self), FALSE);
   priv = self->priv;
 
+  if (priv->devices == NULL)
+    return FALSE;
+
   for (link = priv->devices; link != NULL; link = link->next)
     {
       HyScanHWProfileItem *item = link->data;
@@ -207,6 +210,9 @@ hyscan_hw_profile_connect (HyScanHWProfile *self)
 
   g_return_val_if_fail (HYSCAN_IS_HW_PROFILE (self), NULL);
   priv = self->priv;
+
+  if (priv->devices == NULL)
+    return FALSE;
 
   control = hyscan_control_new ();
 
