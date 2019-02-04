@@ -113,6 +113,9 @@ hyscan_hw_profile_device_read_params (GKeyFile         *kf,
         gint64 int_val;
         gdouble dbl_val;
         gchar *str_val;
+        const gchar * enum_id;
+        GList * enum_vals;
+        const HyScanDataSchemaEnumValue * found;
 
         case HYSCAN_DATA_SCHEMA_KEY_BOOLEAN:
           bool_val = g_key_file_get_boolean (kf, group, *iter, NULL);
@@ -125,8 +128,15 @@ hyscan_hw_profile_device_read_params (GKeyFile         *kf,
           break;
 
         case HYSCAN_DATA_SCHEMA_KEY_ENUM:
-          int_val = g_key_file_get_int64 (kf, group, *iter, NULL);
-          hyscan_param_list_set_enum (params, *iter, int_val);
+          str_val = g_key_file_get_string (kf, group, *iter, NULL);
+
+          enum_id = hyscan_data_schema_key_get_enum_id (schema, *iter);
+          enum_vals = hyscan_data_schema_get_enum_values (schema, enum_id);
+          found = hyscan_data_schema_enum_value_find_by_name (enum_vals, str_val);
+          hyscan_param_list_set_enum (params, *iter, found->value);
+
+          g_list_free (enum_vals);
+          g_free (str_val);
           break;
 
         case HYSCAN_DATA_SCHEMA_KEY_DOUBLE:
