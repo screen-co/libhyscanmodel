@@ -1,11 +1,14 @@
 set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
      hyscan-db-info.c
+     hyscan-profile.c
+     hyscan-db-profile.c
      hyscan-hw-profile-device.c
      hyscan-hw-profile.c
+     hyscan-offset-profile.c
+     hyscan-profile-loader.c
      # hyscan-appearance.c
      # hyscan-async.c
      # hyscan-connector.c
-     # hyscan-db-profile.c
      # hyscan-profile-common.c
      # hyscan-sensors-data.c
      # hyscan-sensors-profile.c
@@ -40,10 +43,10 @@ install (FILES "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/hyscanmodel-${HYSCAN_MAJOR_VER
 
 set (HYSCAN_MODEL_LIBRARY_INSTALL_FILES
      hyscan-db-info.h
+     hyscan-db-profile.h
      # hyscan-appearance.h
      # hyscan-async.h
      # hyscan-connector.h
-     # hyscan-db-profile.h
      # hyscan-profile-common.h
      # hyscan-sensors-data.h
      # hyscan-sensors-profile.h

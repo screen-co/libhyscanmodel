@@ -18,7 +18,6 @@ struct _HyScanHWProfileDevicePrivate
 static void    hyscan_hw_profile_device_object_constructed (GObject *object);
 static void    hyscan_hw_profile_device_object_finalize    (GObject *object);
 
-/* TODO: Change G_TYPE_OBJECT to type of the base class. */
 G_DEFINE_TYPE_WITH_PRIVATE (HyScanHWProfileDevice, hyscan_hw_profile_device, G_TYPE_OBJECT);
 
 static void
@@ -131,11 +130,10 @@ hyscan_hw_profile_device_read_params (GKeyFile         *kf,
           str_val = g_key_file_get_string (kf, group, *iter, NULL);
 
           enum_id = hyscan_data_schema_key_get_enum_id (schema, *iter);
-          enum_vals = hyscan_data_schema_get_enum_values (schema, enum_id);
-          found = hyscan_data_schema_enum_value_find_by_name (enum_vals, str_val);
-          hyscan_param_list_set_enum (params, *iter, found->value);
+          found = hyscan_data_schema_enum_find_by_id (schema, enum_id, str_val);
+          if (found != NULL)
+            hyscan_param_list_set_enum (params, *iter, found->value);
 
-          g_list_free (enum_vals);
           g_free (str_val);
           break;
 
@@ -201,6 +199,10 @@ hyscan_hw_profile_device_read (HyScanHWProfileDevice *hw_device,
 
   /* Считываем схему данных. */
   priv->discover = hyscan_hw_profile_device_find_driver (priv->paths, driver);
+
+  if (priv->discover == NULL)
+    return;
+
   schema = hyscan_discover_config (priv->discover, priv->uri);
 
   /* По этой схеме считываем ключи. */
@@ -216,6 +218,9 @@ hyscan_hw_profile_device_check (HyScanHWProfileDevice *hw_device)
 
   g_return_val_if_fail (HYSCAN_IS_HW_PROFILE_DEVICE (hw_device), FALSE);
   priv = hw_device->priv;
+
+  if (priv->discover == NULL)
+    return FALSE;
 
   return hyscan_discover_check (priv->discover, priv->uri, priv->params);
 }

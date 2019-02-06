@@ -2,11 +2,8 @@
 #include <hyscan-hw-profile-device.h>
 #include <hyscan-driver.h>
 
-enum
-{
-  PROP_0,
-  PROP_FILE_NAME
-};
+#define HYSCAN_HW_PROFILE_INFO_GROUP "_"
+#define HYSCAN_HW_PROFILE_NAME "name"
 
 typedef struct
 {
@@ -17,95 +14,141 @@ typedef struct
 
 struct _HyScanHWProfilePrivate
 {
-  gchar     *file_name;
-  GKeyFile  *kf;
-
   gchar    **drivers;
   GList     *devices;
 };
 
-static void    hyscan_hw_profile_set_property             (GObject               *object,
-                                                           guint                  prop_id,
-                                                           const GValue          *value,
-                                                           GParamSpec            *pspec);
-static void    hyscan_hw_profile_object_constructed       (GObject               *object);
-static void    hyscan_hw_profile_object_finalize          (GObject               *object);
+static void     hyscan_hw_profile_object_finalize         (GObject               *object);
+static void     hyscan_hw_profile_item_free               (gpointer               data);
+static void     hyscan_hw_profile_clear                   (HyScanHWProfile       *profile);
+static gboolean hyscan_hw_profile_read                    (HyScanProfile         *profile,
+                                                           const gchar           *file);
+static gboolean hyscan_hw_profile_info_group              (HyScanProfile         *profile,
+                                                           GKeyFile              *kf,
+                                                           const gchar           *group);
 
-G_DEFINE_TYPE_WITH_PRIVATE (HyScanHWProfile, hyscan_hw_profile, G_TYPE_OBJECT);
+
+G_DEFINE_TYPE_WITH_PRIVATE (HyScanHWProfile, hyscan_hw_profile, HYSCAN_TYPE_PROFILE);
 
 static void
 hyscan_hw_profile_class_init (HyScanHWProfileClass *klass)
 {
   GObjectClass *oclass = G_OBJECT_CLASS (klass);
+  HyScanProfileClass *pklass = HYSCAN_PROFILE_CLASS (klass);
 
-  oclass->set_property = hyscan_hw_profile_set_property;
-  oclass->constructed = hyscan_hw_profile_object_constructed;
   oclass->finalize = hyscan_hw_profile_object_finalize;
-
-  g_object_class_install_property (oclass, PROP_FILE_NAME,
-    g_param_spec_string ("file", "FilePath", "Full path to file", NULL,
-                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY));
+  pklass->read = hyscan_hw_profile_read;
 }
 
 static void
-hyscan_hw_profile_init (HyScanHWProfile *hw_profile)
+hyscan_hw_profile_init (HyScanHWProfile *profile)
 {
-  hw_profile->priv = hyscan_hw_profile_get_instance_private (hw_profile);
-}
-
-static void
-hyscan_hw_profile_set_property (GObject      *object,
-                                guint         prop_id,
-                                const GValue *value,
-                                GParamSpec   *pspec)
-{
-  HyScanHWProfile *hw_profile = HYSCAN_HW_PROFILE (object);
-  HyScanHWProfilePrivate *priv = hw_profile->priv;
-
-  switch (prop_id)
-    {
-    case PROP_FILE_NAME:
-      priv->file_name = g_value_dup_string (value);
-      break;
-
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-      break;
-    }
-}
-
-static void
-hyscan_hw_profile_object_constructed (GObject *object)
-{
-  HyScanHWProfile *hw_profile = HYSCAN_HW_PROFILE (object);
-  HyScanHWProfilePrivate *priv = hw_profile->priv;
-  GKeyFileFlags kf_flags;
-  gboolean st;
-
-  G_OBJECT_CLASS (hyscan_hw_profile_parent_class)->constructed (object);
-
-  /* Загружаем файл профиля. */
-  priv->kf = g_key_file_new ();
-
-  kf_flags = G_KEY_FILE_KEEP_COMMENTS | G_KEY_FILE_KEEP_TRANSLATIONS;
-  st = g_key_file_load_from_file (priv->kf, priv->file_name, kf_flags, NULL);
-
-  if (!st)
-    g_clear_pointer (&priv->kf, g_key_file_unref);
-
+  profile->priv = hyscan_hw_profile_get_instance_private (profile);
 }
 
 static void
 hyscan_hw_profile_object_finalize (GObject *object)
 {
-  HyScanHWProfile *hw_profile = HYSCAN_HW_PROFILE (object);
-  HyScanHWProfilePrivate *priv = hw_profile->priv;
+  HyScanHWProfile *profile = HYSCAN_HW_PROFILE (object);
+  HyScanHWProfilePrivate *priv = profile->priv;
 
-  g_key_file_unref (priv->kf);
-  g_free (priv->file_name);
   g_strfreev (priv->drivers);
+  hyscan_hw_profile_clear (profile);
 
   G_OBJECT_CLASS (hyscan_hw_profile_parent_class)->finalize (object);
+}
+
+static void
+hyscan_hw_profile_item_free (gpointer data)
+{
+  HyScanHWProfileItem *item = data;
+
+  if (item == NULL)
+    return;
+
+  g_clear_pointer (&item->group, g_free);
+  g_clear_object (&item->device);
+  g_free (item);
+}
+
+static void
+hyscan_hw_profile_clear (HyScanHWProfile *profile)
+{
+  HyScanHWProfilePrivate *priv = profile->priv;
+
+  g_list_free_full (priv->devices, hyscan_hw_profile_item_free);
+}
+
+static gboolean
+hyscan_hw_profile_read (HyScanProfile *profile,
+                        const gchar   *file)
+{
+  HyScanHWProfile *self = HYSCAN_HW_PROFILE (profile);
+  HyScanHWProfilePrivate *priv = self->priv;
+  gchar **groups, **iter;
+  GKeyFile *kf;
+  GError *error = NULL;
+  gboolean status;
+
+  /* Очищаем, если что-то было. */
+  hyscan_hw_profile_clear (self);
+
+  kf = g_key_file_new ();
+  status = g_key_file_load_from_file (kf, file, G_KEY_FILE_NONE, &error);
+
+  if (!status && error->code != G_FILE_ERROR_NOENT)
+    {
+      g_warning ("HyScanHWProfile: can't load file <%s>", file);
+      goto exit;
+    }
+
+  groups = g_key_file_get_groups (kf, NULL);
+  for (iter = groups; iter != NULL && *iter != NULL; ++iter)
+    {
+      HyScanHWProfileDevice * device;
+      HyScanHWProfileItem *item;
+
+      if (hyscan_hw_profile_info_group (profile, kf, *iter))
+        continue;
+
+      device = hyscan_hw_profile_device_new (kf);
+      hyscan_hw_profile_device_set_group (device, *iter);
+      hyscan_hw_profile_device_set_paths (device, priv->drivers);
+      hyscan_hw_profile_device_read (device, kf);
+
+      item = g_new0 (HyScanHWProfileItem, 1);
+      item->group = g_strdup (*iter);
+      item->device = device;
+
+      priv->devices = g_list_append (priv->devices, item);
+    }
+
+  g_strfreev (groups);
+
+exit:
+  g_key_file_unref (kf);
+  if (error != NULL)
+    g_error_free (error);
+
+  return status;
+}
+
+
+static gboolean
+hyscan_hw_profile_info_group (HyScanProfile *profile,
+                              GKeyFile      *kf,
+                              const gchar   *group)
+{
+  gchar *name;
+
+  if (!g_str_equal (group, HYSCAN_HW_PROFILE_INFO_GROUP))
+    return FALSE;
+
+  name = g_key_file_get_string (kf, group, HYSCAN_HW_PROFILE_NAME, NULL);
+  hyscan_profile_set_name (HYSCAN_PROFILE (profile), name);
+
+  g_free (name);
+  return TRUE;
 }
 
 HyScanHWProfile *
@@ -124,35 +167,6 @@ hyscan_hw_profile_set_driver_paths (HyScanHWProfile  *self,
 
   g_strfreev (self->priv->drivers);
   self->priv->drivers = g_strdupv (driver_paths);
-}
-
-void
-hyscan_hw_profile_read (HyScanHWProfile *self)
-{
- gchar **groups, **iter;
- HyScanHWProfilePrivate *priv;
-
- g_return_if_fail (HYSCAN_IS_HW_PROFILE (self));
- priv = self->priv;
-
- groups = g_key_file_get_groups (priv->kf, NULL);
-
- for (iter = groups; iter != NULL && *iter != NULL; ++iter)
-   {
-     HyScanHWProfileDevice * device;
-     HyScanHWProfileItem *item;
-
-     device = hyscan_hw_profile_device_new (priv->kf);
-     hyscan_hw_profile_device_set_group (device, *iter);
-     hyscan_hw_profile_device_set_paths (device, priv->drivers);
-     hyscan_hw_profile_device_read (device, priv->kf);
-
-     item = g_new0 (HyScanHWProfileItem, 1);
-     item->group = g_strdup (*iter);
-     item->device = device;
-
-     priv->devices = g_list_append (priv->devices, item);
-   }
 }
 
 GList *
@@ -235,8 +249,6 @@ hyscan_hw_profile_connect (HyScanHWProfile *self)
         }
     }
 
-  hyscan_control_device_bind (control);
-
   return control;
 }
 
@@ -248,9 +260,10 @@ hyscan_hw_profile_connect_simple (const gchar *file)
 
   profile = hyscan_hw_profile_new (file);
   if (profile == NULL)
-    return NULL;
+    {
+      return NULL;
+    }
 
-  hyscan_hw_profile_read (profile);
   if (!hyscan_hw_profile_check (profile))
     {
       g_object_unref (profile);
@@ -258,7 +271,8 @@ hyscan_hw_profile_connect_simple (const gchar *file)
     }
 
   control = hyscan_hw_profile_connect (profile);
-  g_object_unref (profile);
+  hyscan_control_device_bind (control);
 
+  g_object_unref (profile);
   return control;
 }

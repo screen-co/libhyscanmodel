@@ -2,6 +2,7 @@
 #define __HYSCAN_HW_PROFILE_H__
 
 #include <hyscan-control.h>
+#include "hyscan-profile.h"
 
 G_BEGIN_DECLS
 
@@ -16,20 +17,19 @@ typedef struct _HyScanHWProfile HyScanHWProfile;
 typedef struct _HyScanHWProfilePrivate HyScanHWProfilePrivate;
 typedef struct _HyScanHWProfileClass HyScanHWProfileClass;
 
-/* TODO: Change GObject to type of the base class. */
 struct _HyScanHWProfile
 {
-  GObject parent_instance;
+  HyScanProfile parent_instance;
 
   HyScanHWProfilePrivate *priv;
 };
 
-/* TODO: Change GObjectClass to type of the base class. */
 struct _HyScanHWProfileClass
 {
-  GObjectClass parent_class;
+  HyScanProfileClass parent_class;
 };
 
+HYSCAN_API
 GType                  hyscan_hw_profile_get_type         (void);
 
 HYSCAN_API
@@ -38,8 +38,6 @@ HyScanHWProfile *      hyscan_hw_profile_new              (const gchar     *file
 HYSCAN_API
 void                   hyscan_hw_profile_set_driver_paths (HyScanHWProfile *profile,
                                                            gchar          **driver_paths);
-HYSCAN_API
-void                   hyscan_hw_profile_read             (HyScanHWProfile *profile);
 
 HYSCAN_API
 GList *                hyscan_hw_profile_list             (HyScanHWProfile *profile);

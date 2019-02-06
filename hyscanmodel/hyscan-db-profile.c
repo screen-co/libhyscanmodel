@@ -8,7 +8,6 @@
  *
  */
 
-#include <gio/gio.h>
 #include "hyscan-db-profile.h"
 
 #define HYSCAN_DB_PROFILE_GROUP_NAME "db"
@@ -29,7 +28,6 @@ struct _HyScanDBProfilePrivate
   gchar *uri;    /* Идентификатор БД.*/
 };
 
-static void   hyscan_db_profile_interface_init  (HyScanSerializableInterface  *iface);
 static void   hyscan_db_profile_set_property    (GObject                      *object,
                                                  guint                         prop_id,
                                                  const GValue                 *value,
@@ -38,41 +36,33 @@ static void   hyscan_db_profile_get_property    (GObject                      *o
                                                  guint                         prop_id,
                                                  GValue                       *value,
                                                  GParamSpec                   *pspec);
-static void   hyscan_db_profile_finalize        (GObject                      *object);
+static void   hyscan_db_profile_object_finalize     (GObject                      *object);
 static void   hyscan_db_profile_clear           (HyScanDBProfile              *profile);
-gboolean      hyscan_db_profile_read            (HyScanSerializable           *serializable,
-                                                 const gchar                  *name);
-gboolean      hyscan_db_profile_write           (HyScanSerializable           *serializable,
+static gboolean hyscan_db_profile_read          (HyScanProfile                *profile,
                                                  const gchar                  *name);
 
-G_DEFINE_TYPE_WITH_CODE (HyScanDBProfile, hyscan_db_profile, G_TYPE_OBJECT,
-                         G_ADD_PRIVATE (HyScanDBProfile)
-                         G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_SERIALIZABLE, hyscan_db_profile_interface_init));
+G_DEFINE_TYPE_WITH_CODE (HyScanDBProfile, hyscan_db_profile, HYSCAN_TYPE_PROFILE,
+                         G_ADD_PRIVATE (HyScanDBProfile));
 
 static void
 hyscan_db_profile_class_init (HyScanDBProfileClass *klass)
 {
-  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+  GObjectClass *oclass = G_OBJECT_CLASS (klass);
+  HyScanProfileClass *pklass = HYSCAN_PROFILE_CLASS (klass);
 
-  object_class->set_property = hyscan_db_profile_set_property;
-  object_class->get_property = hyscan_db_profile_get_property;
-  object_class->finalize = hyscan_db_profile_finalize;
+  oclass->set_property = hyscan_db_profile_set_property;
+  oclass->get_property = hyscan_db_profile_get_property;
+  oclass->finalize = hyscan_db_profile_object_finalize;
 
-  g_object_class_install_property (object_class,
-                                   PROP_URI,
-                                   g_param_spec_string ("uri",
-                                                        "URI",
-                                                        "Database URI",
-                                                        NULL,
-                                                        G_PARAM_READWRITE));
+  pklass->read = hyscan_db_profile_read;
 
-  g_object_class_install_property (object_class,
-                                   PROP_NAME,
-                                   g_param_spec_string ("name",
-                                                        "Name",
-                                                        "Database name",
-                                                        NULL, 
-                                                        G_PARAM_READWRITE));
+  g_object_class_install_property (oclass, PROP_URI,
+    g_param_spec_string ("uri", "URI", "Database URI",
+                         NULL, G_PARAM_READWRITE));
+
+  g_object_class_install_property (oclass, PROP_NAME,
+    g_param_spec_string ("name", "Name", "Database name",
+                         NULL, G_PARAM_READWRITE));
 }
 
 static void
@@ -131,9 +121,11 @@ hyscan_db_profile_get_property (GObject    *object,
 }
 
 static void
-hyscan_db_profile_finalize (GObject *object)
+hyscan_db_profile_object_finalize (GObject *object)
 {
-  hyscan_db_profile_clear (HYSCAN_DB_PROFILE (object));
+  HyScanDBProfile *self = HYSCAN_DB_PROFILE (object);
+
+  hyscan_db_profile_clear (self);
 
   G_OBJECT_CLASS (hyscan_db_profile_parent_class)->finalize (object);
 }
@@ -149,105 +141,54 @@ hyscan_db_profile_clear (HyScanDBProfile *profile)
 
 /* Создаёт объект HyScanDBProfile. */
 HyScanDBProfile *
-hyscan_db_profile_new (void)
-{
-  return hyscan_db_profile_new_full (NULL, NULL);
-}
-
-/* Создаёт объект HyScanDBProfile. */
-HyScanDBProfile *
-hyscan_db_profile_new_full (const gchar *name,
-                            const gchar *uri)
+hyscan_db_profile_new (const gchar *file)
 {
   return g_object_new (HYSCAN_TYPE_DB_PROFILE,
-                       "name", name,
-                       "uri", uri,
+                       "file", file,
                        NULL);
 }
 
 /* Десериализация из INI-файла. */
-gboolean
-hyscan_db_profile_read (HyScanSerializable *serializable,
-                        const gchar        *name)
+static gboolean
+hyscan_db_profile_read (HyScanProfile *profile,
+                        const gchar   *file)
 {
-  HyScanDBProfile *profile = HYSCAN_DB_PROFILE(serializable);
-  HyScanDBProfilePrivate *priv = profile->priv;
-  GKeyFile *key_file;
-  gboolean result = TRUE;
+  HyScanDBProfile *self = HYSCAN_DB_PROFILE (profile);
+  HyScanDBProfilePrivate *priv = self->priv;
+  GKeyFile *kf;
+  GError *error = NULL;
+  gboolean status = FALSE;
 
-  key_file = g_key_file_new ();
-
-  if (!g_key_file_load_from_file (key_file, name, G_KEY_FILE_NONE, NULL))
+  kf = g_key_file_new ();
+  if (!g_key_file_load_from_file (kf, file, G_KEY_FILE_NONE, &error))
     {
-      g_warning ("HyScanDBProfile: there is a problem parsing the file.");
-      result = FALSE;
-      goto exit;
+      /* Если произошла ошибка при загрузке параметров не связанная с существованием файла,
+         сигнализируем о ней. */
+      if (error->code != G_FILE_ERROR_NOENT)
+        {
+          g_warning ("HyScanOffsetProfile: can't load file <%s>", file);
+          goto exit;
+        }
     }
 
   /* Очистка профиля. */
-  hyscan_db_profile_clear (profile);
+  hyscan_db_profile_clear (self);
 
-  /* Чтение строки с идентификатором системы хранения. */
-  priv->uri = g_key_file_get_string (key_file, HYSCAN_DB_PROFILE_GROUP_NAME, HYSCAN_DB_PROFILE_URI_KEY, NULL);
+  priv->name = g_key_file_get_string (kf, HYSCAN_DB_PROFILE_GROUP_NAME, HYSCAN_DB_PROFILE_NAME_KEY, NULL);
+  priv->uri = g_key_file_get_string (kf, HYSCAN_DB_PROFILE_GROUP_NAME, HYSCAN_DB_PROFILE_URI_KEY, NULL);
   if (priv->uri == NULL)
     {
       g_warning ("HyScanDBProfile: %s", "uri not found.");
-      result = FALSE;
       goto exit;
     }
 
-  /* Чтение строки с именем системы хранения. */
-  priv->name = g_key_file_get_string (key_file, HYSCAN_DB_PROFILE_GROUP_NAME, HYSCAN_DB_PROFILE_NAME_KEY, NULL);
-  if (priv->name == NULL)
-    {
-      g_warning ("HyScanDBProfile: %s", "name not found.");
-      result = FALSE;
-      goto exit;
-    }
+  hyscan_profile_set_name (profile, priv->name != NULL ? priv->name : priv->uri);
+
+  status = TRUE;
 
 exit:
-  g_key_file_unref (key_file);
-  return result;
-}
-
-/* Сериализация в INI-файл. */
-gboolean
-hyscan_db_profile_write (HyScanSerializable *serializable,
-                         const gchar        *name)
-{
-  HyScanDBProfile *profile = HYSCAN_DB_PROFILE(serializable);
-  HyScanDBProfilePrivate *priv = profile->priv;
-  GKeyFile *key_file;
-  GError *gerror = NULL;
-  gboolean result;
-
-  key_file = g_key_file_new ();
-
-  /* URI не задан - на выход. */
-  if (priv->uri == NULL)
-    {
-      result = FALSE;
-      goto exit;
-    }
-
-  /* Задание значения для ключа идентификатора системы хранения. */
-  g_key_file_set_string (key_file, HYSCAN_DB_PROFILE_GROUP_NAME, HYSCAN_DB_PROFILE_URI_KEY,
-                         priv->uri);
-
-  /* Задание значения для ключа имени системы хранения. */
-  g_key_file_set_string (key_file, HYSCAN_DB_PROFILE_GROUP_NAME, HYSCAN_DB_PROFILE_NAME_KEY,
-                         priv->name != NULL ? priv->name : HYSCAN_DB_PROFILE_UNNAMED_VALUE);
-
-  /* Запись в файл. */
-  if (!(result = g_key_file_save_to_file (key_file, name, &gerror)))
-    {
-      g_warning ("HyScanDBProfile: couldn't write data to file. %s", gerror->message);
-      g_error_free (gerror);
-    }
-
-exit:
-  g_key_file_unref (key_file);
-  return result;
+  g_key_file_unref (kf);
+  return status;
 }
 
 /* Получает имя системы хранения. */
@@ -290,9 +231,19 @@ hyscan_db_profile_set_uri (HyScanDBProfile *profile,
   profile->priv->uri = g_strdup (uri);
 }
 
-static void
-hyscan_db_profile_interface_init (HyScanSerializableInterface *iface)
+HyScanDB *
+hyscan_db_profile_connect (HyScanDBProfile *profile)
 {
-  iface->read = hyscan_db_profile_read;
-  iface->write = hyscan_db_profile_write;
+  HyScanDBProfilePrivate *priv;
+
+  g_return_val_if_fail (HYSCAN_IS_DB_PROFILE (profile), NULL);
+  priv = profile->priv;
+
+  if (priv->uri == NULL)
+    {
+      g_warning ("HyScanDBProfile: %s", "uri not set");
+      return NULL;
+    }
+
+  return hyscan_db_new (priv->uri);
 }

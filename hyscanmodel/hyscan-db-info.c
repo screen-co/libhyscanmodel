@@ -71,6 +71,8 @@
 #include <hyscan-core-schemas.h>
 #include <string.h>
 
+#define HYSCAN_DB_INFO_TIMEOUT 1000
+
 enum
 {
   PROP_O,
@@ -95,15 +97,14 @@ struct _HyScanDBInfoPrivate
 {
   HyScanDB                    *db;                     /* Интерфейс базы данных. */
 
-  guint32                      projects_mod_counter;   /* Текущий счётчик изменений в проектах. */
   gboolean                     projects_update;        /* Признак изменения списка проектов. */
   GHashTable                  *projects;               /* Список проектов. */
 
   gchar                       *new_project_name;       /* Название нового проекта для слежения. */
+  gboolean                     project_changed;        /* Флаг смены проекта. */
   gchar                       *project_name;           /* Название текущего проекта для слежения. */
   gint32                       project_id;             /* Идентификатор проекта для слежения. */
 
-  guint32                      tracks_mod_counter;     /* Текущий счётчик изменений в галсах. */
   gboolean                     tracks_update;          /* Признак изменения числа галсов. */
   GHashTable                  *tracks;                 /* Списк галсов. */
 
@@ -115,6 +116,7 @@ struct _HyScanDBInfoPrivate
   gint                         shutdown;               /* Признак завершения работы. */
 
   GMutex                       lock;                   /* Блокировка. */
+  GCond                        cond;                   /* Триггер для запуска потока. */
 };
 
 static void        hyscan_db_info_set_property         (GObject               *object,
@@ -139,7 +141,7 @@ static void        hyscan_db_info_add_active_id        (GHashTable            *a
 
 static gboolean    hyscan_db_info_alerter              (gpointer               data);
 
-static gpointer    hyscan_db_info_informer             (gpointer               data);
+static gpointer    hyscan_db_info_watcher              (gpointer               data);
 
 static guint       hyscan_db_info_signals[SIGNAL_LAST] = { 0 };
 
@@ -218,13 +220,14 @@ hyscan_db_info_object_constructed (GObject *object)
   priv->project_id = -1;
 
   g_mutex_init (&priv->lock);
+  g_cond_init (&priv->cond);
 
   if (priv->db == NULL)
     return;
 
   priv->actives = g_hash_table_new_full (NULL, NULL, NULL, hyscan_db_info_free_monitor);
-  priv->alerter = g_timeout_add (1000, hyscan_db_info_alerter, info);
-  priv->informer = g_thread_new ("db-informer", hyscan_db_info_informer, priv);
+  priv->alerter = g_timeout_add (HYSCAN_DB_INFO_TIMEOUT, hyscan_db_info_alerter, info);
+  priv->informer = g_thread_new ("db-watcher", hyscan_db_info_watcher, priv);
 }
 
 static void
@@ -237,6 +240,7 @@ hyscan_db_info_object_finalize (GObject *object)
     g_source_remove (priv->alerter);
 
   g_atomic_int_set (&priv->shutdown, TRUE);
+  g_cond_signal (&priv->cond);
   g_clear_pointer (&priv->informer, g_thread_join);
 
   g_clear_pointer (&priv->projects, g_hash_table_unref);
@@ -247,6 +251,7 @@ hyscan_db_info_object_finalize (GObject *object)
   g_free (priv->project_name);
 
   g_mutex_clear (&priv->lock);
+  g_cond_clear (&priv->cond);
   g_clear_object (&priv->db);
 
   G_OBJECT_CLASS (hyscan_db_info_parent_class)->finalize (object);
@@ -310,50 +315,39 @@ hyscan_db_info_alerter (gpointer data)
 
 /* Поток проверяющий состояние базы данных и собирающий информацию о проектах, галсах и источниках данных. */
 static gpointer
-hyscan_db_info_informer (gpointer data)
+hyscan_db_info_watcher (gpointer data)
 {
   HyScanDBInfoPrivate *priv = data;
-  GTimer *check_timer;
-
-  /* Таймер проверки изменений. */
-  check_timer = g_timer_new ();
+  gboolean project_changed;
+  guint32 tracks_mod_counter;     /* Текущий счётчик изменений в галсах. */
+  guint32 projects_mod_counter;   /* Текущий счётчик изменений в проектах. */
+  guint32 mod_counter;
+  gboolean check_projects, check_tracks;
+  GHashTableIter iter;
+  gpointer key, value;
+  gint64 end_time;
 
   /* Начальное значение счётчика изменений списка проектов. */
-  priv->projects_mod_counter = hyscan_db_get_mod_count (priv->db, 0) - 1;
+  projects_mod_counter = hyscan_db_get_mod_count (priv->db, 0) - 1;
+  mod_counter = ~projects_mod_counter;
 
   while (!g_atomic_int_get (&priv->shutdown))
     {
-      guint32 mod_counter;
-      gchar *project_name;
-      GHashTableIter iter;
-      gpointer key, value;
-      gboolean check_projects;
-      gboolean check_tracks;
-
       /* Задержка между проверками базы данных, а также завершением работы. */
-      g_usleep (100000);
+      g_mutex_lock (&priv->lock);
+      end_time = g_get_monotonic_time () + HYSCAN_DB_INFO_TIMEOUT;
+      g_cond_wait_until (&priv->cond, &priv->lock, end_time);
 
-      /* Проверка в обычном режиме - 1 раз в секунду. */
-      if (g_timer_elapsed (check_timer, NULL) < 1.0)
-        continue;
+      /* Возможно, было запрошено принудительное обновление. */
+      check_projects = priv->refresh;
+      check_tracks = priv->refresh;
+      priv->refresh = FALSE;
 
-      g_timer_start (check_timer);
-
-      /* Принудительное обновление. */
-      if (g_atomic_int_compare_and_exchange (&priv->refresh, TRUE, FALSE))
-        {
-          check_projects = TRUE;
-          check_tracks = TRUE;
-        }
-      else
-        {
-          check_projects = FALSE;
-          check_tracks = FALSE;
-        }
+      g_mutex_unlock (&priv->lock);
 
       /* Проверяем изменение списка проектов при наличии изменений. */
       mod_counter = hyscan_db_get_mod_count (priv->db, 0);
-      if (check_projects || (mod_counter != priv->projects_mod_counter))
+      if (check_projects || (mod_counter != projects_mod_counter))
         {
           GHashTable *projects;
           gchar **project_list;
@@ -392,53 +386,53 @@ hyscan_db_info_informer (gpointer data)
           priv->projects_update = TRUE;
           g_mutex_unlock (&priv->lock);
 
-          priv->projects_mod_counter = mod_counter;
+          projects_mod_counter = mod_counter;
           g_strfreev (project_list);
         }
 
-      /* Название проекта для отслеживания. */
+      /* Проверяем, не изменился ли проект. */
       g_mutex_lock (&priv->lock);
-      project_name = g_strdup (priv->new_project_name);
+      project_changed = priv->project_changed;
+      if (project_changed)
+        {
+          g_clear_pointer (&priv->project_name, g_free);
+          priv->project_name = priv->new_project_name;
+          priv->new_project_name = NULL;
+          priv->project_changed = FALSE;
+        }
       g_mutex_unlock (&priv->lock);
 
-      /* Открываем проект который будем отслеживать. */
-      if (project_name != NULL)
+      /* Закрываем предыдущий проект. */
+      if (project_changed)
         {
-          /* Закрываем предыдущий проект. */
-          if (priv->project_id > 0)
-            hyscan_db_close (priv->db, priv->project_id);
-
-          /* Открываем проект. */
-          if (hyscan_db_is_exist (priv->db, project_name, NULL, NULL))
-            priv->project_id = hyscan_db_project_open (priv->db, project_name);
-          else
-            priv->project_id = -1;
-
-          /* Если проект открыли, очищаем глобальную переменную с именем нового проекта,
-           * запоминаем имя текущего проекта и очищаем список галсов. */
           if (priv->project_id > 0)
             {
-              priv->tracks_mod_counter = hyscan_db_get_mod_count (priv->db, priv->project_id) - 1;
-
-              g_mutex_lock (&priv->lock);
-              if (g_strcmp0 (priv->new_project_name, project_name) == 0)
-                {
-                  g_clear_pointer (&priv->project_name, g_free);
-                  priv->project_name = priv->new_project_name;
-                  priv->new_project_name = NULL;
-                }
-
-              g_clear_pointer (&priv->tracks, g_hash_table_unref);
-              priv->tracks_update = TRUE;
-              g_mutex_unlock (&priv->lock);
+              hyscan_db_close (priv->db, priv->project_id);
+              priv->project_id = -1;
             }
-
-          g_free (project_name);
         }
 
-      /* Нет проекта для отслеживания. */
+      /* Если в данный момент проект не открыт. */
       if (priv->project_id <= 0)
-        continue;
+        {
+          /* Пробуем открыть проект. */
+          if (priv->project_name != NULL && hyscan_db_is_exist (priv->db, priv->project_name, NULL, NULL))
+            priv->project_id = hyscan_db_project_open (priv->db, priv->project_name);
+
+          /* Если проект не задан, не существует или не открылся -- выходим. */
+          if (priv->project_id <= 0)
+            continue;
+
+          /* Если проект открылся, очищаем список галсов. */
+          tracks_mod_counter = ~hyscan_db_get_mod_count (priv->db, priv->project_id);
+
+          g_mutex_lock (&priv->lock);
+
+          g_clear_pointer (&priv->tracks, g_hash_table_unref);
+          priv->tracks_update = TRUE;
+
+          g_mutex_unlock (&priv->lock);
+        }
 
       /* Проверяем изменения в активных объектах базы данных. */
       g_hash_table_iter_init (&iter, priv->actives);
@@ -456,7 +450,7 @@ hyscan_db_info_informer (gpointer data)
 
       /* Проверяем изменение списка галсов. */
       mod_counter = hyscan_db_get_mod_count (priv->db, priv->project_id);
-      if (check_tracks || (mod_counter != priv->tracks_mod_counter))
+      if (check_tracks || (mod_counter != tracks_mod_counter))
         {
           GHashTable *tracks;
           gchar **track_list;
@@ -504,12 +498,10 @@ hyscan_db_info_informer (gpointer data)
           priv->tracks_update = TRUE;
           g_mutex_unlock (&priv->lock);
 
-          priv->tracks_mod_counter = mod_counter;
+          tracks_mod_counter = mod_counter;
           g_strfreev (track_list);
         }
     }
-
-  g_timer_destroy (check_timer);
 
   return NULL;
 }
@@ -553,15 +545,15 @@ hyscan_db_info_set_project (HyScanDBInfo *info,
   HyScanDBInfoPrivate *priv;
 
   g_return_if_fail (HYSCAN_IS_DB_INFO (info));
-
   priv = info->priv;
 
   g_mutex_lock (&priv->lock);
-  if (g_strcmp0 (priv->project_name, project_name) != 0)
-    {
-      g_clear_pointer (&priv->new_project_name, g_free);
-      priv->new_project_name = g_strdup (project_name);
-    }
+
+  g_clear_pointer (&priv->new_project_name, g_free);
+  priv->new_project_name = g_strdup (project_name);
+  priv->project_changed = TRUE;
+  g_cond_signal (&priv->cond);
+
   g_mutex_unlock (&priv->lock);
 }
 
@@ -678,9 +670,15 @@ hyscan_db_info_get_tracks (HyScanDBInfo *info)
 void
 hyscan_db_info_refresh (HyScanDBInfo *info)
 {
-  g_return_if_fail (HYSCAN_IS_DB_INFO (info));
+  HyScanDBInfoPrivate *priv;
 
-  g_atomic_int_set (&info->priv->refresh, TRUE);
+  g_return_if_fail (HYSCAN_IS_DB_INFO (info));
+  priv = info->priv;
+
+  g_mutex_lock (&priv->lock);
+  priv->refresh = TRUE;
+  g_cond_signal (&priv->cond);
+  g_mutex_unlock (&priv->lock);
 }
 
 /**

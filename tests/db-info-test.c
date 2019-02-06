@@ -85,6 +85,8 @@ create_source (HyScanDataWriter *writer,
     {
       hyscan_data_writer_acoustic_add_data (writer, source, 1, FALSE, 0, &info, data);
     }
+
+  g_object_unref (data);
 }
 
 /* Функция создаёт проекты, галсы и каналы данных для теста. */
@@ -95,7 +97,6 @@ db_info_test (gpointer data)
   gchar *project_name;
   gchar *track_name;
   gint64 ctime;
-  gint64 mtime;
   guint i;
 
   /* Завершаем работу, если прошли все этапы теста. */
@@ -123,10 +124,6 @@ db_info_test (gpointer data)
     g_error ("can't create track %s.%s", project_name, track_name);
 
   /* Время изменения проекта. */
-
-
-
-
   for (i = 0; i < sub_step; i++)
     create_source (writer, sources[i]);
 
@@ -346,6 +343,7 @@ main (int    argc,
       g_free (project_name);
     }
 
+  g_main_loop_unref (loop);
   g_timer_destroy (timer);
   g_object_unref (writer);
   g_object_unref (db_info);

@@ -17,7 +17,6 @@ int main (int argc, char **argv)
   pf = hyscan_hw_profile_new (argv[1]);
   hyscan_hw_profile_set_driver_paths (pf, driver_paths);
 
-  hyscan_hw_profile_read (pf);
   check = hyscan_hw_profile_check (pf);
   control = hyscan_hw_profile_connect (pf);
 
