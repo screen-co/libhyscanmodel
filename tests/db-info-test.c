@@ -75,7 +75,7 @@ create_source (HyScanDataWriter *writer,
   info.data_rate = 1.0;
 
   data = hyscan_buffer_new ();
-  hyscan_buffer_wrap_data (data, HYSCAN_DATA_BLOB, SOURCE_DATA, sizeof (SOURCE_DATA));
+  hyscan_buffer_wrap (data, HYSCAN_DATA_BLOB, SOURCE_DATA, sizeof (SOURCE_DATA));
 
   if (hyscan_source_is_sensor (source))
     {
