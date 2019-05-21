@@ -3,6 +3,8 @@ cmake_minimum_required (VERSION 2.8)
 
 project (libhyscanmodel)
 
+enable_testing()
+
 set (HYSCAN_MAJOR_VERSION 5)
 set (HYSCAN_MODEL_VERSION 0)
 set (HYSCAN_MODEL_LIBRARY "hyscanmodel-${HYSCAN_MAJOR_VERSION}")
