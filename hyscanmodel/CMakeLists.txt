@@ -6,7 +6,6 @@ set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
      hyscan-hw-profile-device.c
      hyscan-hw-profile.c
      hyscan-offset-profile.c
-     hyscan-profile-loader.c
      # hyscan-appearance.c
      # hyscan-async.c
      # hyscan-connector.c
