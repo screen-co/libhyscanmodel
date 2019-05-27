@@ -42,19 +42,19 @@ enum
 
 struct _HyScanProfilePrivate
 {
-  gchar * file;
-  gchar * name;
+  gchar    *file;
+  GKeyFile *kf;
+  gchar    *name;
 };
 
-static void     hyscan_profile_set_property            (GObject               *object,
-                                                        guint                  prop_id,
-                                                        const GValue          *value,
-                                                        GParamSpec            *pspec);
-static void     hyscan_profile_object_constructed      (GObject               *object);
-static void     hyscan_profile_object_finalize         (GObject               *object);
+static void     hyscan_profile_set_property       (GObject               *object,
+                                                   guint                  prop_id,
+                                                   const GValue          *value,
+                                                   GParamSpec            *pspec);
+static void     hyscan_profile_object_finalize    (GObject               *object);
 
-static gboolean hyscan_profile_read                    (HyScanProfile         *profile,
-                                                        const gchar           *file);
+static gboolean hyscan_profile_read_real          (HyScanProfile         *profile,
+                                                   const gchar           *file);
 
 G_DEFINE_TYPE_WITH_PRIVATE (HyScanProfile, hyscan_profile, G_TYPE_OBJECT);
 
@@ -64,7 +64,6 @@ hyscan_profile_class_init (HyScanProfileClass *klass)
   GObjectClass *oclass = G_OBJECT_CLASS (klass);
 
   oclass->set_property = hyscan_profile_set_property;
-  oclass->constructed = hyscan_profile_object_constructed;
   oclass->finalize = hyscan_profile_object_finalize;
 
   g_object_class_install_property (oclass, PROP_FILE,
@@ -100,15 +99,6 @@ hyscan_profile_set_property (GObject      *object,
 }
 
 static void
-hyscan_profile_object_constructed (GObject *object)
-{
-  HyScanProfile *self = HYSCAN_PROFILE (object);
-  HyScanProfilePrivate *priv = self->priv;
-
-  hyscan_profile_read (self, priv->file);
-}
-
-static void
 hyscan_profile_object_finalize (GObject *object)
 {
   HyScanProfile *self = HYSCAN_PROFILE (object);
@@ -116,20 +106,46 @@ hyscan_profile_object_finalize (GObject *object)
 
   g_clear_pointer (&priv->file, g_free);
   g_clear_pointer (&priv->name, g_free);
+  g_clear_pointer (&priv->kf, g_key_file_unref);
 
   G_OBJECT_CLASS (hyscan_profile_parent_class)->finalize (object);
 }
 
 static gboolean
-hyscan_profile_read (HyScanProfile *profile,
-                     const gchar   *file)
+hyscan_profile_read_real (HyScanProfile *profile,
+                          const gchar   *file)
 {
-  HyScanProfileClass * klass = HYSCAN_PROFILE_GET_CLASS (profile);
+  HyScanProfileClass *klass = HYSCAN_PROFILE_GET_CLASS (profile);
+  HyScanProfilePrivate *priv = profile->priv;
+  GError *error = NULL;
+  gboolean status;
+
+  priv->kf = g_key_file_new ();
+  status = g_key_file_load_from_file (priv->kf, file, G_KEY_FILE_NONE, &error);
+
+  if (!status && error->code != G_FILE_ERROR_NOENT)
+    {
+      g_warning ("HyScanProfile: can't load file <%s>", file);
+      g_error_free (error);
+      return FALSE;
+    }
 
   if (klass->read == NULL)
     return FALSE;
 
-  return klass->read (profile, file);
+  return klass->read (profile, priv->kf);
+}
+
+gboolean
+hyscan_profile_read (HyScanProfile *self)
+{
+  g_return_val_if_fail (HYSCAN_IS_PROFILE (self), FALSE);
+
+  /* Текущая реализация запрещает читать дважды. */
+  if (self->priv->kf != NULL)
+    return FALSE;
+
+  return hyscan_profile_read_real (self, self->priv->file);
 }
 
 void

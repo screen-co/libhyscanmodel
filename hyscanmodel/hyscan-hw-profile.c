@@ -22,11 +22,10 @@ static void     hyscan_hw_profile_object_finalize         (GObject              
 static void     hyscan_hw_profile_item_free               (gpointer               data);
 static void     hyscan_hw_profile_clear                   (HyScanHWProfile       *profile);
 static gboolean hyscan_hw_profile_read                    (HyScanProfile         *profile,
-                                                           const gchar           *file);
+                                                           GKeyFile              *file);
 static gboolean hyscan_hw_profile_info_group              (HyScanProfile         *profile,
                                                            GKeyFile              *kf,
                                                            const gchar           *group);
-
 
 G_DEFINE_TYPE_WITH_PRIVATE (HyScanHWProfile, hyscan_hw_profile, HYSCAN_TYPE_PROFILE);
 
@@ -81,40 +80,28 @@ hyscan_hw_profile_clear (HyScanHWProfile *profile)
 
 static gboolean
 hyscan_hw_profile_read (HyScanProfile *profile,
-                        const gchar   *file)
+                        GKeyFile      *file)
 {
   HyScanHWProfile *self = HYSCAN_HW_PROFILE (profile);
   HyScanHWProfilePrivate *priv = self->priv;
   gchar **groups, **iter;
-  GKeyFile *kf;
-  GError *error = NULL;
-  gboolean status;
 
   /* Очищаем, если что-то было. */
   hyscan_hw_profile_clear (self);
 
-  kf = g_key_file_new ();
-  status = g_key_file_load_from_file (kf, file, G_KEY_FILE_NONE, &error);
-
-  if (!status && error->code != G_FILE_ERROR_NOENT)
-    {
-      g_warning ("HyScanHWProfile: can't load file <%s>", file);
-      goto exit;
-    }
-
-  groups = g_key_file_get_groups (kf, NULL);
+  groups = g_key_file_get_groups (file, NULL);
   for (iter = groups; iter != NULL && *iter != NULL; ++iter)
     {
       HyScanHWProfileDevice * device;
       HyScanHWProfileItem *item;
 
-      if (hyscan_hw_profile_info_group (profile, kf, *iter))
+      if (hyscan_hw_profile_info_group (profile, file, *iter))
         continue;
 
-      device = hyscan_hw_profile_device_new (kf);
+      device = hyscan_hw_profile_device_new (file);
       hyscan_hw_profile_device_set_group (device, *iter);
       hyscan_hw_profile_device_set_paths (device, priv->drivers);
-      hyscan_hw_profile_device_read (device, kf);
+      hyscan_hw_profile_device_read (device, file);
 
       item = g_new0 (HyScanHWProfileItem, 1);
       item->group = g_strdup (*iter);
@@ -125,14 +112,8 @@ hyscan_hw_profile_read (HyScanProfile *profile,
 
   g_strfreev (groups);
 
-exit:
-  g_key_file_unref (kf);
-  if (error != NULL)
-    g_error_free (error);
-
-  return status;
+  return TRUE;
 }
-
 
 static gboolean
 hyscan_hw_profile_info_group (HyScanProfile *profile,

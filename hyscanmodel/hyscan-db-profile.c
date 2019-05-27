@@ -36,10 +36,10 @@ static void   hyscan_db_profile_get_property    (GObject                      *o
                                                  guint                         prop_id,
                                                  GValue                       *value,
                                                  GParamSpec                   *pspec);
-static void   hyscan_db_profile_object_finalize     (GObject                      *object);
+static void   hyscan_db_profile_object_finalize (GObject                      *object);
 static void   hyscan_db_profile_clear           (HyScanDBProfile              *profile);
 static gboolean hyscan_db_profile_read          (HyScanProfile                *profile,
-                                                 const gchar                  *name);
+                                                 GKeyFile                     *file);
 
 G_DEFINE_TYPE_WITH_CODE (HyScanDBProfile, hyscan_db_profile, HYSCAN_TYPE_PROFILE,
                          G_ADD_PRIVATE (HyScanDBProfile));
@@ -151,44 +151,25 @@ hyscan_db_profile_new (const gchar *file)
 /* Десериализация из INI-файла. */
 static gboolean
 hyscan_db_profile_read (HyScanProfile *profile,
-                        const gchar   *file)
+                        GKeyFile      *file)
 {
   HyScanDBProfile *self = HYSCAN_DB_PROFILE (profile);
   HyScanDBProfilePrivate *priv = self->priv;
-  GKeyFile *kf;
-  GError *error = NULL;
-  gboolean status = FALSE;
-
-  kf = g_key_file_new ();
-  if (!g_key_file_load_from_file (kf, file, G_KEY_FILE_NONE, &error))
-    {
-      /* Если произошла ошибка при загрузке параметров не связанная с существованием файла,
-         сигнализируем о ней. */
-      if (error->code != G_FILE_ERROR_NOENT)
-        {
-          g_warning ("HyScanOffsetProfile: can't load file <%s>", file);
-          goto exit;
-        }
-    }
 
   /* Очистка профиля. */
   hyscan_db_profile_clear (self);
 
-  priv->name = g_key_file_get_string (kf, HYSCAN_DB_PROFILE_GROUP_NAME, HYSCAN_DB_PROFILE_NAME_KEY, NULL);
-  priv->uri = g_key_file_get_string (kf, HYSCAN_DB_PROFILE_GROUP_NAME, HYSCAN_DB_PROFILE_URI_KEY, NULL);
+  priv->name = g_key_file_get_string (file, HYSCAN_DB_PROFILE_GROUP_NAME, HYSCAN_DB_PROFILE_NAME_KEY, NULL);
+  priv->uri = g_key_file_get_string (file, HYSCAN_DB_PROFILE_GROUP_NAME, HYSCAN_DB_PROFILE_URI_KEY, NULL);
   if (priv->uri == NULL)
     {
       g_warning ("HyScanDBProfile: %s", "uri not found.");
-      goto exit;
+      return FALSE;
     }
 
   hyscan_profile_set_name (profile, priv->name != NULL ? priv->name : priv->uri);
 
-  status = TRUE;
-
-exit:
-  g_key_file_unref (kf);
-  return status;
+  return TRUE;
 }
 
 /* Получает имя системы хранения. */

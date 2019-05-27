@@ -3,6 +3,7 @@
 
 #include <hyscan-api.h>
 #include <hyscan-types.h>
+#include <hyscan-control.h>
 #include "hyscan-profile.h"
 
 G_BEGIN_DECLS
@@ -41,6 +42,10 @@ GHashTable *           hyscan_offset_profile_get_sonars       (HyScanOffsetProfi
 
 HYSCAN_API
 GHashTable *           hyscan_offset_profile_get_sensors      (HyScanOffsetProfile *profile);
+
+HYSCAN_API
+gboolean               hyscan_offset_profile_apply            (HyScanOffsetProfile *profile,
+                                                               HyScanControl       *control);
 
 G_END_DECLS
 

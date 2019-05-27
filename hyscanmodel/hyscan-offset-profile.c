@@ -30,7 +30,7 @@ struct _HyScanOffsetProfilePrivate
 static void     hyscan_offset_profile_object_finalize  (GObject             *object);
 static void     hyscan_offset_profile_clear            (HyScanOffsetProfile *profile);
 static gboolean hyscan_offset_profile_read             (HyScanProfile       *profile,
-                                                        const gchar         *name);
+                                                        GKeyFile            *file);
 static gboolean hyscan_offset_profile_info_group       (HyScanOffsetProfile *profile,
                                                         GKeyFile            *kf,
                                                         const gchar         *group);
@@ -91,32 +91,16 @@ hyscan_offset_profile_new (const gchar *file)
 /* Десериализация из INI-файла. */
 static gboolean
 hyscan_offset_profile_read (HyScanProfile *profile,
-                            const gchar   *file)
+                            GKeyFile      *file)
 {
   HyScanOffsetProfile *self = HYSCAN_OFFSET_PROFILE (profile);
   HyScanOffsetProfilePrivate *priv = self->priv;
   gchar **groups, **iter;
-  GKeyFile *kf;
-  GError *error = NULL;
-  gboolean status = FALSE;
-
-  priv = self->priv;
 
   /* Очищаем, если что-то было. */
   hyscan_offset_profile_clear (self);
 
-  kf = g_key_file_new ();
-  status = g_key_file_load_from_file (kf, file, G_KEY_FILE_NONE, &error);
-
-  /* Если произошла ошибка при загрузке параметров не связанная с
-     существованием файла, сигнализируем о ней. */
-  if (!status && error->code != G_FILE_ERROR_NOENT)
-    {
-      g_warning ("HyScanOffsetProfile: can't load file <%s>", file);
-      goto exit;
-    }
-
-  groups = g_key_file_get_groups (kf, NULL);
+  groups = g_key_file_get_groups (file, NULL);
   for (iter = groups; iter != NULL && *iter != NULL; ++iter)
     {
       HyScanAntennaOffset offset;
@@ -125,15 +109,15 @@ hyscan_offset_profile_read (HyScanProfile *profile,
       guint channel;
 
       /* Возможно, это группа с информацией. */
-      if (hyscan_offset_profile_info_group (self, kf, *iter))
+      if (hyscan_offset_profile_info_group (self, file, *iter))
         continue;
 
-      offset.x = g_key_file_get_double (kf, *iter, HYSCAN_OFFSET_PROFILE_X, NULL);
-      offset.y = g_key_file_get_double (kf, *iter, HYSCAN_OFFSET_PROFILE_Y, NULL);
-      offset.z = g_key_file_get_double (kf, *iter, HYSCAN_OFFSET_PROFILE_Z, NULL);
-      offset.psi = g_key_file_get_double (kf, *iter, HYSCAN_OFFSET_PROFILE_PSI, NULL);
-      offset.gamma = g_key_file_get_double (kf, *iter, HYSCAN_OFFSET_PROFILE_GAMMA, NULL);
-      offset.theta = g_key_file_get_double (kf, *iter, HYSCAN_OFFSET_PROFILE_THETA, NULL);
+      offset.x = g_key_file_get_double (file, *iter, HYSCAN_OFFSET_PROFILE_X, NULL);
+      offset.y = g_key_file_get_double (file, *iter, HYSCAN_OFFSET_PROFILE_Y, NULL);
+      offset.z = g_key_file_get_double (file, *iter, HYSCAN_OFFSET_PROFILE_Z, NULL);
+      offset.psi = g_key_file_get_double (file, *iter, HYSCAN_OFFSET_PROFILE_PSI, NULL);
+      offset.gamma = g_key_file_get_double (file, *iter, HYSCAN_OFFSET_PROFILE_GAMMA, NULL);
+      offset.theta = g_key_file_get_double (file, *iter, HYSCAN_OFFSET_PROFILE_THETA, NULL);
 
       /* Если название группы совпадает с названием того или иного
        * HyScanSourceType, то это локатор. Иначе -- датчик. */
@@ -145,12 +129,7 @@ hyscan_offset_profile_read (HyScanProfile *profile,
 
   g_strfreev (groups);
 
-exit:
-  g_key_file_unref (kf);
-  if (error != NULL)
-    g_error_free (error);
-
-  return status;
+  return TRUE;
 }
 
 static gboolean
@@ -184,4 +163,33 @@ hyscan_offset_profile_get_sensors (HyScanOffsetProfile *profile)
   g_return_val_if_fail (HYSCAN_IS_OFFSET_PROFILE (profile), NULL);
 
   return g_hash_table_ref (profile->priv->sensors);
+}
+
+gboolean
+hyscan_offset_profile_apply (HyScanOffsetProfile *profile,
+                             HyScanControl       *control)
+{
+  gpointer k;
+  HyScanAntennaOffset *v;
+  GHashTableIter iter;
+  HyScanOffsetProfilePrivate *priv;
+
+  g_return_val_if_fail (HYSCAN_IS_OFFSET_PROFILE (profile), FALSE);
+  priv = profile->priv;
+
+  g_hash_table_iter_init (&iter, priv->sonars);
+  while (g_hash_table_iter_next (&iter, &k, (gpointer*)&v))
+    {
+      if (!hyscan_sonar_antenna_set_offset (HYSCAN_SONAR (control), (HyScanSourceType)k, v))
+        return FALSE;
+    }
+
+  g_hash_table_iter_init (&iter, priv->sensors);
+  while (g_hash_table_iter_next (&iter, &k, (gpointer*)&v))
+    {
+      if (!hyscan_sensor_antenna_set_offset (HYSCAN_SENSOR (control), (const gchar*)k, v))
+        return FALSE;
+    }
+
+  return TRUE;
 }

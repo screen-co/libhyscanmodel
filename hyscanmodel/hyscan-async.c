@@ -2,8 +2,8 @@
  * \file hyscan-async.c
  *
  * \brief Исходный файл класса HyScanAsync, выполняющего список запросов в отдельном потоке.
- * \author Vladimir Maximov (vmakxs@gmail.com)
- * \date 2017
+ * \author Alexander Dmitriev (m1n7@yandex.ru)
+ * \date 2019
  * \license Проприетарная лицензия ООО "Экран"
  *
  */
@@ -11,16 +11,8 @@
 #include <memory.h>
 #include "hyscan-async.h"
 
-#define HYSCAN_ASYNC_IDLE                       (0)
-#define HYSCAN_ASYNC_BUSY                       (1)
-
-#define HYSCAN_ASYNC_CONTINUE                   (0)
-#define HYSCAN_ASYNC_SHUTDOWN                   (1)
-
-#define HYSCAN_ASYNC_THREAD_NAME                "hyscan-async-thread"
-
-#define HYSCAN_ASYNC_COND_WAIT_TIMEOUT          (100 * G_TIME_SPAN_MILLISECOND)
-#define HYSCAN_ASYNC_RESULT_CHECK_TIMEOUT_MS    (100)
+#define HYSCAN_ASYNC_COND_TIMEOUT (100 * G_TIME_SPAN_MILLISECOND)
+#define HYSCAN_ASYNC_RESULT_CHECK_TIMEOUT_MS (100)
 
 /* Запрос - это команда плюс объект плюс данные. */
 typedef struct
@@ -28,12 +20,13 @@ typedef struct
   HyScanAsyncCommand command; /* Команда. */
   gpointer           object;  /* Объект. */
   gpointer           data;    /* Данные. */
+  GQuark             detail;  /* Detail для эмиссии сигнала. */
+  gpointer           result;  /* Результат выполнения. */
 } HyScanQuery;
 
 enum
 {
-  SIGNAL_STARTED,
-  SIGNAL_COMPLETED,
+  SIGNAL_READY,
   SIGNAL_LAST
 };
 
@@ -42,28 +35,20 @@ guint hyscan_async_signals[SIGNAL_LAST] = { 0 };
 
 struct _HyScanAsyncPrivate
 {
-  GList     *queries;             /* Очередь запросов. */
+  GList     *waiting;             /* Очередь запросов. */
+  GList     *ready;               /* Выполненные запросы. */
 
   GThread   *sender;              /* Поток выполнения запросов. */
+  gint       shutdown;            /* Флаг останова потока выполнения запросов. */
   GMutex     mutex;               /* Мьютекс, для установки запроса на выполнение. */
   GCond      cond;                /* Условие приостановки потока выполнения запросов. */
 
-  gint       busy;                /* Флаг, запрещающий выполнение новых запросов, пока не закончится выполнение текущих. */
-  gint       shutdown;            /* Флаг останова потока выполнения запросов. */
-
-  guint      timer_source_id;     /* Идентификатор таймера. */
-  gboolean   queries_ready;       /* Флаг готовности запросов к выполнению. */
-  gboolean   queries_completed;   /* Флаг завершения выполнения запросов. */
-  gboolean   queries_result;      /* Результат выполнения запроса (TRUE - успех, FALSE - ошибка). */
+  guint      result_tag;     /* Идентификатор таймера. */
 };
 
 static void     hyscan_async_object_constructed (GObject        *object);
 static void     hyscan_async_object_finalize    (GObject        *object);
 
-static gboolean hyscan_async_is_busy            (HyScanAsync    *async);
-static gboolean hyscan_async_is_idle            (HyScanAsync    *async);
-static void     hyscan_async_set_busy           (HyScanAsync    *async);
-static void     hyscan_async_set_idle           (HyScanAsync    *async);
 static void     hyscan_async_shutdown           (HyScanAsync    *async);
 static gpointer hyscan_async_thread_func        (gpointer        object);
 static gboolean hyscan_async_result_func        (gpointer        object);
@@ -80,17 +65,13 @@ hyscan_async_class_init (HyScanAsyncClass *klass)
   obj_class->constructed = hyscan_async_object_constructed;
   obj_class->finalize = hyscan_async_object_finalize;
 
-  hyscan_async_signals[SIGNAL_STARTED] =
-      g_signal_new ("started", HYSCAN_TYPE_ASYNC,
-                    G_SIGNAL_RUN_LAST, 0, NULL, NULL,
-                    g_cclosure_marshal_VOID__VOID,
-                    G_TYPE_NONE, 0);
-
-  hyscan_async_signals[SIGNAL_COMPLETED] =
-      g_signal_new ("completed", HYSCAN_TYPE_ASYNC,
-                    G_SIGNAL_RUN_LAST, 0, NULL, NULL,
-                    g_cclosure_marshal_VOID__BOOLEAN,
-                    G_TYPE_NONE, 1, G_TYPE_BOOLEAN);
+  hyscan_async_signals[SIGNAL_READY] =
+      g_signal_new ("ready", HYSCAN_TYPE_ASYNC,
+                    G_SIGNAL_RUN_LAST | G_SIGNAL_DETAILED,
+                    0, NULL, NULL,
+                    g_cclosure_marshal_VOID__POINTER,
+                    G_TYPE_NONE,
+                    1, G_TYPE_POINTER);
 }
 
 static void
@@ -101,11 +82,6 @@ hyscan_async_init (HyScanAsync *async)
   priv->sender = NULL;
   g_mutex_init (&priv->mutex);
   g_cond_init (&priv->cond);
-
-  priv->busy = HYSCAN_ASYNC_IDLE;
-  priv->queries_ready = FALSE;
-  priv->queries_completed = FALSE;
-  priv->queries = NULL;
 
   async->priv = priv;
 }
@@ -119,8 +95,11 @@ hyscan_async_object_constructed (GObject *object)
   G_OBJECT_CLASS (hyscan_async_parent_class)->constructed (object);
 
   /* Поток, в котором выполняются запросы. */
-  priv->shutdown = HYSCAN_ASYNC_CONTINUE;
-  priv->sender = g_thread_new (HYSCAN_ASYNC_THREAD_NAME, hyscan_async_thread_func, async);
+  priv->shutdown = FALSE;
+  priv->sender = g_thread_new ("hyscan-async", hyscan_async_thread_func, async);
+
+  priv->result_tag = g_timeout_add (HYSCAN_ASYNC_RESULT_CHECK_TIMEOUT_MS,
+                                    hyscan_async_result_func, async);
 }
 
 static void
@@ -131,50 +110,13 @@ hyscan_async_object_finalize (GObject *object)
 
   hyscan_async_shutdown (async);
 
-  if (priv->timer_source_id)
-    g_source_remove (priv->timer_source_id);
-  
+  if (priv->result_tag)
+    g_source_remove (priv->result_tag);
+
   g_mutex_clear (&priv->mutex);
   g_cond_clear (&priv->cond);
 
   G_OBJECT_CLASS (hyscan_async_parent_class)->finalize (object);
-}
-
-/* Проверяет, что запросы выполняются, т.е. поток ЗАНЯТ выполнением запросов. */
-static gboolean
-hyscan_async_is_busy (HyScanAsync *async)
-{
-  return async->priv->busy == HYSCAN_ASYNC_BUSY;
-}
-
-/* Проверяет, что запросы не выполняются, т.е. поток ОЖИДАЕТ выполнения запросов. */
-static gboolean
-hyscan_async_is_idle (HyScanAsync *async)
-{
-  return async->priv->busy == HYSCAN_ASYNC_IDLE;
-}
-
-/* Перевод в режим выполнения запроса. */
-static void
-hyscan_async_set_busy (HyScanAsync *async)
-{
-  if (hyscan_async_is_idle (async))
-    {
-      async->priv->busy = HYSCAN_ASYNC_BUSY;
-      g_signal_emit (async, hyscan_async_signals[SIGNAL_STARTED], 0);
-    }
-}
-
-/* Перевод в режим ожидания запроса. */
-static void
-hyscan_async_set_idle (HyScanAsync *async)
-{
-  if (hyscan_async_is_busy (async))
-    {
-      async->priv->busy = HYSCAN_ASYNC_IDLE;
-      g_signal_emit (async, hyscan_async_signals[SIGNAL_COMPLETED], 0,
-                     async->priv->queries_result);
-    }
 }
 
 /* Завершает поток отправки и выключает таймер опроса статуса. */
@@ -183,7 +125,7 @@ hyscan_async_shutdown (HyScanAsync *async)
 {
   HyScanAsyncPrivate *priv = async->priv;
 
-  g_atomic_int_set (&priv->shutdown, HYSCAN_ASYNC_SHUTDOWN);
+  g_atomic_int_set (&priv->shutdown, TRUE);
   g_cond_signal (&priv->cond);
   g_thread_join (priv->sender);
 }
@@ -192,41 +134,40 @@ hyscan_async_shutdown (HyScanAsync *async)
 static gpointer
 hyscan_async_thread_func (gpointer object)
 {
-  HyScanAsync *async;
-  HyScanAsyncPrivate *priv;
+  HyScanAsync *async = HYSCAN_ASYNC (object);
+  HyScanAsyncPrivate *priv = async->priv;
+  GList *waiting, *link;
 
-  async = HYSCAN_ASYNC (object);
-  priv = async->priv;
-
-  while (g_atomic_int_get (&priv->shutdown) == HYSCAN_ASYNC_CONTINUE)
+  while (!g_atomic_int_get (&priv->shutdown))
     {
       g_mutex_lock (&priv->mutex);
 
-      if (priv->queries_completed || !priv->queries_ready)
+      if (priv->waiting == NULL)
         {
-          gint64 end_time = g_get_monotonic_time () + HYSCAN_ASYNC_COND_WAIT_TIMEOUT;
+          gint64 end_time = g_get_monotonic_time () + HYSCAN_ASYNC_COND_TIMEOUT;
           g_cond_wait_until (&priv->cond, &priv->mutex, end_time);
         }
-      else
-        {
-          /* Список запросов. */
-          GList *query_item = priv->queries;
-          /* Результат выполнения списка запросов. */
-          gboolean queries_result = TRUE;
 
-          /* В цикле выполняются запросы до завершения списка или до первой ошибки. */
-          for (query_item = priv->queries; query_item != NULL && queries_result; query_item = g_list_next (query_item))
-            {
-              HyScanQuery *query = (HyScanQuery *) query_item->data;
-              if (query != NULL && query->command != NULL)
-                queries_result = (*query->command) (query->object, query->data);
-            }
-
-          priv->queries_completed = TRUE;
-          priv->queries_result = queries_result;
-        }
-
+      /* Забираем список запросов. */
+      waiting = priv->waiting;
+      priv->waiting = NULL;
       g_mutex_unlock (&priv->mutex);
+
+      /* Выполняю запросы. */
+      while (waiting != NULL)
+        {
+          HyScanQuery *query = (HyScanQuery *) waiting->data;
+
+          query->result = (*query->command) (query->object, query->data);
+
+          /* Переносим запрос в список выполненных. */
+          link = waiting;
+          waiting = g_list_remove_link (waiting, link);
+
+          g_mutex_lock (&priv->mutex);
+          priv->ready = g_list_concat (priv->ready, link);
+          g_mutex_unlock (&priv->mutex);
+        }
     }
 
   return NULL;
@@ -238,27 +179,26 @@ hyscan_async_result_func (gpointer object)
 {
   HyScanAsync *async = HYSCAN_ASYNC (object);
   HyScanAsyncPrivate *priv = async->priv;
+  GList *ready, *link;
 
-  if (g_mutex_trylock (&priv->mutex))
+  if (!g_mutex_trylock (&priv->mutex))
+    return G_SOURCE_CONTINUE;
+
+  /* Забираем список выполненных запросов. */
+  ready = priv->ready;
+  priv->ready = NULL;
+  g_mutex_unlock (&priv->mutex);
+
+  /* Выполняю запросы. */
+  for (link = ready; link != NULL; link = link->next)
     {
-      if (priv->queries_completed)
-        {
-          g_list_free_full (priv->queries, (GDestroyNotify) hyscan_async_query_free);
-          priv->queries = NULL;
-          priv->queries_ready = FALSE;
-          priv->queries_completed = FALSE;
+      HyScanQuery *query = (HyScanQuery *) ready->data;
 
-          g_mutex_unlock (&priv->mutex);
-
-          hyscan_async_set_idle (async);
-
-          priv->timer_source_id = 0;
-
-          return G_SOURCE_REMOVE;
-        }
-
-        g_mutex_unlock (&priv->mutex);
+      g_signal_emit (async, hyscan_async_signals[SIGNAL_READY],
+                     query->detail, query->result, NULL);
     }
+
+  g_list_free_full (ready, (GDestroyNotify) hyscan_async_query_free);
 
   return G_SOURCE_CONTINUE;
 }
@@ -267,11 +207,11 @@ hyscan_async_result_func (gpointer object)
 static void
 hyscan_async_query_free (HyScanQuery *query)
 {
-  if (query != NULL)
-    {
-      g_free (query->data);
-      g_free (query);
-    }
+  if (query == NULL)
+    return;
+
+  g_free (query->data);
+  g_free (query);
 }
 
 /* Создаёт объект HyScanAsync. */
@@ -283,59 +223,37 @@ hyscan_async_new (void)
 
 /* Добавляет запрос в список. */
 gboolean
-hyscan_async_append_query (HyScanAsync        *async,
-                           HyScanAsyncCommand  command,
-                           gpointer            object,
-                           gconstpointer       data,
-                           gsize               data_size)
+hyscan_async_append (HyScanAsync        *async,
+                     const gchar        *detail,
+                     HyScanAsyncCommand  command,
+                     gpointer            object,
+                     gconstpointer       data,
+                     gsize               data_size)
 {
+  HyScanAsyncPrivate *priv;
   HyScanQuery *query;
 
   g_return_val_if_fail (HYSCAN_IS_ASYNC (async), FALSE);
+  priv = async->priv;
 
-  if (hyscan_async_is_busy (async) || (command == NULL))
+  if (command == NULL)
     return FALSE;
 
   query = g_new0 (HyScanQuery, 1);
   query->command = command;
   query->object = object;
 
-  if (data != NULL && data_size)
-    {
-      query->data = g_malloc0 (data_size);
-      memcpy (query->data, data, data_size);
-    }
+  if (detail != NULL)
+    query->detail = g_quark_from_static_string (detail);
 
-  async->priv->queries = g_list_append (async->priv->queries, (gpointer) query);
+  if (data != NULL && data_size != 0)
+    query->data = g_memdup (data, data_size);
 
-  return TRUE;
-}
-
-/* Запускает выполнение списка запросов в отдельном потоке. */
-gboolean
-hyscan_async_execute (HyScanAsync *async)
-{
-  HyScanAsyncPrivate *priv;
-  g_return_val_if_fail (HYSCAN_IS_ASYNC (async), FALSE);
-
-  priv = async->priv;
-
-  if (hyscan_async_is_busy (async) || (priv->queries == NULL))
-    return FALSE;
-
-  hyscan_async_set_busy (async);
-
+  /* Добавляем. */
   g_mutex_lock (&priv->mutex);
-
-  priv->queries_ready = TRUE;
-  priv->queries_completed = FALSE;
-
+  async->priv->waiting = g_list_append (async->priv->waiting, (gpointer) query);
   g_cond_signal (&priv->cond);
   g_mutex_unlock (&priv->mutex);
-
-  /* Проверка результата выполнения запросов по таймауту. */
-  priv->timer_source_id = g_timeout_add (HYSCAN_ASYNC_RESULT_CHECK_TIMEOUT_MS,
-                                         hyscan_async_result_func, async);
 
   return TRUE;
 }

@@ -63,13 +63,16 @@ struct _HyScanProfileClass
   GObjectClass   parent_class;
 
   gboolean     (*read)      (HyScanProfile *self,
-                             const gchar   *file);
+                             GKeyFile      *file);
 
   void         (*use)       (HyScanProfile *self);
 };
 
 HYSCAN_API
 GType                  hyscan_profile_get_type         (void);
+
+HYSCAN_API
+gboolean               hyscan_profile_read             (HyScanProfile *profile);
 
 HYSCAN_API
 void                   hyscan_profile_set_name         (HyScanProfile *profile,

@@ -2,8 +2,8 @@
  * \file hyscan-async.h
  *
  * \brief Заголовочный файл класса HyScanAsync, выполняющего список запросов в отдельном потоке.
- * \author Vladimir Maximov (vmakxs@gmail.com)
- * \date 2017
+ * \author Alexander Dmitriev (m1n7@yandex.ru)
+ * \date 2019
  * \license Проприетарная лицензия ООО "Экран"
  *
  * \defgroup HyScanAsync HyScanAsync - выполнение списка запросов в отдельном потоке.
@@ -42,7 +42,7 @@
 #include <hyscan-api.h>
 
 /** Асинхронная команда. */
-typedef gboolean (*HyScanAsyncCommand) (gpointer object, gpointer data);
+typedef gpointer (*HyScanAsyncCommand) (gpointer object, gpointer data);
 
 G_BEGIN_DECLS
 
@@ -78,7 +78,7 @@ GType        hyscan_async_get_type      (void);
  * \return указатель на класс \link HyScanAsync \endlink.
  */
 HYSCAN_API
-HyScanAsync *hyscan_async_new           (void);
+HyScanAsync *  hyscan_async_new           (void);
 
 /**
  * Добавляет запрос в список.
@@ -96,22 +96,23 @@ HyScanAsync *hyscan_async_new           (void);
  * \return TRUE, если удалось добавить запрос, либо FALSE, если произошла ошибка.
  */
 HYSCAN_API
-gboolean     hyscan_async_append_query  (HyScanAsync        *async,
-                                         HyScanAsyncCommand  command,
-                                         gpointer            object,
-                                         gconstpointer       data,
-                                         gsize               data_size);
+gboolean     hyscan_async_append  (HyScanAsync        *async,
+                                   const gchar        *detail,
+                                   HyScanAsyncCommand  command,
+                                   gpointer            object,
+                                   gconstpointer       data,
+                                   gsize               data_size);
 
-/**
- * Запускает выполнение списка запросов в отдельном потоке.
- *
- * \param async указатель на класс \link HyScanAsync \endlink.
- *
- * \return TRUE, если удалось запустить выполнение запросов, либо FALSE,
- * если список запросов пуст, запросы ещё выполняются, или в случае ошибки.
- */
-HYSCAN_API
-gboolean     hyscan_async_execute       (HyScanAsync    *async);
+// *
+ // * Запускает выполнение списка запросов в отдельном потоке.
+ // *
+ // * \param async указатель на класс \link HyScanAsync \endlink.
+ // *
+ // * \return TRUE, если удалось запустить выполнение запросов, либо FALSE,
+ // * если список запросов пуст, запросы ещё выполняются, или в случае ошибки.
+ // 
+// HYSCAN_API
+// gboolean     hyscan_async_execute       (HyScanAsync    *async);
 
 G_END_DECLS
 
