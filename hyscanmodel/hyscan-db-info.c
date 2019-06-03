@@ -802,7 +802,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
 
           info->id = hyscan_param_list_dup_string (list, "/id");
           info->ctime = g_date_time_new_from_unix_utc (ctime);
-          info->type = hyscan_track_get_type_by_name (track_type);
+          info->type = hyscan_track_get_type_by_id (track_type);
           info->operator_name = hyscan_param_list_dup_string (list, "/operator");
           info->sonar_info = hyscan_data_schema_new_from_string (sonar_info, "info");
         }
@@ -852,7 +852,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
       gboolean active;
 
       /* Проверяем типы данных. */
-      if (!hyscan_channel_get_types_by_name (channels[i], &source, &type, &channel))
+      if (!hyscan_channel_get_types_by_id (channels[i], &source, &type, &channel))
         continue;
 
       /* Учитываем только первые каналы с данными. */
