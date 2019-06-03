@@ -240,7 +240,7 @@ tracks_changed (HyScanDBInfo *info)
       for (j = 0; j < i; j++)
         {
           if (!track_info->sources[sources[j]])
-            g_error ("%s: %s source error", track_info->name, hyscan_channel_get_name_by_types (sources[j], FALSE, 1));
+            g_error ("%s: %s source error", track_info->name, hyscan_channel_get_id_by_types (sources[j], FALSE, 1));
         }
     }
 
