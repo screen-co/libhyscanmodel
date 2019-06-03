@@ -34,8 +34,6 @@ static gboolean hyscan_offset_profile_read             (HyScanProfile       *pro
 static gboolean hyscan_offset_profile_info_group       (HyScanOffsetProfile *profile,
                                                         GKeyFile            *kf,
                                                         const gchar         *group);
-// static gboolean hyscan_offset_profile_write         (HyScanOffsetProfile              *profile,
-                                                 // const gchar                  *name);
 
 G_DEFINE_TYPE_WITH_PRIVATE (HyScanOffsetProfile, hyscan_offset_profile, HYSCAN_TYPE_PROFILE);
 
@@ -121,7 +119,7 @@ hyscan_offset_profile_read (HyScanProfile *profile,
 
       /* Если название группы совпадает с названием того или иного
        * HyScanSourceType, то это локатор. Иначе -- датчик. */
-      if (hyscan_channel_get_types_by_name (*iter, &source, &type, &channel))
+      if (hyscan_channel_get_types_by_id (*iter, &source, &type, &channel))
         g_hash_table_insert (priv->sonars, GINT_TO_POINTER (source), hyscan_antenna_offset_copy (&offset));
       else
         g_hash_table_insert (priv->sensors, g_strdup (*iter), hyscan_antenna_offset_copy (&offset));

@@ -319,17 +319,19 @@ hyscan_db_info_watcher (gpointer data)
 {
   HyScanDBInfoPrivate *priv = data;
   gboolean project_changed;
-  guint32 tracks_mod_counter;     /* Текущий счётчик изменений в галсах. */
-  guint32 projects_mod_counter;   /* Текущий счётчик изменений в проектах. */
-  guint32 mod_counter;
+  guint32 tracks_mc;         /* Текущий счётчик изменений в галсах. */
+  guint32 projects_mc;       /* Текущий счётчик изменений в проектах. */
+  guint32 tracks_mc_old;     /* Предыдущий счётчик изменений в галсах. */
+  guint32 projects_mc_old;   /* Предыдущий счётчик изменений в проектах. */
   gboolean check_projects, check_tracks;
   GHashTableIter iter;
   gpointer key, value;
   gint64 end_time;
 
-  /* Начальное значение счётчика изменений списка проектов. */
-  projects_mod_counter = hyscan_db_get_mod_count (priv->db, 0) - 1;
-  mod_counter = ~projects_mod_counter;
+  /* Начальные значения счётчиков изменений. Специально инициализирую
+   * невалидными значениями, чтобы поток не думал, что ничего не изменилось. */
+  projects_mc_old = ~hyscan_db_get_mod_count (priv->db, 0);
+  tracks_mc_old = projects_mc_old;
 
   while (!g_atomic_int_get (&priv->shutdown))
     {
@@ -339,15 +341,14 @@ hyscan_db_info_watcher (gpointer data)
       g_cond_wait_until (&priv->cond, &priv->lock, end_time);
 
       /* Возможно, было запрошено принудительное обновление. */
-      check_projects = priv->refresh;
-      check_tracks = priv->refresh;
+      check_projects = check_tracks = priv->refresh;
       priv->refresh = FALSE;
 
       g_mutex_unlock (&priv->lock);
 
       /* Проверяем изменение списка проектов при наличии изменений. */
-      mod_counter = hyscan_db_get_mod_count (priv->db, 0);
-      if (check_projects || (mod_counter != projects_mod_counter))
+      projects_mc = hyscan_db_get_mod_count (priv->db, 0);
+      if (check_projects || (projects_mc != projects_mc_old))
         {
           GHashTable *projects;
           gchar **project_list;
@@ -386,7 +387,7 @@ hyscan_db_info_watcher (gpointer data)
           priv->projects_update = TRUE;
           g_mutex_unlock (&priv->lock);
 
-          projects_mod_counter = mod_counter;
+          projects_mc_old = projects_mc;
           g_strfreev (project_list);
         }
 
@@ -403,13 +404,10 @@ hyscan_db_info_watcher (gpointer data)
       g_mutex_unlock (&priv->lock);
 
       /* Закрываем предыдущий проект. */
-      if (project_changed)
+      if (project_changed && priv->project_id > 0)
         {
-          if (priv->project_id > 0)
-            {
-              hyscan_db_close (priv->db, priv->project_id);
-              priv->project_id = -1;
-            }
+          hyscan_db_close (priv->db, priv->project_id);
+          priv->project_id = -1;
         }
 
       /* Если в данный момент проект не открыт. */
@@ -424,7 +422,7 @@ hyscan_db_info_watcher (gpointer data)
             continue;
 
           /* Если проект открылся, очищаем список галсов. */
-          tracks_mod_counter = ~hyscan_db_get_mod_count (priv->db, priv->project_id);
+          tracks_mc_old = ~hyscan_db_get_mod_count (priv->db, priv->project_id);
 
           g_mutex_lock (&priv->lock);
 
@@ -439,9 +437,10 @@ hyscan_db_info_watcher (gpointer data)
       while (g_hash_table_iter_next (&iter, &key, &value))
         {
           HyScanDBInfoMonitor *info = value;
+          guint32 mc;
 
-          mod_counter = hyscan_db_get_mod_count (priv->db, info->id);
-          if (mod_counter != info->mod_counter)
+          mc = hyscan_db_get_mod_count (priv->db, info->id);
+          if (mc != info->mod_counter)
             {
               check_tracks = TRUE;
               break;
@@ -449,8 +448,8 @@ hyscan_db_info_watcher (gpointer data)
         }
 
       /* Проверяем изменение списка галсов. */
-      mod_counter = hyscan_db_get_mod_count (priv->db, priv->project_id);
-      if (check_tracks || (mod_counter != tracks_mod_counter))
+      tracks_mc = hyscan_db_get_mod_count (priv->db, priv->project_id);
+      if (check_tracks || (tracks_mc != tracks_mc_old))
         {
           GHashTable *tracks;
           gchar **track_list;
@@ -498,7 +497,7 @@ hyscan_db_info_watcher (gpointer data)
           priv->tracks_update = TRUE;
           g_mutex_unlock (&priv->lock);
 
-          tracks_mod_counter = mod_counter;
+          tracks_mc_old = tracks_mc;
           g_strfreev (track_list);
         }
     }

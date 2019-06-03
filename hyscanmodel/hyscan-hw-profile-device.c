@@ -113,7 +113,6 @@ hyscan_hw_profile_device_read_params (GKeyFile         *kf,
         gdouble dbl_val;
         gchar *str_val;
         const gchar * enum_id;
-        GList * enum_vals;
         const HyScanDataSchemaEnumValue * found;
 
         case HYSCAN_DATA_SCHEMA_KEY_BOOLEAN:
