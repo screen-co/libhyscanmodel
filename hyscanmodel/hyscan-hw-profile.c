@@ -9,7 +9,6 @@ typedef struct
 {
   gchar                 *group;
   HyScanHWProfileDevice *device;
-  gboolean               check_status;
 } HyScanHWProfileItem;
 
 struct _HyScanHWProfilePrivate
@@ -189,7 +188,7 @@ hyscan_hw_profile_check (HyScanHWProfile *self)
   for (link = priv->devices; link != NULL; link = link->next)
     {
       HyScanHWProfileItem *item = link->data;
-      st &= item->check_status = hyscan_hw_profile_device_check (item->device);
+      st &= hyscan_hw_profile_device_check (item->device);
     }
 
   return st;
@@ -201,7 +200,6 @@ hyscan_hw_profile_connect (HyScanHWProfile *self)
   HyScanHWProfilePrivate *priv;
   HyScanControl * control;
   GList *link;
-  gboolean status;
 
   g_return_val_if_fail (HYSCAN_IS_HW_PROFILE (self), NULL);
   priv = self->priv;
@@ -216,17 +214,20 @@ hyscan_hw_profile_connect (HyScanHWProfile *self)
       HyScanHWProfileItem *item = link->data;
       HyScanDevice *device;
 
-      if (!item->check_status)
-        g_warning ("check was not performed or failed");
-
       device = hyscan_hw_profile_device_connect (item->device);
 
-      if (device != NULL)
+      if (device == NULL)
         {
-          status = hyscan_control_device_add (control, device);
+          g_warning ("couldn't connect to device");
+          g_clear_object (&control);
+          break;
+        }
 
-          if (!status)
-            g_warning ("couldn't add device");
+      if (!hyscan_control_device_add (control, device))
+        {
+          g_warning ("couldn't add device");
+          g_clear_object (&control);
+          break;
         }
     }
 
