@@ -1,11 +1,6 @@
 set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
      hyscan-db-info.c
      hyscan-async.c
-     hyscan-profile.c
-     hyscan-db-profile.c
-     hyscan-hw-profile-device.c
-     hyscan-hw-profile.c
-     hyscan-offset-profile.c
      # hyscan-appearance.c
      # hyscan-async.c
      # hyscan-connector.c
