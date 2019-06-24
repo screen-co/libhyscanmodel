@@ -17,11 +17,11 @@
 /* Запрос - это команда плюс объект плюс данные. */
 typedef struct
 {
-  HyScanAsyncCommand command; /* Команда. */
-  gpointer           object;  /* Объект. */
-  gpointer           data;    /* Данные. */
-  GQuark             detail;  /* Detail для эмиссии сигнала. */
-  gpointer           result;  /* Результат выполнения. */
+  HyScanAsyncCommand  command; /* Команда. */
+  gpointer            object;  /* Объект. */
+  gpointer           *data;    /* Данные. */
+  GQuark              detail;  /* Detail для эмиссии сигнала. */
+  gpointer            result;  /* Результат выполнения. */
 } HyScanQuery;
 
 enum
@@ -158,7 +158,8 @@ hyscan_async_thread_func (gpointer object)
         {
           HyScanQuery *query = (HyScanQuery *) waiting->data;
 
-          query->result = (*query->command) (query->object, query->data);
+          query->result = (*query->command) (query->object,
+                                             query->data != NULL ? *query->data : NULL);
 
           /* Переносим запрос в список выполненных. */
           link = waiting;
