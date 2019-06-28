@@ -71,7 +71,8 @@
 #include <hyscan-core-schemas.h>
 #include <string.h>
 
-#define HYSCAN_DB_INFO_TIMEOUT 1000
+#define HYSCAN_DB_INFO_TIMEOUT      1000    /* Задержка между сигналами об изменениях в базе данных, милисекунды. */
+#define HYSCAN_DB_INFO_COND_TIMEOUT 100000  /* Задержка между проверками базы данных, микросекунды. */
 
 enum
 {
@@ -337,7 +338,7 @@ hyscan_db_info_watcher (gpointer data)
     {
       /* Задержка между проверками базы данных, а также завершением работы. */
       g_mutex_lock (&priv->lock);
-      end_time = g_get_monotonic_time () + HYSCAN_DB_INFO_TIMEOUT;
+      end_time = g_get_monotonic_time () + HYSCAN_DB_INFO_COND_TIMEOUT;
       g_cond_wait_until (&priv->cond, &priv->lock, end_time);
 
       /* Возможно, было запрошено принудительное обновление. */
