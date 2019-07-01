@@ -813,6 +813,10 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
 
       hyscan_db_close (db, param_id);
     }
+  else
+    {
+      info->error = TRUE;
+    }
 
   /* Информация о галсе из проекта. */
   param_id = hyscan_db_project_param_open (db, project_id, PROJECT_INFO_GROUP);
