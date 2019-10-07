@@ -1,4 +1,4 @@
-/* hyscan-sonar-model.h
+/* hyscan-sensor-state.h
  *
  * Copyright 2019 Screen LLC, Alexander Dmitriev <m1n7@yandex.ru>
  *
@@ -31,45 +31,37 @@
  * Во-вторых, этот программный код можно использовать по коммерческой
  * лицензии. Для этого свяжитесь с ООО Экран - <info@screen-co.ru>.
  */
+#ifndef __HYSCAN_SENSOR_STATE_H__
+#define __HYSCAN_SENSOR_STATE_H__
 
-#ifndef __HYSCAN_SONAR_MODEL_H__
-#define __HYSCAN_SONAR_MODEL_H__
-
-#include <hyscan-control.h>
-#include "hyscan-sonar-state.h"
-#include "hyscan-sensor-state.h"
+#include <glib-object.h>
+#include <hyscan-api.h>
 
 G_BEGIN_DECLS
 
-#define HYSCAN_TYPE_SONAR_MODEL             (hyscan_sonar_model_get_type ())
-#define HYSCAN_SONAR_MODEL(obj)             (G_TYPE_CHECK_INSTANCE_CAST ((obj), HYSCAN_TYPE_SONAR_MODEL, HyScanSonarModel))
-#define HYSCAN_IS_SONAR_MODEL(obj)          (G_TYPE_CHECK_INSTANCE_TYPE ((obj), HYSCAN_TYPE_SONAR_MODEL))
-#define HYSCAN_SONAR_MODEL_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST ((klass), HYSCAN_TYPE_SONAR_MODEL, HyScanSonarModelClass))
-#define HYSCAN_IS_SONAR_MODEL_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE ((klass), HYSCAN_TYPE_SONAR_MODEL))
-#define HYSCAN_SONAR_MODEL_GET_CLASS(obj)   (G_TYPE_INSTANCE_GET_CLASS ((obj), HYSCAN_TYPE_SONAR_MODEL, HyScanSonarModelClass))
+#define HYSCAN_TYPE_SENSOR_STATE            (hyscan_sensor_state_get_type ())
+#define HYSCAN_SENSOR_STATE(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), HYSCAN_TYPE_SENSOR_STATE, HyScanSensorState))
+#define HYSCAN_IS_SENSOR_STATE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), HYSCAN_TYPE_SENSOR_STATE))
+#define HYSCAN_SENSOR_STATE_GET_IFACE(obj)  (G_TYPE_INSTANCE_GET_INTERFACE ((obj), HYSCAN_TYPE_SENSOR_STATE, HyScanSensorStateInterface))
 
-typedef struct _HyScanSonarModel HyScanSonarModel;
-typedef struct _HyScanSonarModelPrivate HyScanSonarModelPrivate;
-typedef struct _HyScanSonarModelClass HyScanSonarModelClass;
+typedef struct _HyScanSensorState HyScanSensorState;
+typedef struct _HyScanSensorStateInterface HyScanSensorStateInterface;
 
-struct _HyScanSonarModel
+struct _HyScanSensorStateInterface
 {
-  GObject parent_instance;
+  GTypeInterface       g_iface;
 
-  HyScanSonarModelPrivate *priv;
-};
-
-struct _HyScanSonarModelClass
-{
-  GObjectClass parent_class;
+  gboolean            (*get_enabled)                  (HyScanSensorState *state,
+                                                       const gchar       *name);
 };
 
 HYSCAN_API
-GType                     hyscan_sonar_model_get_type      (void);
+GType               hyscan_sensor_state_get_type      (void);
 
 HYSCAN_API
-HyScanSonarModel *        hyscan_sonar_model_new           (HyScanControl *control);
+gboolean            hyscan_sensor_state_get_enabled   (HyScanSensorState *state,
+                                                       const gchar       *name);
 
 G_END_DECLS
 
-#endif /* __HYSCAN_SONAR_MODEL_H__ */
+#endif /* __HYSCAN_SENSOR_STATE_H__ */

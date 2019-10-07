@@ -1,4 +1,4 @@
-/* hyscan-sonar-model.h
+/* hyscan-sensor-state.h
  *
  * Copyright 2019 Screen LLC, Alexander Dmitriev <m1n7@yandex.ru>
  *
@@ -32,44 +32,32 @@
  * лицензии. Для этого свяжитесь с ООО Экран - <info@screen-co.ru>.
  */
 
-#ifndef __HYSCAN_SONAR_MODEL_H__
-#define __HYSCAN_SONAR_MODEL_H__
-
-#include <hyscan-control.h>
-#include "hyscan-sonar-state.h"
+/**
+ * SECTION: hyscan-@class-name@
+ * @Title HyScan@Class@
+ * @Short_description
+ *
+ */
 #include "hyscan-sensor-state.h"
 
-G_BEGIN_DECLS
+G_DEFINE_INTERFACE (HyScanSensorState, hyscan_sensor_state, G_TYPE_OBJECT);
 
-#define HYSCAN_TYPE_SONAR_MODEL             (hyscan_sonar_model_get_type ())
-#define HYSCAN_SONAR_MODEL(obj)             (G_TYPE_CHECK_INSTANCE_CAST ((obj), HYSCAN_TYPE_SONAR_MODEL, HyScanSonarModel))
-#define HYSCAN_IS_SONAR_MODEL(obj)          (G_TYPE_CHECK_INSTANCE_TYPE ((obj), HYSCAN_TYPE_SONAR_MODEL))
-#define HYSCAN_SONAR_MODEL_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST ((klass), HYSCAN_TYPE_SONAR_MODEL, HyScanSonarModelClass))
-#define HYSCAN_IS_SONAR_MODEL_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE ((klass), HYSCAN_TYPE_SONAR_MODEL))
-#define HYSCAN_SONAR_MODEL_GET_CLASS(obj)   (G_TYPE_INSTANCE_GET_CLASS ((obj), HYSCAN_TYPE_SONAR_MODEL, HyScanSonarModelClass))
-
-typedef struct _HyScanSonarModel HyScanSonarModel;
-typedef struct _HyScanSonarModelPrivate HyScanSonarModelPrivate;
-typedef struct _HyScanSonarModelClass HyScanSonarModelClass;
-
-struct _HyScanSonarModel
+static void
+hyscan_sensor_state_default_init (HyScanSensorStateInterface *iface)
 {
-  GObject parent_instance;
+}
 
-  HyScanSonarModelPrivate *priv;
-};
-
-struct _HyScanSonarModelClass
+gboolean
+hyscan_sensor_state_get_enabled (HyScanSensorState *state,
+                                 const gchar       *name)
 {
-  GObjectClass parent_class;
-};
+  HyScanSensorStateInterface *iface;
 
-HYSCAN_API
-GType                     hyscan_sonar_model_get_type      (void);
+  g_return_val_if_fail (HYSCAN_IS_SENSOR_STATE (state), FALSE);
 
-HYSCAN_API
-HyScanSonarModel *        hyscan_sonar_model_new           (HyScanControl *control);
+  iface = HYSCAN_SENSOR_STATE_GET_IFACE (state);
+  if (iface->get_enabled != NULL)
+    return (* iface->get_enabled) (state, name);
 
-G_END_DECLS
-
-#endif /* __HYSCAN_SONAR_MODEL_H__ */
+  return FALSE;
+}

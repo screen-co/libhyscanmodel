@@ -476,7 +476,7 @@ hyscan_db_info_watcher (gpointer data)
 
               /* Если информацию о галсе уже считывали ранее и галс не является активным,
                * то используем эту информацию. Иначе считываем информацию из базы. */
-              if ((info != NULL) && !info->active)
+              if ((info != NULL) && !info->record)
                 {
                   info = hyscan_db_info_track_info_copy (info);
                 }
@@ -877,7 +877,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
           n_sources += 1;
 
           if (active)
-            info->active = TRUE;
+            info->record = TRUE;
         }
 
       /* Ставим на карандаш, если канал открыт на запись. */
@@ -902,7 +902,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
     }
 
   /* Если в галсе есть открытый для записи канал, проверим этот галс позже. */
-  if (info->active)
+  if (info->record)
     hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter);
   else
     hyscan_db_close (db, track_id);
@@ -984,6 +984,7 @@ hyscan_db_info_track_info_copy (HyScanTrackInfo *info)
   HyScanTrackInfo *new_info;
 
   new_info = g_slice_new0 (HyScanTrackInfo);
+
   new_info->id = g_strdup (info->id);
   new_info->type = info->type;
   new_info->name = g_strdup (info->name);
@@ -996,7 +997,7 @@ hyscan_db_info_track_info_copy (HyScanTrackInfo *info)
   if (info->sonar_info != NULL)
     new_info->sonar_info = g_object_ref (info->sonar_info);
   memcpy (new_info->sources, info->sources, sizeof (info->sources));
-  new_info->active = info->active;
+  new_info->record = info->record;
 
   return new_info;
 }
@@ -1010,10 +1011,10 @@ hyscan_db_info_track_info_copy (HyScanTrackInfo *info)
 void
 hyscan_db_info_track_info_free (HyScanTrackInfo *info)
 {
-  g_free ((gchar*)info->id);
-  g_free ((gchar*)info->name);
-  g_free ((gchar*)info->description);
-  g_free ((gchar*)info->operator_name);
+  g_clear_pointer ((gchar**)&info->id, g_free);
+  g_clear_pointer ((gchar**)&info->name, g_free);
+  g_clear_pointer ((gchar**)&info->description, g_free);
+  g_clear_pointer ((gchar**)&info->operator_name, g_free);
   g_clear_pointer (&info->ctime, g_date_time_unref);
   g_clear_pointer (&info->mtime, g_date_time_unref);
   g_clear_object (&info->sonar_info);

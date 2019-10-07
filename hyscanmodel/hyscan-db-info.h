@@ -72,7 +72,7 @@ struct _HyScanProjectInfo
  * @operator_name: имя оператора записавшего галс
  * @sonar_info: общая информация о гидролокаторе
  * @sources: список источников данных
- * @active: признак записи данных в галс
+ * @record: признак записи данных в галс
  * @error: признак ошибки в галсе
  *
  * Структура содержит информацию о галсе.
@@ -88,7 +88,7 @@ struct _HyScanTrackInfo
   const gchar         *operator_name;
   HyScanDataSchema    *sonar_info;
   gboolean             sources[HYSCAN_SOURCE_LAST];
-  gboolean             active;
+  gboolean             record;
   gboolean             error;
 };
 

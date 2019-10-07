@@ -1,4 +1,4 @@
-/* hyscan-sonar-model.h
+/* hyscan-control-model.h
  *
  * Copyright 2019 Screen LLC, Alexander Dmitriev <m1n7@yandex.ru>
  *
@@ -32,44 +32,43 @@
  * лицензии. Для этого свяжитесь с ООО Экран - <info@screen-co.ru>.
  */
 
-#ifndef __HYSCAN_SONAR_MODEL_H__
-#define __HYSCAN_SONAR_MODEL_H__
+#ifndef __HYSCAN_CONTROL_MODEL_H__
+#define __HYSCAN_CONTROL_MODEL_H__
 
-#include <hyscan-control.h>
-#include "hyscan-sonar-state.h"
-#include "hyscan-sensor-state.h"
+#include <glib-object.h>
+#include <hyscan-api.h>
 
 G_BEGIN_DECLS
 
-#define HYSCAN_TYPE_SONAR_MODEL             (hyscan_sonar_model_get_type ())
-#define HYSCAN_SONAR_MODEL(obj)             (G_TYPE_CHECK_INSTANCE_CAST ((obj), HYSCAN_TYPE_SONAR_MODEL, HyScanSonarModel))
-#define HYSCAN_IS_SONAR_MODEL(obj)          (G_TYPE_CHECK_INSTANCE_TYPE ((obj), HYSCAN_TYPE_SONAR_MODEL))
-#define HYSCAN_SONAR_MODEL_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST ((klass), HYSCAN_TYPE_SONAR_MODEL, HyScanSonarModelClass))
-#define HYSCAN_IS_SONAR_MODEL_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE ((klass), HYSCAN_TYPE_SONAR_MODEL))
-#define HYSCAN_SONAR_MODEL_GET_CLASS(obj)   (G_TYPE_INSTANCE_GET_CLASS ((obj), HYSCAN_TYPE_SONAR_MODEL, HyScanSonarModelClass))
+#define HYSCAN_TYPE_CONTROL_MODEL             (hyscan_control_model_get_type ())
+#define HYSCAN_CONTROL_MODEL(obj)             (G_TYPE_CHECK_INSTANCE_CAST ((obj), HYSCAN_TYPE_CONTROL_MODEL, HyScanControlModel))
+#define HYSCAN_IS_CONTROL_MODEL(obj)          (G_TYPE_CHECK_INSTANCE_TYPE ((obj), HYSCAN_TYPE_CONTROL_MODEL))
+#define HYSCAN_CONTROL_MODEL_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST ((klass), HYSCAN_TYPE_CONTROL_MODEL, HyScanControlModelClass))
+#define HYSCAN_IS_CONTROL_MODEL_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE ((klass), HYSCAN_TYPE_CONTROL_MODEL))
+#define HYSCAN_CONTROL_MODEL_GET_CLASS(obj)   (G_TYPE_INSTANCE_GET_CLASS ((obj), HYSCAN_TYPE_CONTROL_MODEL, HyScanControlModelClass))
 
-typedef struct _HyScanSonarModel HyScanSonarModel;
-typedef struct _HyScanSonarModelPrivate HyScanSonarModelPrivate;
-typedef struct _HyScanSonarModelClass HyScanSonarModelClass;
+typedef struct _HyScanControlModel HyScanControlModel;
+typedef struct _HyScanControlModelPrivate HyScanControlModelPrivate;
+typedef struct _HyScanControlModelClass HyScanControlModelClass;
 
-struct _HyScanSonarModel
+struct _HyScanControlModel
 {
   GObject parent_instance;
 
-  HyScanSonarModelPrivate *priv;
+  HyScanControlModelPrivate *priv;
 };
 
-struct _HyScanSonarModelClass
+struct _HyScanControlModelClass
 {
   GObjectClass parent_class;
 };
 
 HYSCAN_API
-GType                     hyscan_sonar_model_get_type      (void);
+GType                  hyscan_control_model_get_type         (void);
 
 HYSCAN_API
-HyScanSonarModel *        hyscan_sonar_model_new           (HyScanControl *control);
+HyScanControlModel *        hyscan_control_model_new              (void);
 
 G_END_DECLS
 
-#endif /* __HYSCAN_SONAR_MODEL_H__ */
+#endif /* __HYSCAN_CONTROL_MODEL_H__ */

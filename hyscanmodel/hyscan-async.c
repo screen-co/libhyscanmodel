@@ -1,11 +1,44 @@
-/*
- * \file hyscan-async.c
+/* hyscan-async.c
  *
- * \brief Исходный файл класса HyScanAsync, выполняющего список запросов в отдельном потоке.
- * \author Alexander Dmitriev (m1n7@yandex.ru)
- * \date 2019
- * \license Проприетарная лицензия ООО "Экран"
+ * Copyright 2017 Screen LLC, Vladimir Maximov <vmakxs@gmail.com>
+ * Copyright 2019 Screen LLC, Alexander Dmitriev <m1n7@yandex.ru>
  *
+ * This file is part of HyScanModel.
+ *
+ * HyScanModel is dual-licensed: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * HyScanModel is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this library. If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Alternatively, you can license this code under a commercial license.
+ * Contact the Screen LLC in this case - <info@screen-co.ru>.
+ */
+
+/* HyScanModel имеет двойную лицензию.
+ *
+ * Во-первых, вы можете распространять HyScanModel на условиях Стандартной
+ * Общественной Лицензии GNU версии 3, либо по любой более поздней версии
+ * лицензии (по вашему выбору). Полные положения лицензии GNU приведены в
+ * <http://www.gnu.org/licenses/>.
+ *
+ * Во-вторых, этот программный код можно использовать по коммерческой
+ * лицензии. Для этого свяжитесь с ООО Экран - <info@screen-co.ru>.
+ */
+
+/**
+ * SECTION: hyscan-async
+ * @Title HyScanAsync
+ * @Short_description выполнение запросов в фоне
+ *
+ * Класс необходимо заменить на GTask.
  */
 
 #include <memory.h>
@@ -17,31 +50,26 @@
 /* Запрос - это команда плюс объект плюс данные. */
 typedef struct
 {
-  HyScanAsyncCommand  command; /* Команда. */
-  gpointer            object;  /* Объект. */
-  gpointer           *data;    /* Данные. */
-  GQuark              detail;  /* Detail для эмиссии сигнала. */
-  gpointer            result;  /* Результат выполнения. */
+  HyScanAsyncCommand  command;       /* Команда. */
+
+  gpointer            object;        /* Объект. */
+  gpointer            data;          /* Данные. */
+
+  HyScanAsyncResult   callback;      /* Коллбек. */
+  gpointer            callback_data; /* Первый пар-р коллбека. */
+
+  gpointer            result;        /* Результат выполнения. */
 } HyScanQuery;
-
-enum
-{
-  SIGNAL_READY,
-  SIGNAL_LAST
-};
-
-/* Идентификаторы сигналов. */
-guint hyscan_async_signals[SIGNAL_LAST] = { 0 };
 
 struct _HyScanAsyncPrivate
 {
-  GList     *waiting;             /* Очередь запросов. */
-  GList     *ready;               /* Выполненные запросы. */
+  GList     *waiting;        /* Очередь запросов. */
+  GList     *ready;          /* Выполненные запросы. */
 
-  GThread   *sender;              /* Поток выполнения запросов. */
-  gint       shutdown;            /* Флаг останова потока выполнения запросов. */
-  GMutex     mutex;               /* Мьютекс, для установки запроса на выполнение. */
-  GCond      cond;                /* Условие приостановки потока выполнения запросов. */
+  GThread   *sender;         /* Поток выполнения запросов. */
+  gint       shutdown;       /* Флаг останова потока выполнения запросов. */
+  GMutex     mutex;          /* Мьютекс, для установки запроса на выполнение. */
+  GCond      cond;           /* Условие приостановки потока выполнения запросов. */
 
   guint      result_tag;     /* Идентификатор таймера. */
 };
@@ -60,18 +88,10 @@ G_DEFINE_TYPE_WITH_PRIVATE (HyScanAsync, hyscan_async, G_TYPE_OBJECT)
 static void
 hyscan_async_class_init (HyScanAsyncClass *klass)
 {
-  GObjectClass *obj_class = G_OBJECT_CLASS (klass);
+  GObjectClass *oclass = G_OBJECT_CLASS (klass);
 
-  obj_class->constructed = hyscan_async_object_constructed;
-  obj_class->finalize = hyscan_async_object_finalize;
-
-  hyscan_async_signals[SIGNAL_READY] =
-      g_signal_new ("ready", HYSCAN_TYPE_ASYNC,
-                    G_SIGNAL_RUN_LAST | G_SIGNAL_DETAILED,
-                    0, NULL, NULL,
-                    g_cclosure_marshal_VOID__POINTER,
-                    G_TYPE_NONE,
-                    1, G_TYPE_POINTER);
+  oclass->constructed = hyscan_async_object_constructed;
+  oclass->finalize = hyscan_async_object_finalize;
 }
 
 static void
@@ -158,8 +178,7 @@ hyscan_async_thread_func (gpointer object)
         {
           HyScanQuery *query = (HyScanQuery *) waiting->data;
 
-          query->result = (*query->command) (query->object,
-                                             query->data != NULL ? *query->data : NULL);
+          query->result = (*query->command) (query->object, query->data);
 
           /* Переносим запрос в список выполненных. */
           link = waiting;
@@ -195,8 +214,8 @@ hyscan_async_result_func (gpointer object)
     {
       HyScanQuery *query = (HyScanQuery *) ready->data;
 
-      g_signal_emit (async, hyscan_async_signals[SIGNAL_READY],
-                     query->detail, query->result, NULL);
+      if (query->callback != NULL)
+        (*query->callback) (query->callback_data, query->result, query->object);
     }
 
   g_list_free_full (ready, (GDestroyNotify) hyscan_async_query_free);
@@ -208,28 +227,45 @@ hyscan_async_result_func (gpointer object)
 static void
 hyscan_async_query_free (HyScanQuery *query)
 {
-  if (query == NULL)
-    return;
-
-  g_free (query->data);
-  g_free (query);
+  if (query != NULL)
+    g_free (query);
 }
 
-/* Создаёт объект HyScanAsync. */
+/**
+ * hyscan_async_new:
+ *
+ * Создаёт объект HyScanAsync.
+ *
+ * Returns: (transfer full): #HyScanAsync
+ */
 HyScanAsync *
 hyscan_async_new (void)
 {
   return g_object_new (HYSCAN_TYPE_ASYNC, NULL);
 }
 
-/* Добавляет запрос в список. */
+/**
+ * hyscan_async_append:
+ * @async: #HyScanAsync
+ * @command: #HyScanAsyncCommand
+ * @object: первый параметр, передаваемый в HyScanAsyncCommand
+ * @data: второй параметр, передаваемый в HyScanAsyncCommand
+ * @callback: коллбек, вызываемый после выполнения задания
+ * @callback_data: первый параметр коллбека
+ *
+ * Добавляет запрос в список. Функция ничего не копирует, требуется самостоятельно
+ * освобождать данные и гарантировать их доступность.
+ * Коллбэк будет вызыван в главном потоке.
+ *
+ * Returns: %TRUE, если удалось добавить запрос, %FALSE, если произошла ошибка.
+ */
 gboolean
 hyscan_async_append (HyScanAsync        *async,
-                     const gchar        *detail,
                      HyScanAsyncCommand  command,
                      gpointer            object,
-                     gconstpointer       data,
-                     gsize               data_size)
+                     gpointer            data,
+                     HyScanAsyncResult   callback,
+                     gpointer            callback_data)
 {
   HyScanAsyncPrivate *priv;
   HyScanQuery *query;
@@ -243,12 +279,9 @@ hyscan_async_append (HyScanAsync        *async,
   query = g_new0 (HyScanQuery, 1);
   query->command = command;
   query->object = object;
-
-  if (detail != NULL)
-    query->detail = g_quark_from_static_string (detail);
-
-  if (data != NULL && data_size != 0)
-    query->data = g_memdup (data, data_size);
+  query->data = data;
+  query->callback = callback;
+  query->callback_data = callback_data;
 
   /* Добавляем. */
   g_mutex_lock (&priv->mutex);

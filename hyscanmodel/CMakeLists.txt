@@ -1,15 +1,10 @@
 set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
      hyscan-db-info.c
      hyscan-async.c
+     hyscan-sonar-state.c
+     hyscan-sensor-state.c
+     hyscan-sonar-model.c
      # hyscan-appearance.c
-     # hyscan-async.c
-     # hyscan-connector.c
-     # hyscan-profile-common.c
-     # hyscan-sensors-data.c
-     # hyscan-sensors-profile.c
-     # hyscan-sonar-control-model.c
-     # hyscan-sonar-model.c
-     # hyscan-sonar-profile.c
      # hyscan-serializable.c
      )
 
@@ -39,16 +34,10 @@ install (FILES "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/hyscanmodel-${HYSCAN_MAJOR_VER
 set (HYSCAN_MODEL_LIBRARY_INSTALL_FILES
      hyscan-db-info.h
      hyscan-async.h
-     hyscan-db-profile.h
+     hyscan-sonar-state.h
+     hyscan-sensor-state.h
+     hyscan-sonar-model.h
      # hyscan-appearance.h
-     # hyscan-async.h
-     # hyscan-connector.h
-     # hyscan-profile-common.h
-     # hyscan-sensors-data.h
-     # hyscan-sensors-profile.h
-     # hyscan-sonar-control-model.h
-     # hyscan-sonar-model.h
-     # hyscan-sonar-profile.h
      # hyscan-serializable.h
      )
 

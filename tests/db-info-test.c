@@ -216,7 +216,7 @@ tracks_changed (HyScanDBInfo *info)
         g_error ("%s: info error", track_info->name);
 
        /* Проверка флага активности записи. */
-      if (track_info->active && (i != n_tracks))
+      if (track_info->record && (i != n_tracks))
         g_error ("%s: activity error", track_info->name);
 
       /* Ждём, если еще не все каналы данных обнаружены. */
