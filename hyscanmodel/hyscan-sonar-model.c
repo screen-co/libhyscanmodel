@@ -849,16 +849,18 @@ hyscan_sonar_model_tvg_disable (HyScanSonar      *sonar,
 }
 
 static gboolean
-hyscan_sonar_model_start (HyScanSonar     *sonar,
-                          const gchar     *project_name,
-                          const gchar     *track_name,
-                          HyScanTrackType  track_type)
+hyscan_sonar_model_start (HyScanSonar           *sonar,
+                          const gchar           *project_name,
+                          const gchar           *track_name,
+                          HyScanTrackType        track_type,
+                          const HyScanTrackPlan *track_plan)
 {
   HyScanSonarModel *self = HYSCAN_SONAR_MODEL (sonar);
   return hyscan_sonar_start (HYSCAN_SONAR (self->priv->control),
                              project_name,
                              track_name,
-                             track_type);
+                             track_type,
+                             track_plan);
 }
 
 static gboolean
