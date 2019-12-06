@@ -584,6 +584,32 @@ hyscan_db_info_get_project (HyScanDBInfo *info)
 }
 
 /**
+ * hyscan_db_info_get_db:
+ * @info: указатель на #HyScanDBInfo
+ *
+ * Функция считывает базу данных для которой в данный момент
+ * отслеживаются изменения.
+ *
+ * Returns: (nullable): Указатель на #HyScanDB или %NULL. Для удаления #g_object_unref.
+ */
+HyScanDB *
+hyscan_db_info_get_db (HyScanDBInfo *info)
+{
+  HyScanDBInfoPrivate *priv;
+  HyScanDB *db;
+
+  g_return_val_if_fail (HYSCAN_IS_DB_INFO (info), NULL);
+
+  priv = info->priv;
+
+  g_mutex_lock (&priv->lock);
+  db = g_object_ref (priv->db);
+  g_mutex_unlock (&priv->lock);
+
+  return db;
+}
+
+/**
  * hyscan_db_info_get_projects:
  * @info: указатель на #HyScanDBInfo
  *
@@ -791,14 +817,28 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
       hyscan_param_list_add (list, "/type");
       hyscan_param_list_add (list, "/operator");
       hyscan_param_list_add (list, "/sonar");
+      hyscan_param_list_add (list, "/plan/start/lat");
+      hyscan_param_list_add (list, "/plan/start/lon");
+      hyscan_param_list_add (list, "/plan/end/lat");
+      hyscan_param_list_add (list, "/plan/end/lon");
+      hyscan_param_list_add (list, "/plan/velocity");
 
       if ((hyscan_db_param_get (db, param_id, NULL, list)) &&
           (hyscan_param_list_get_integer (list, "/schema/id") == TRACK_SCHEMA_ID) &&
           (hyscan_param_list_get_integer (list, "/schema/version") == TRACK_SCHEMA_VERSION))
         {
+          HyScanTrackPlan plan;
           const gchar *track_type = hyscan_param_list_get_string (list, "/type");
           const gchar *sonar_info = hyscan_param_list_get_string (list, "/sonar");
           gint64 ctime = hyscan_param_list_get_integer (list, "/ctime") / G_USEC_PER_SEC;
+
+          plan.start.lat = hyscan_param_list_get_double (list, "/plan/start/lat");
+          plan.start.lon = hyscan_param_list_get_double (list, "/plan/start/lon");
+          plan.end.lat = hyscan_param_list_get_double (list, "/plan/end/lat");
+          plan.end.lon = hyscan_param_list_get_double (list, "/plan/end/lon");
+          plan.velocity = hyscan_param_list_get_double (list, "/plan/velocity");
+          if (plan.velocity > 0)
+            info->plan = hyscan_track_plan_copy (&plan);
 
           info->id = hyscan_param_list_dup_string (list, "/id");
           info->ctime = g_date_time_new_from_unix_utc (ctime);
@@ -996,6 +1036,7 @@ hyscan_db_info_track_info_copy (HyScanTrackInfo *info)
   new_info->operator_name = g_strdup (info->operator_name);
   if (info->sonar_info != NULL)
     new_info->sonar_info = g_object_ref (info->sonar_info);
+  new_info->plan = hyscan_track_plan_copy (info->plan);
   memcpy (new_info->sources, info->sources, sizeof (info->sources));
   new_info->record = info->record;
 
@@ -1018,6 +1059,7 @@ hyscan_db_info_track_info_free (HyScanTrackInfo *info)
   g_clear_pointer (&info->ctime, g_date_time_unref);
   g_clear_pointer (&info->mtime, g_date_time_unref);
   g_clear_object (&info->sonar_info);
+  hyscan_track_plan_free (info->plan);
 
   g_slice_free (HyScanTrackInfo, info);
 }
