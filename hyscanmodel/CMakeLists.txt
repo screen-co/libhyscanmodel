@@ -4,6 +4,8 @@ set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
      hyscan-sonar-state.c
      hyscan-sensor-state.c
      hyscan-sonar-model.c
+     hyscan-track-stats.c
+     hyscan-planner-stats.c
      # hyscan-appearance.c
      # hyscan-serializable.c
      )
@@ -37,6 +39,8 @@ set (HYSCAN_MODEL_LIBRARY_INSTALL_FILES
      hyscan-sonar-state.h
      hyscan-sensor-state.h
      hyscan-sonar-model.h
+     hyscan-track-stats.h
+     hyscan-planner-stats.h
      # hyscan-appearance.h
      # hyscan-serializable.h
      )
