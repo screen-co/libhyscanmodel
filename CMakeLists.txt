@@ -78,6 +78,9 @@ else ()
                         "hyscancore-${HYSCAN_MAJOR_VERSION}")
 endif ()
 
+#include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/../libhyscangui/hyscangui")
+#link_directories ("${CMAKE_CURRENT_SOURCE_DIR}/../libhyscangui/bin")
+
 include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/hyscanmodel")
 
 add_definitions (-DG_LOG_DOMAIN="HyScanModel")
