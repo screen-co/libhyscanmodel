@@ -41,6 +41,7 @@
 
 #include "hyscan-sonar-model.h"
 #include <hyscan-data-box.h>
+#include <string.h>
 
 #define HYSCAN_SONAR_MODEL_TIMEOUT (1 /* Одна секунда*/)
 
@@ -110,11 +111,13 @@ struct _HyScanSonarModelSource
   HyScanSonarModelTVG         tvg;
   HyScanSonarModelRec         rec;
   HyScanSonarModelGen         gen;
+  HyScanAntennaOffset         offset;
 };
 
 struct _HyScanSonarModelSensor
 {
   gboolean                    enable;
+  HyScanAntennaOffset         offset;
 };
 
 struct _HyScanSonarModelPrivate
@@ -164,6 +167,41 @@ static gboolean hyscan_sonar_model_tvg_set                 (HyScanSonarModel    
                                                             HyScanSourceType           source,
                                                             HyScanSonarModelTVG       *tvg);
 static gpointer hyscan_sonar_model_param_thread            (gpointer                   data);
+static void     hyscan_sonar_model_sensor_data             (HyScanDevice              *device,
+                                                            const gchar               *sensor,
+                                                            gint                       source,
+                                                            gint64                     time,
+                                                            HyScanBuffer              *data,
+                                                            HyScanSonarModel          *self);
+static void     hyscan_sonar_model_sonar_signal            (HyScanDevice              *device,
+                                                            gint                       source,
+                                                            guint                      channel,
+                                                            gint64                     time,
+                                                            HyScanBuffer              *image,
+                                                            HyScanSonarModel          *self);
+static void     hyscan_sonar_model_sonar_tvg               (HyScanDevice              *device,
+                                                            gint                       source,
+                                                            guint                      channel,
+                                                            gint64                     time,
+                                                            HyScanBuffer              *gains,
+                                                            HyScanSonarModel          *self);
+static void     hyscan_sonar_model_sonar_acoustic_data     (HyScanDevice              *device,
+                                                            gint                       source,
+                                                            guint                      channel,
+                                                            gboolean                   noise,
+                                                            gint64                     time,
+                                                            HyScanAcousticDataInfo    *info,
+                                                            HyScanBuffer              *data,
+                                                            HyScanSonarModel          *self);
+static void     hyscan_sonar_model_device_state            (HyScanDevice              *device,
+                                                            const gchar               *dev_id,
+                                                            HyScanSonarModel          *self);
+static void     hyscan_sonar_model_device_log              (HyScanDevice              *device,
+                                                            const gchar               *source,
+                                                            gint64                     time,
+                                                            gint                       level,
+                                                            const gchar               *message,
+                                                            HyScanSonarModel          *self);
 
 static guint hyscan_sonar_model_signals[SIGNAL_LAST] = {0};
 
@@ -250,6 +288,20 @@ hyscan_sonar_model_object_constructed (GObject *object)
   HyScanSonarModelPrivate *priv = self->priv;
   HyScanDataSchema *schema;
 
+  /* Ретрансляция сигналов. */
+  g_signal_connect (HYSCAN_SENSOR (priv->control), "sensor-data",
+                    G_CALLBACK (hyscan_sonar_model_sensor_data), self);
+  g_signal_connect (HYSCAN_DEVICE (priv->control), "device-state",
+                    G_CALLBACK (hyscan_sonar_model_device_state), self);
+  g_signal_connect (HYSCAN_DEVICE (priv->control), "device-log",
+                    G_CALLBACK (hyscan_sonar_model_device_log), self);
+  g_signal_connect (HYSCAN_SONAR (priv->control), "sonar-signal",
+                    G_CALLBACK (hyscan_sonar_model_sonar_signal), self);
+  g_signal_connect (HYSCAN_SONAR (priv->control), "sonar-tvg",
+                    G_CALLBACK (hyscan_sonar_model_sonar_tvg), self);
+  g_signal_connect (HYSCAN_SONAR (priv->control), "sonar-acoustic-data",
+                    G_CALLBACK (hyscan_sonar_model_sonar_acoustic_data), self);
+
   /* Промежуточный HyScanParam, в который пишет мейн-луп. */
   schema = hyscan_param_schema (HYSCAN_PARAM (priv->control));
   priv->fake = HYSCAN_PARAM (hyscan_data_box_new (schema));
@@ -272,6 +324,79 @@ hyscan_sonar_model_object_finalize (GObject *object)
   g_clear_object (&priv->control);
 
   G_OBJECT_CLASS (hyscan_sonar_model_parent_class)->finalize (object);
+}
+
+/* Обработчик сигнала sensor-data. */
+static void
+hyscan_sonar_model_sensor_data (HyScanDevice     *device,
+                                const gchar      *sensor,
+                                gint              source,
+                                gint64            time,
+                                HyScanBuffer     *data,
+                                HyScanSonarModel *self)
+{
+  g_signal_emit_by_name (self, "sensor-data", sensor, source, time, data);
+}
+
+/* Обработчик сигнала sonar-signal. */
+static void
+hyscan_sonar_model_sonar_signal (HyScanDevice     *device,
+                                 gint              source,
+                                 guint             channel,
+                                 gint64            time,
+                                 HyScanBuffer     *image,
+                                 HyScanSonarModel *self)
+{
+  g_signal_emit_by_name (self, "sonar-signal", source, channel, time, image);
+}
+
+/* Обработчик сигнала sonar-tvg. */
+static void
+hyscan_sonar_model_sonar_tvg (HyScanDevice     *device,
+                              gint              source,
+                              guint             channel,
+                              gint64            time,
+                              HyScanBuffer     *gains,
+                              HyScanSonarModel *self)
+{
+  g_signal_emit_by_name (self, "sonar-tvg", source, channel, time, gains);
+}
+
+/* Обработчик сигнала sonar-acoustic-data. */
+static void
+hyscan_sonar_model_sonar_acoustic_data (HyScanDevice           *device,
+                                        gint                    source,
+                                        guint                   channel,
+                                        gboolean                noise,
+                                        gint64                  time,
+                                        HyScanAcousticDataInfo *info,
+                                        HyScanBuffer           *data,
+                                        HyScanSonarModel       *self)
+{
+  g_signal_emit_by_name (self, "sonar-acoustic-data",
+                                source, channel, noise,
+                                time, info, data);
+}
+
+/* Обработчик сигнала device-state. */
+static void
+hyscan_sonar_model_device_state (HyScanDevice     *device,
+                                 const gchar      *dev_id,
+                                 HyScanSonarModel *self)
+{
+  g_signal_emit_by_name (self, "device-state", dev_id);
+}
+
+/* Обработчик сигнала device-log. */
+static void
+hyscan_sonar_model_device_log (HyScanDevice     *device,
+                               const gchar      *source,
+                               gint64            time,
+                               gint              level,
+                               const gchar      *message,
+                               HyScanSonarModel *self)
+{
+  g_signal_emit_by_name (self, "device-log", source, time, level, message);
 }
 
 /* Функция инициирует обновление. */
@@ -318,6 +443,33 @@ hyscan_sonar_model_rec_update (HyScanSonarModelRec *dest,
 }
 
 static gboolean
+hyscan_sonar_model_offset_update (HyScanAntennaOffset       *dest,
+                                  const HyScanAntennaOffset *src)
+{
+  if (memcmp (dest, src, sizeof (*dest)) == 0)
+    return FALSE;
+
+  *dest = *src;
+
+  return TRUE;
+}
+
+static void
+hyscan_sonar_model_sonar_changed (HyScanSonarModel *self,
+                                  HyScanSourceType  source)
+{
+  HyScanSonarModelPrivate *priv = self->priv;
+
+  g_signal_emit (self, hyscan_sonar_model_signals[SIGNAL_SONAR],
+                     g_quark_from_static_string (hyscan_source_get_id_by_type (source)), 0);
+
+  /* Помечаем, что пора обновляться. */
+  g_mutex_lock (&priv->lock);
+  hyscan_sonar_model_changed (priv);
+  g_mutex_unlock (&priv->lock);
+}
+
+static gboolean
 hyscan_sonar_model_receiver_set (HyScanSonarModel    *self,
                                  HyScanSourceType     source,
                                  HyScanSonarModelRec *rec)
@@ -335,26 +487,18 @@ hyscan_sonar_model_receiver_set (HyScanSonarModel    *self,
 
   if (rec->disabled)
     status = hyscan_sonar_receiver_disable (HYSCAN_SONAR (priv->control), source);
-
-  if (rec->mode == HYSCAN_SONAR_RECEIVER_MODE_MANUAL)
+  else if (rec->mode == HYSCAN_SONAR_RECEIVER_MODE_MANUAL)
     status = hyscan_sonar_receiver_set_time (HYSCAN_SONAR (priv->control), source, rec->receive, rec->wait);
   else if (rec->mode == HYSCAN_SONAR_RECEIVER_MODE_AUTO)
     status = hyscan_sonar_receiver_set_auto (HYSCAN_SONAR (priv->control), source);
 
-  if (status && hyscan_sonar_model_rec_update (old_rec, rec))
-    {
-      g_signal_emit (self, hyscan_sonar_model_signals[SIGNAL_SONAR],
-                     g_quark_from_static_string (hyscan_source_get_id_by_type (source)), 0);
+  if (!status)
+    return FALSE;
 
-      /* Помечаем, что пора обновляться. */
-      g_mutex_lock (&priv->lock);
-      hyscan_sonar_model_changed (priv);
-      g_mutex_unlock (&priv->lock);
+  if (hyscan_sonar_model_rec_update (old_rec, rec))
+    hyscan_sonar_model_sonar_changed (self, source);
 
-      return TRUE;
-    }
-
-  return FALSE;
+  return TRUE;
 }
 
 static gboolean
@@ -385,7 +529,7 @@ hyscan_sonar_model_generator_set (HyScanSonarModel    *self,
   HyScanSonarModelPrivate *priv = self->priv;
   HyScanSonarModelSource *info;
   HyScanSonarModelGen *old_gen;
-  gboolean status = FALSE;
+  gboolean status;
 
   info = g_hash_table_lookup (priv->sources, GINT_TO_POINTER (source));
   if (info == NULL)
@@ -399,22 +543,14 @@ hyscan_sonar_model_generator_set (HyScanSonarModel    *self,
   else
     status = hyscan_sonar_generator_set_preset (HYSCAN_SONAR (priv->control), source, gen->preset);
 
-  /* Если параметры удалось задать и они отличаются от уже установленных,
-   * эмиттируем сигнал и сообщаем об успехе. */
-  if (status && hyscan_sonar_model_gen_update (old_gen, gen))
-    {
-      g_signal_emit (self, hyscan_sonar_model_signals[SIGNAL_SONAR],
-                     g_quark_from_static_string (hyscan_source_get_id_by_type (source)), 0);
+  if (!status)
+    return FALSE;
 
-      /* Помечаем, что пора обновляться. */
-      g_mutex_lock (&priv->lock);
-      hyscan_sonar_model_changed (priv);
-      g_mutex_unlock (&priv->lock);
+  /* Если параметры отличаются от уже установленных, эмиттируем сигнал . */
+  if (hyscan_sonar_model_gen_update (old_gen, gen))
+    hyscan_sonar_model_sonar_changed (self, source);
 
-      return TRUE;
-    }
-
-  return FALSE;
+  return TRUE;
 }
 
 static gboolean
@@ -483,10 +619,11 @@ hyscan_sonar_model_tvg_set (HyScanSonarModel    *self,
 
   /* Отключение ВАРУ. */
   if (tvg->disabled || tvg->mode == HYSCAN_SONAR_TVG_MODE_NONE)
-    status = hyscan_sonar_tvg_disable (HYSCAN_SONAR (priv->control), source);
-
+    {
+      status = hyscan_sonar_tvg_disable (HYSCAN_SONAR (priv->control), source);
+    }
   /* Переключение и настройка режимов. */
-  if (tvg->mode == HYSCAN_SONAR_TVG_MODE_AUTO)
+  else if (tvg->mode == HYSCAN_SONAR_TVG_MODE_AUTO)
     {
       status = hyscan_sonar_tvg_set_auto (HYSCAN_SONAR (priv->control), source,
                                           tvg->atvg.level,
@@ -510,27 +647,15 @@ hyscan_sonar_model_tvg_set (HyScanSonarModel    *self,
                                                  tvg->log.beta,
                                                  tvg->log.alpha);
     }
-  else
-    {
-      status = FALSE;
-    }
 
-  /* Если параметры удалось задать и они отличаются от уже установленных,
-   * эмиттируем сигнал и сообщаем об успехе. */
-  if (status && hyscan_sonar_model_tvg_update (old_tvg, tvg))
-    {
-      g_signal_emit (self, hyscan_sonar_model_signals[SIGNAL_SONAR],
-                     g_quark_from_static_string (hyscan_source_get_id_by_type (source)), 0);
+  if (!status)
+    return FALSE;
 
-      /* Помечаем, что пора обновляться. */
-      g_mutex_lock (&priv->lock);
-      hyscan_sonar_model_changed (priv);
-      g_mutex_unlock (&priv->lock);
+  /* Если параметры отличаются от уже установленных, эмиттируем сигнал. */
+  if (hyscan_sonar_model_tvg_update (old_tvg, tvg))
+    hyscan_sonar_model_sonar_changed (self, source);
 
-      return TRUE;
-    }
-
-  return FALSE;
+  return TRUE;
 }
 
 static HyScanSonarReceiverModeType
@@ -561,7 +686,7 @@ hyscan_sonar_model_receiver_get_time (HyScanSonarState *sonar,
     return FALSE;
 
   receive_time != NULL ? *receive_time = info->rec.receive : 0;
-  wait_time != NULL ? *receive_time = info->rec.wait : 0;
+  wait_time != NULL ? *wait_time = info->rec.wait : 0;
 
   return TRUE;
 }
@@ -708,6 +833,33 @@ hyscan_sonar_model_tvg_get_disabled (HyScanSonarState *sonar,
     return FALSE;
 
   return info->tvg.disabled;
+}
+
+static gboolean
+hyscan_sonar_model_antenna_set_offset (HyScanSonar               *sonar,
+                                       HyScanSourceType           source,
+                                       const HyScanAntennaOffset *offset)
+{
+  HyScanSonarModel *self = HYSCAN_SONAR_MODEL (sonar);
+  HyScanSonarModelPrivate *priv = self->priv;
+  HyScanSonarModelSource *info;
+  HyScanAntennaOffset *old_offset;
+  gboolean status;
+
+  info = g_hash_table_lookup (priv->sources, GINT_TO_POINTER (source));
+  if (info == NULL)
+    return FALSE;
+
+  old_offset = &info->offset;
+
+  status = hyscan_sonar_antenna_set_offset (HYSCAN_SONAR (priv->control), source, offset);
+  if (!status)
+    return FALSE;
+
+  if (hyscan_sonar_model_offset_update (old_offset, offset))
+    hyscan_sonar_model_sonar_changed (self, source);
+
+  return TRUE;
 }
 
 static gboolean
@@ -908,6 +1060,33 @@ hyscan_sonar_model_sensor_set_enable (HyScanSensor *sensor,
   /* Такая же логика, как у локаторов (ТВГ, генератор, приемник). */
   if (enable != info->enable)
     {
+      info->enable = enable;
+      g_signal_emit (self, hyscan_sonar_model_signals[SIGNAL_SENSOR],
+                     g_quark_from_string (name), 0);
+    }
+
+  return TRUE;
+}
+
+static gboolean
+hyscan_sonar_model_sensor_antenna_set_offset (HyScanSensor              *sensor,
+                                              const gchar               *name,
+                                              const HyScanAntennaOffset *offset)
+{
+  HyScanSonarModel *self = HYSCAN_SONAR_MODEL (sensor);
+  HyScanSonarModelPrivate *priv = self->priv;
+  HyScanSonarModelSensor *info = g_hash_table_lookup (priv->sensors, name);
+
+  if (info == NULL)
+    return FALSE;
+
+  if (!hyscan_sensor_antenna_set_offset (HYSCAN_SENSOR (priv->control), name, offset))
+    return FALSE;
+
+  /* Такая же логика, как у локаторов (ТВГ, генератор, приемник). */
+  if (memcmp (&info->offset, offset, sizeof (info->offset)) != 0)
+    {
+      info->offset = *offset;
       g_signal_emit (self, hyscan_sonar_model_signals[SIGNAL_SENSOR],
                      g_quark_from_string (name), 0);
       return TRUE;
@@ -990,7 +1169,7 @@ hyscan_sonar_model_param_thread (gpointer data)
        * а сверху накатываю свежие изменения. */
       g_mutex_lock (&priv->lock);
       hyscan_param_set (priv->fake, full);
-      hyscan_param_set (priv->fake, priv->incoming);
+      hyscan_param_set (priv->fake, priv->incoming); // todo: delete?
       g_mutex_unlock (&priv->lock);
     }
 
@@ -1065,7 +1244,7 @@ hyscan_sonar_model_sonar_state_iface_init (HyScanSonarStateInterface *iface)
 static void
 hyscan_sonar_model_sonar_iface_init (HyScanSonarInterface *iface)
 {
-  iface->antenna_set_offset = NULL;
+  iface->antenna_set_offset = hyscan_sonar_model_antenna_set_offset;
   iface->receiver_set_time = hyscan_sonar_model_receiver_set_time;
   iface->receiver_set_auto = hyscan_sonar_model_receiver_set_auto;
   iface->receiver_disable = hyscan_sonar_model_receiver_disable;
@@ -1090,7 +1269,7 @@ hyscan_sonar_model_sensor_state_iface_init (HyScanSensorStateInterface *iface)
 static void
 hyscan_sonar_model_sensor_iface_init (HyScanSensorInterface *iface)
 {
-  iface->antenna_set_offset = NULL;
+  iface->antenna_set_offset = hyscan_sonar_model_sensor_antenna_set_offset;
   iface->set_enable = hyscan_sonar_model_sensor_set_enable;
 }
 
