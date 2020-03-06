@@ -4,7 +4,6 @@ set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
      hyscan-sonar-state.c
      hyscan-sensor-state.c
      hyscan-sonar-model.c
-     hyscan-model-manager.c
      hyscan-mark-location.c
      hyscan-mark-loc-model.c
      # hyscan-appearance.c
@@ -40,7 +39,6 @@ set (HYSCAN_MODEL_LIBRARY_INSTALL_FILES
      hyscan-sonar-state.h
      hyscan-sensor-state.h
      hyscan-sonar-model.h
-     hyscan-model-manager.h
      hyscan-mark-location.h
      hyscan-mark-loc-model.h
      # hyscan-appearance.h
