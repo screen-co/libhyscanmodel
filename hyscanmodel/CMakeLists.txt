@@ -1,7 +1,8 @@
 
 add_library (${HYSCAN_MODEL_LIBRARY} SHARED
+             hyscan-async.c
              hyscan-db-info.c
-             hyscan-async.c)
+             hyscan-object-model.c)
 
 target_link_libraries (${HYSCAN_MODEL_LIBRARY} ${GLIB2_LIBRARIES} ${HYSCAN_LIBRARIES})
 
@@ -26,6 +27,7 @@ install (FILES "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/hyscanmodel-${HYSCAN_MAJOR_VER
 
 install (FILES hyscan-async.h
                hyscan-db-info.h
+               hyscan-object-model.h
          COMPONENT development
          DESTINATION "include/hyscan-${HYSCAN_MAJOR_VERSION}/hyscanmodel"
          PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
