@@ -73,7 +73,7 @@ HYSCAN_API
 GType                   hyscan_object_model_get_type          (void);
 
 HYSCAN_API
-HyScanObjectModel*      hyscan_object_model_new               (GType                      data_type);
+HyScanObjectModel *     hyscan_object_model_new               (GType                      data_type);
 
 HYSCAN_API
 void                    hyscan_object_model_set_project       (HyScanObjectModel         *model,
@@ -97,14 +97,14 @@ void                    hyscan_object_model_remove_object     (HyScanObjectModel
                                                                const gchar               *id);
 
 HYSCAN_API
-GHashTable*             hyscan_object_model_get               (HyScanObjectModel         *model);
+GHashTable *            hyscan_object_model_get               (HyScanObjectModel         *model);
 
 HYSCAN_API
 HyScanObject *          hyscan_object_model_get_id            (HyScanObjectModel         *model,
                                                                const gchar               *id);
 
 HYSCAN_API
-GHashTable*             hyscan_object_model_copy              (HyScanObjectModel         *model,
+GHashTable *            hyscan_object_model_copy              (HyScanObjectModel         *model,
                                                                GHashTable                *objects);
 
 G_END_DECLS

@@ -77,17 +77,17 @@ enum
 
 typedef enum
 {
-  OBJECT_ADD    = 1001,      /* Добавление объекта. */
-  OBJECT_MODIFY = 1002,      /* Изменение объекта. */
-  OBJECT_REMOVE = 1003       /* Удаление объекта. */
+  OBJECT_ADD    = 1001,                      /* Добавление объекта. */
+  OBJECT_MODIFY = 1002,                      /* Изменение объекта. */
+  OBJECT_REMOVE = 1003                       /* Удаление объекта. */
 } HyScanObjectModelAction;
 
 /* Задание, структура с информацией о том, что требуется сделать. */
 typedef struct
 {
-  gchar                      *id;        /* Идентификатор объекта. */
-  HyScanObject               *object;    /* Объект. */
-  HyScanObjectModelAction     action;    /* Требуемое действие. */
+  gchar                      *id;            /* Идентификатор объекта. */
+  HyScanObject               *object;        /* Объект. */
+  HyScanObjectModelAction     action;        /* Требуемое действие. */
 } HyScanObjectModelTask;
 
 /* Состояние объекта. */
@@ -126,10 +126,8 @@ static void         hyscan_object_model_set_property           (GObject         
                                                                 guint                      prop_id,
                                                                 const GValue              *value,
                                                                 GParamSpec                *pspec);
-                    
 static void         hyscan_object_model_clear_state            (HyScanObjectModelState    *state);
 static gboolean     hyscan_object_model_track_sync             (HyScanObjectModelPrivate  *priv);
-
 static GHashTable * hyscan_object_model_make_ht                (HyScanObjectModelPrivate  *priv);
 static void         hyscan_object_model_add_task               (HyScanObjectModel         *model,
                                                                 const gchar               *id,
@@ -225,9 +223,9 @@ hyscan_object_model_object_finalize (GObject *object)
 
 static void
 hyscan_object_model_set_property (GObject      *object,
-                                guint         prop_id,
-                                const GValue *value,
-                                GParamSpec   *pspec)
+                                  guint         prop_id,
+                                  const GValue *value,
+                                  GParamSpec   *pspec)
 {
   HyScanObjectModel *data = HYSCAN_OBJECT_MODEL (object);
   HyScanObjectModelPrivate *priv = data->priv;
@@ -389,8 +387,8 @@ static GHashTable *
 hyscan_object_model_get_all_objects (HyScanObjectModelPrivate *priv,
                                      HyScanObjectData         *data)
 {
-  HyScanObject * object;
-  GHashTable * object_list;
+  HyScanObject *object;
+  GHashTable *object_list;
   gchar **id_list;
   guint len, i;
 
