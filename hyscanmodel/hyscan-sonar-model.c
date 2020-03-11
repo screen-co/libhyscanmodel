@@ -42,6 +42,7 @@
 #include "hyscan-sonar-model.h"
 #include <hyscan-data-box.h>
 #include <string.h>
+#include <hyscan-model-marshallers.h>
 
 #define HYSCAN_SONAR_MODEL_TIMEOUT (1 /* Одна секунда*/)
 
@@ -62,6 +63,8 @@ enum
   SIGNAL_SONAR,
   SIGNAL_SENSOR,
   SIGNAL_PARAM,
+  SIGNAL_BEFORE_START,
+  SIGNAL_START_STOP,
   SIGNAL_LAST
 };
 
@@ -211,8 +214,7 @@ G_DEFINE_TYPE_WITH_CODE (HyScanSonarModel, hyscan_sonar_model, G_TYPE_OBJECT,
                          G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_SONAR, hyscan_sonar_model_sonar_iface_init)
                          G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_SENSOR_STATE, hyscan_sonar_model_sensor_state_iface_init)
                          G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_SENSOR, hyscan_sonar_model_sensor_iface_init)
-                         G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_PARAM, hyscan_sonar_model_param_iface_init)
-                         );
+                         G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_PARAM, hyscan_sonar_model_param_iface_init))
 
 static void
 hyscan_sonar_model_class_init (HyScanSonarModelClass *klass)
@@ -251,6 +253,22 @@ hyscan_sonar_model_class_init (HyScanSonarModelClass *klass)
                   g_cclosure_marshal_VOID__VOID,
                   G_TYPE_NONE,
                   0);
+
+  hyscan_sonar_model_signals[SIGNAL_BEFORE_START] =
+    g_signal_new ("before-start", HYSCAN_TYPE_SONAR_MODEL,
+                  G_SIGNAL_RUN_LAST, 0,
+                  g_signal_accumulator_true_handled, NULL,
+                  hyscan_model_marshal_BOOLEAN__VOID,
+                  G_TYPE_BOOLEAN,
+                  0);
+
+  hyscan_sonar_model_signals[SIGNAL_START_STOP] =
+    g_signal_new ("start-stop", HYSCAN_TYPE_SONAR_MODEL,
+                  G_SIGNAL_RUN_LAST, 0,
+                  NULL, NULL,
+                  g_cclosure_marshal_VOID__STRING,
+                  G_TYPE_NONE,
+                  1, G_TYPE_STRING);
 
 }
 
@@ -1008,18 +1026,35 @@ hyscan_sonar_model_start (HyScanSonar           *sonar,
                           const HyScanTrackPlan *track_plan)
 {
   HyScanSonarModel *self = HYSCAN_SONAR_MODEL (sonar);
-  return hyscan_sonar_start (HYSCAN_SONAR (self->priv->control),
-                             project_name,
-                             track_name,
-                             track_type,
-                             track_plan);
+  gboolean cancel = FALSE;
+  gboolean result;
+
+  /* Сигнал "before-start" для подготовки всех систем к началу записи и возможности отменить запись. */
+  g_signal_emit (self, hyscan_sonar_model_signals[SIGNAL_BEFORE_START], 0, &cancel);
+
+  result = !cancel && hyscan_sonar_start (HYSCAN_SONAR (self->priv->control),
+                                          project_name,
+                                          track_name,
+                                          track_type,
+                                          track_plan);
+
+  /* Сигнал "start-stop" отправляем в любом случае, даже если запись не началась. */
+  g_signal_emit (self, hyscan_sonar_model_signals[SIGNAL_START_STOP], 0, result ? track_name : NULL);
+
+  return result;
 }
 
 static gboolean
 hyscan_sonar_model_stop (HyScanSonar *sonar)
 {
   HyScanSonarModel *self = HYSCAN_SONAR_MODEL (sonar);
-  return hyscan_sonar_stop (HYSCAN_SONAR (self->priv->control));
+  gboolean result;
+
+  result = hyscan_sonar_stop (HYSCAN_SONAR (self->priv->control));
+
+  g_signal_emit (self, hyscan_sonar_model_signals[SIGNAL_START_STOP], 0, NULL);
+
+  return result;
 }
 
 static gboolean
