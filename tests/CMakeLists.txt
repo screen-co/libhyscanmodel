@@ -11,7 +11,6 @@ add_executable (planner-stats-test planner-stats-test.c waypoint.c)
 # add_executable (async-test async-test.c)
 # add_executable (connector-test connector-test.c)
 # add_executable (sonar-control-model-test sonar-control-model-test.c)
-# add_executable (sonar-model-test sonar-model-test.c)
 
 target_link_libraries (db-info-test ${TEST_LIBRARIES})
 target_link_libraries (track-stats-test ${TEST_LIBRARIES})
@@ -19,17 +18,28 @@ target_link_libraries (planner-stats-test ${TEST_LIBRARIES})
 # target_link_libraries (async-test ${TEST_LIBRARIES})
 # target_link_libraries (connector-test ${TEST_LIBRARIES})
 # target_link_libraries (sonar-control-model-test ${TEST_LIBRARIES})
-# target_link_libraries (sonar-model-test ${TEST_LIBRARIES})
 
 set (HYSCAN_MODEL_TEST_INSTALL_TARGETS
+     ${HYSCAN_MODEL_TEST_INSTALL_TARGETS}
      db-info-test
      track-stats-test
      planner-stats-test
      # async-test
      # connector-test
      # sonar-control-model-test
-     # sonar-model-test
      )
+
+if (NOT HYSCAN_USE_SYS_LIBS)
+  add_executable (sonar-model-test sonar-model-test.c
+                  ${CMAKE_CURRENT_SOURCE_DIR}/../../libhyscancore/tests/hyscan-dummy-device.c)
+  include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/../../libhyscancore/tests")
+  target_link_libraries (sonar-model-test ${TEST_LIBRARIES})
+  set (HYSCAN_MODEL_TEST_INSTALL_TARGETS ${HYSCAN_SONAR_MODEL_TEST_INSTALL_TARGETS} sonar-model-test)
+  add_test (NAME SonarModelTest COMMAND sonar-model-test
+          WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+else()
+  message(STATUS Skip target sonar-model-test because HYSCAN_USE_SYS_LIBS is enabled)
+endif()
 
 install (TARGETS ${HYSCAN_MODEL_TEST_INSTALL_TARGETS}
          COMPONENT test

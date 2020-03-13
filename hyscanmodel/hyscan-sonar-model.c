@@ -130,13 +130,12 @@ struct _HyScanSonarModelPrivate
   GHashTable                 *sources; /* Параметры датчиков. {HyScanSourceType : HyScanSonarModelSource* } */
   GHashTable                 *sensors; /* Параметры датчиков. {gchar* : HyScanSonarModelSensor* } */
 
-  HyScanParam                *fake;    /* Фейковый бекенд для мейнлупа. */
-  HyScanParamList            *incoming;/* Входящий список параметров. */
   GThread                    *thread;  /* Поток. */
   gint                        stop;    /* Остановка потока. */
   GMutex                      lock;    /* Блокировка. */
 
   GTimer                     *timer;
+  gint                        sync_interval;
   gboolean                    changed;
   GCond                       cond;
 };
@@ -304,7 +303,10 @@ hyscan_sonar_model_object_constructed (GObject *object)
 {
   HyScanSonarModel *self = HYSCAN_SONAR_MODEL (object);
   HyScanSonarModelPrivate *priv = self->priv;
-  HyScanDataSchema *schema;
+
+  guint32 n_sources, i;
+  const HyScanSourceType *source;
+  const gchar *const *sensor;
 
   /* Ретрансляция сигналов. */
   g_signal_connect (HYSCAN_SENSOR (priv->control), "sensor-data",
@@ -320,17 +322,32 @@ hyscan_sonar_model_object_constructed (GObject *object)
   g_signal_connect (HYSCAN_SONAR (priv->control), "sonar-acoustic-data",
                     G_CALLBACK (hyscan_sonar_model_sonar_acoustic_data), self);
 
-  /* Промежуточный HyScanParam, в который пишет мейн-луп. */
-  schema = hyscan_param_schema (HYSCAN_PARAM (priv->control));
-  priv->fake = HYSCAN_PARAM (hyscan_data_box_new (schema));
+  priv->timer = g_timer_new ();
+  priv->sync_interval = HYSCAN_SONAR_MODEL_TIMEOUT * G_USEC_PER_SEC;
+
+  /* Получаем список источников данных. */
+  priv->sources = g_hash_table_new_full (NULL, NULL, NULL, g_free);
+  source = hyscan_control_sources_list (priv->control, &n_sources);
+  if (source != NULL)
+    {
+      for (i = 0; i < n_sources; ++i)
+        g_hash_table_insert (priv->sources, GINT_TO_POINTER (source[i]), g_new0 (HyScanSonarModelSource, 1));
+    }
+
+  /* Получаем список датчиков. */
+  priv->sensors = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+  sensor = hyscan_control_sensors_list (priv->control);
+  if (sensor != NULL)
+    {
+      for (i = 0; sensor[i] != NULL; i++)
+        g_hash_table_insert (priv->sensors, g_strdup (sensor[i]), g_new0 (HyScanSonarModelSensor, 1));
+    }
 
   g_cond_init (&priv->cond);
 
   /* Поток обмена. */
   g_mutex_init (&priv->lock);
   priv->thread = g_thread_new ("sonar-model", hyscan_sonar_model_param_thread, self);
-
-  g_clear_object (&schema);
 }
 
 static void
@@ -339,7 +356,14 @@ hyscan_sonar_model_object_finalize (GObject *object)
   HyScanSonarModel *self = HYSCAN_SONAR_MODEL (object);
   HyScanSonarModelPrivate *priv = self->priv;
 
+  /* Завершаем поток обработки. */
+  g_atomic_int_set (&priv->stop, TRUE);
+  hyscan_sonar_model_changed (priv);
+  g_thread_join (priv->thread);
+
   g_clear_object (&priv->control);
+  g_hash_table_destroy (priv->sensors);
+  g_hash_table_destroy (priv->sources);
 
   G_OBJECT_CLASS (hyscan_sonar_model_parent_class)->finalize (object);
 }
@@ -1134,7 +1158,7 @@ static HyScanDataSchema *
 hyscan_sonar_model_param_schema (HyScanParam *param)
 {
   HyScanSonarModel *self = HYSCAN_SONAR_MODEL (param);
-  return hyscan_param_schema (self->priv->fake);
+  return hyscan_param_schema (HYSCAN_PARAM (self->priv->control));
 }
 
 static gpointer
@@ -1144,6 +1168,7 @@ hyscan_sonar_model_param_thread (gpointer data)
   HyScanSonarModelPrivate *priv = self->priv;
   HyScanParam *remote = HYSCAN_PARAM (g_object_ref (priv->control));
   HyScanParamList *list, *full;
+  gulong sync_interval;
 
   list = hyscan_param_list_new ();
   full = hyscan_param_list_new ();
@@ -1173,39 +1198,24 @@ hyscan_sonar_model_param_thread (gpointer data)
           continue;
         }
 
-      /* Если я здесь я оказался, значит, изменения есть.
+      /* Если я здесь оказался, значит, изменения есть.
        * Жду, пока не пройдет достаточное число времени после последнего
        * изменения. Тут специально стоит continue,  вдруг что-то поменяется,
        * пока поток спит. */
-      if (g_timer_elapsed (priv->timer, NULL) < HYSCAN_SONAR_MODEL_TIMEOUT)
+      sync_interval = g_atomic_int_get (&priv->sync_interval);
+      if (g_timer_elapsed (priv->timer, NULL) < (gdouble) sync_interval / G_USEC_PER_SEC)
         {
-          g_usleep (HYSCAN_SONAR_MODEL_TIMEOUT * G_USEC_PER_SEC);
+          g_usleep (sync_interval);
           continue;
         }
 
       /* Переписываю новые значения во внутренний список. Новый очищаю. */
       g_mutex_lock (&priv->lock);
       g_atomic_int_set (&priv->changed, FALSE);
-      hyscan_param_list_update (list, priv->incoming);
-      hyscan_param_list_clear (priv->incoming);
       g_mutex_unlock (&priv->lock);
 
-      /* Задаю новые значения, синхронизирую локатор. */
-      hyscan_param_set (remote, list);
+      /* Синхронизирую локатор. */
       hyscan_sonar_sync (HYSCAN_SONAR (remote));
-
-      /* Очищаю список. */
-      hyscan_param_list_clear (list);
-
-      /* Считываю полное состояние. */
-      hyscan_param_get (remote, full);
-
-      /* Теперь копирую состояние реального HyScanParam в промежуточный,
-       * а сверху накатываю свежие изменения. */
-      g_mutex_lock (&priv->lock);
-      hyscan_param_set (priv->fake, full);
-      hyscan_param_set (priv->fake, priv->incoming); // todo: delete?
-      g_mutex_unlock (&priv->lock);
     }
 
   g_clear_object (&remote);
@@ -1219,36 +1229,20 @@ static gboolean
 hyscan_sonar_model_param_set (HyScanParam     *param,
                               HyScanParamList *list)
 {
-  gboolean status;
   HyScanSonarModel *self = HYSCAN_SONAR_MODEL (param);
   HyScanSonarModelPrivate *priv = self->priv;
 
-  g_mutex_lock (&priv->lock);
-
-  /* Пробую задать в фейковый парам, чтобы проверить переданный ParamList. */
-  status = hyscan_param_set (priv->fake, list);
-
-  if (status)
-    {
-      hyscan_param_list_update (priv->incoming, list);
-      g_signal_emit (self, hyscan_sonar_model_signals[SIGNAL_PARAM], 0);
-    }
-
-  /* Даже если не получилось, инициируем обновление. */
-  hyscan_sonar_model_changed (priv);
-
-  g_mutex_unlock (&priv->lock);
-
-  return status;
+  return hyscan_param_set (HYSCAN_PARAM (priv->control), list);
 }
 
 static gboolean
 hyscan_sonar_model_param_get (HyScanParam     *param,
                               HyScanParamList *list)
 {
-  HyScanSonarModelPrivate *priv = HYSCAN_SONAR_MODEL (param)->priv;
+  HyScanSonarModel *self = HYSCAN_SONAR_MODEL (param);
+  HyScanSonarModelPrivate *priv = self->priv;
 
-  return hyscan_param_get (priv->fake, list);
+  return hyscan_param_get (HYSCAN_PARAM (priv->control), list);
 }
 
 
@@ -1258,6 +1252,31 @@ hyscan_sonar_model_new (HyScanControl *control)
   return g_object_new (HYSCAN_TYPE_SONAR_MODEL,
                        "control", control,
                        NULL);
+}
+
+void
+hyscan_sonar_model_set_sync_interval (HyScanSonarModel *model,
+                                      gint              usec)
+{
+  HyScanSonarModelPrivate *priv;
+
+  g_return_if_fail (HYSCAN_IS_SONAR_MODEL (model));
+
+  priv = model->priv;
+
+  g_atomic_int_set (&priv->sync_interval, usec);
+}
+
+gint
+hyscan_sonar_model_get_sync_interval (HyScanSonarModel *model)
+{
+  HyScanSonarModelPrivate *priv;
+
+  g_return_val_if_fail (HYSCAN_IS_SONAR_MODEL (model), 0);
+
+  priv = model->priv;
+
+  return g_atomic_int_get (&priv->sync_interval);
 }
 
 static void
