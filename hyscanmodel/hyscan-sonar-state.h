@@ -85,6 +85,11 @@ struct _HyScanSonarStateInterface
                                                                 gdouble                        *alpha);
   gboolean                    (*tvg_get_disabled)              (HyScanSonarState               *sonar,
                                                                 HyScanSourceType                source);
+  gboolean                    (*get_start)                     (HyScanSonarState               *state,
+                                                                gchar                         **project_name,
+                                                                gchar                         **track_name,
+                                                                HyScanTrackType                *track_type,
+                                                                HyScanTrackPlan               **plan);
 };
 
 HYSCAN_API
@@ -144,6 +149,13 @@ gboolean                    hyscan_sonar_state_tvg_get_logarithmic     (HyScanSo
 HYSCAN_API
 gboolean                    hyscan_sonar_state_tvg_get_disabled        (HyScanSonarState               *sonar,
                                                                         HyScanSourceType                source);
+
+HYSCAN_API
+gboolean                    hyscan_sonar_state_get_start               (HyScanSonarState               *state,
+                                                                        gchar                         **project_name,
+                                                                        gchar                         **track_name,
+                                                                        HyScanTrackType                *track_type,
+                                                                        HyScanTrackPlan               **plan);
 
 G_END_DECLS
 
