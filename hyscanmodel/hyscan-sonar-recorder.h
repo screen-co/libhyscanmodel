@@ -40,7 +40,8 @@ HyScanSonar *          hyscan_sonar_recorder_get_sonar      (HyScanSonarRecorder
 
 HYSCAN_API
 void                   hyscan_sonar_recorder_set_suffix     (HyScanSonarRecorder *recorder,
-                                                             const gchar         *suffix);
+                                                             const gchar         *suffix,
+                                                             gboolean             one_time);
 
 HYSCAN_API
 void                   hyscan_sonar_recorder_set_plan       (HyScanSonarRecorder *recorder,
@@ -59,10 +60,10 @@ void                   hyscan_sonar_recorder_set_track_type (HyScanSonarRecorder
                                                              HyScanTrackType      track_type);
 
 HYSCAN_API
-void                   hyscan_sonar_recorder_start          (HyScanSonarRecorder *recorder);
+gboolean               hyscan_sonar_recorder_start          (HyScanSonarRecorder *recorder);
 
 HYSCAN_API
-void                   hyscan_sonar_recorder_stop           (HyScanSonarRecorder *recorder);
+gboolean               hyscan_sonar_recorder_stop           (HyScanSonarRecorder *recorder);
 
 
 G_END_DECLS

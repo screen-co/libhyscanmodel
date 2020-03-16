@@ -70,7 +70,8 @@ struct _HyScanSonarRecorderPrivate
   gchar                   *project_name;
   gchar                   *track_name;
   gchar                   *generated_name;
-  gchar                   *track_name_suffix;
+  gchar                   *suffix1;
+  gchar                   *suffix;
 
   HyScanTrackPlan         *plan;
   HyScanTrackType          track_type;
@@ -158,7 +159,8 @@ hyscan_sonar_recorder_object_finalize (GObject *object)
   g_free (priv->project_name);
   g_free (priv->track_name);
   g_free (priv->generated_name);
-  g_free (priv->track_name_suffix);
+  g_free (priv->suffix);
+  g_free (priv->suffix1);
 
   hyscan_track_plan_free (priv->plan);
 
@@ -168,26 +170,27 @@ hyscan_sonar_recorder_object_finalize (GObject *object)
   G_OBJECT_CLASS (hyscan_sonar_recorder_parent_class)->finalize (object);
 }
 
-/* Генерирует имя галса как следующий номер галса в БД. */
+/* Генерирует имя галса по шаблону "<следующий номер в БД><суффикс><одноразовый суффикс>". */
 static void
 hyscan_sonar_recorder_generate_name (HyScanSonarRecorder *recorder)
 {
   HyScanSonarRecorderPrivate *priv = recorder->priv;
-  gint track_num = 1;
-  const gchar *suffix;
+  gint track_num;
+  const gchar *suffix, *suffix1;
 
-  /* Число галсов в проекте. */
-  gint number;
   gint32 project_id;
   gchar **tracks;
   gchar **strs;
 
+  /* Ищем в текущем проекте галс с самым большим номером в названии. */
   project_id = hyscan_db_project_open (priv->db, priv->project_name);
   tracks = project_id > 0 ? hyscan_db_track_list (priv->db, project_id) : NULL;
 
+  track_num = 1;
   for (strs = tracks; strs != NULL && *strs != NULL; strs++)
     {
-      /* Ищем галс с самым большим номером в названии. */
+      gint number;
+
       number = g_ascii_strtoll (*strs, NULL, 10);
       if (number >= track_num)
         track_num = number + 1;
@@ -196,10 +199,14 @@ hyscan_sonar_recorder_generate_name (HyScanSonarRecorder *recorder)
   hyscan_db_close (priv->db, project_id);
   g_strfreev (tracks);
 
-  suffix = priv->track_name_suffix != NULL ? priv->track_name_suffix : "";
+  suffix1 = priv->suffix1 != NULL ? priv->suffix1 : "";
+  suffix = priv->suffix != NULL ? priv->suffix : "";
 
   g_free (priv->generated_name);
-  priv->generated_name = g_strdup_printf ("%d%s", track_num, suffix);
+  priv->generated_name = g_strdup_printf ("%03d%s%s", track_num, suffix, suffix1);
+
+  /* Удаляем одноразовый суффикс. */
+  g_clear_pointer (&priv->suffix1, g_free);
 }
 
 /**
@@ -240,25 +247,114 @@ hyscan_sonar_recorder_get_sonar (HyScanSonarRecorder *recorder)
   return g_object_ref (priv->sonar);
 }
 
+/* Функция возвращает копию строки, в которой невалидные символы заменены транслитерацией или удалены. */
+static gchar *
+hyscan_sonar_recorder_name_normalize (const gchar *name)
+{
+  /* Правила транслитерации. */
+  static struct
+  {
+    const gchar *from;
+    const gchar *to;
+  } translit[] = {{"а", "a"},   {"А", "A"},
+                  {"б", "b"},   {"Б", "B"},
+                  {"в", "v"},   {"В", "V"},
+                  {"г", "g"},   {"Г", "G"},
+                  {"д", "d"},   {"Д", "D"},
+                  {"е", "e"},   {"Е", "E"},
+                  {"ё", "yo"},  {"Ё", "Yo"},
+                  {"ж", "zh"},  {"Ж", "Zh"},
+                  {"з", "z"},   {"З", "Z"},
+                  {"и", "i"},   {"И", "I"},
+                  {"й", "y"},   {"Й", "Y"},
+                  {"к", "k"},   {"К", "K"},
+                  {"л", "l"},   {"Л", "L"},
+                  {"м", "m"},   {"М", "M"},
+                  {"н", "n"},   {"Н", "N"},
+                  {"о", "o"},   {"О", "O"},
+                  {"п", "p"},   {"П", "P"},
+                  {"р", "r"},   {"Р", "R"},
+                  {"с", "s"},   {"С", "S"},
+                  {"т", "t"},   {"Т", "T"},
+                  {"у", "u"},   {"У", "U"},
+                  {"ф", "f"},   {"Ф", "F"},
+                  {"х", "h"},   {"Х", "H"},
+                  {"ц", "c"},   {"Ц", "C"},
+                  {"ч", "ch"},  {"Ч", "Ch"},
+                  {"ш", "sh"},  {"Ш", "Sh"},
+                  {"щ", "sch"}, {"Щ", "Sch"},
+                  {"ъ", ""},    {"Ъ", ""},
+                  {"ы", "y"},   {"Ы", "Y"},
+                  {"ь", ""},    {"Ь", ""},
+                  {"э", "e"},   {"Э", "E"},
+                  {"ю", "yu"},  {"Ю", "Yu"},
+                  {"я", "ya"},  {"Я", "Ya"},
+                  {" ", "_"}};
+  guint map_n = G_N_ELEMENTS (translit);
+  guint j;
+  const gchar *utf8_char;
+  GString *string;
+
+  if (name == NULL || !g_utf8_validate (name, -1, NULL))
+    return NULL;
+
+  string = g_string_new (NULL);
+
+  /* Цикл по UTF-8 символам строки. */
+  for (utf8_char = name; *utf8_char != '\0'; utf8_char = g_utf8_next_char (utf8_char))
+    {
+      gchar c = *utf8_char;
+
+      /* Валидные символы оставляем. См. hyscan_db_file_check_name(). */
+      if ((c >= 'a' && c <= 'z') ||
+          (c >= 'A' && c <= 'Z') ||
+          (c >= '0' && c <= '9') ||
+          (c == '-' || c == '_' || c == '.'))
+        {
+          g_string_append_c (string, c);
+        }
+
+      /* Русские буквы заменяем транслитом. */
+      else
+        {
+          for (j = 0; j < map_n; j++)
+            {
+              if (!g_str_has_prefix (utf8_char, translit[j].from))
+                continue;
+
+              g_string_append (string, translit[j].to);
+              break;
+            }
+        }
+    }
+
+  return g_string_free (string, FALSE);
+}
+
 /**
  * hyscan_sonar_recorder_set_suffix:
  * @recorder: указатель на #HyScanSonarRecorder
  * @suffix: (optional): суффикс имени галса
+ * @one_time: %TRUE, суффикс применяется только к следующему старту; %FALSE, если ко всем последующим
  *
  * Функция устанавливает суффикс, который будет добавлен в конце автоматически сгенерированных имён галсов.
+ * Недопустимые символы в строке будут транслитерированы или удалены.
  */
 void
 hyscan_sonar_recorder_set_suffix (HyScanSonarRecorder *recorder,
-                                  const gchar         *suffix)
+                                  const gchar         *suffix,
+                                  gboolean             one_time)
 {
   HyScanSonarRecorderPrivate *priv;
+  gchar **suffix_field;
 
   g_return_if_fail (HYSCAN_IS_SONAR_RECORDER (recorder));
 
   priv = recorder->priv;
 
-  g_free (priv->track_name_suffix);
-  priv->track_name_suffix = g_strdup (suffix);
+  suffix_field = one_time ? &priv->suffix1 : &priv->suffix;
+  g_free (*suffix_field);
+  *suffix_field = hyscan_sonar_recorder_name_normalize (suffix);
 }
 
 /**
@@ -350,14 +446,14 @@ hyscan_sonar_recorder_set_track_type (HyScanSonarRecorder *recorder,
  *
  * Функция запускает работу гидролокатора с указанными ранее параметрами.
  */
-void
+gboolean
 hyscan_sonar_recorder_start (HyScanSonarRecorder *recorder)
 {
 
   HyScanSonarRecorderPrivate *priv;
   const gchar *track_name;
 
-  g_return_if_fail (HYSCAN_IS_SONAR_RECORDER (recorder));
+  g_return_val_if_fail (HYSCAN_IS_SONAR_RECORDER (recorder), FALSE);
 
   priv = recorder->priv;
   if (priv->track_name == NULL)
@@ -370,7 +466,7 @@ hyscan_sonar_recorder_start (HyScanSonarRecorder *recorder)
       track_name = priv->track_name;
     }
 
-  hyscan_sonar_start (priv->sonar, priv->project_name, track_name, priv->track_type, priv->plan);
+  return hyscan_sonar_start (priv->sonar, priv->project_name, track_name, priv->track_type, priv->plan);
 }
 
 /**
@@ -379,14 +475,14 @@ hyscan_sonar_recorder_start (HyScanSonarRecorder *recorder)
  *
  * Функция останавливает работы гидролокатора.
  */
-void
+gboolean
 hyscan_sonar_recorder_stop (HyScanSonarRecorder *recorder)
 {
   HyScanSonarRecorderPrivate *priv;
 
-  g_return_if_fail (HYSCAN_IS_SONAR_RECORDER (recorder));
+  g_return_val_if_fail (HYSCAN_IS_SONAR_RECORDER (recorder), FALSE);
 
   priv = recorder->priv;
 
-  hyscan_sonar_stop (priv->sonar);
+  return hyscan_sonar_stop (priv->sonar);
 }

@@ -27,6 +27,8 @@ set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
      hyscan-sonar-model.c
      hyscan-sonar-recorder.c
      hyscan-track-stats.c
+     hyscan-planner-selection.c
+     hyscan-steer.c
      hyscan-planner-stats.c
      ${CMAKE_BINARY_DIR}/marshallers/hyscan-model-marshallers.c
      # hyscan-appearance.c
@@ -64,6 +66,8 @@ set (HYSCAN_MODEL_LIBRARY_INSTALL_FILES
      hyscan-sonar-model.h
      hyscan-sonar-recorder.h
      hyscan-track-stats.h
+     hyscan-planner-selection.h
+     hyscan-steer.h
      hyscan-planner-stats.h
      # hyscan-appearance.h
      # hyscan-serializable.h
