@@ -112,11 +112,11 @@ void                       hyscan_steer_sensor_set_offset (HyScanSteer          
                                                            const HyScanAntennaOffset *offset);
 
 HYSCAN_API
-void                       hyscan_steer_set_threshold    (HyScanSteer                *steer,
-                                                          gdouble                     threshold);
+void                       hyscan_steer_set_threshold     (HyScanSteer                *steer,
+                                                           gdouble                     threshold);
 
 HYSCAN_API
-gdouble                    hyscan_steer_get_threshold    (HyScanSteer                *steer);
+gdouble                    hyscan_steer_get_threshold     (HyScanSteer                *steer);
 
 HYSCAN_API
 void                       hyscan_steer_set_autostart     (HyScanSteer               *steer,
@@ -124,6 +124,13 @@ void                       hyscan_steer_set_autostart     (HyScanSteer          
 
 HYSCAN_API
 gboolean                   hyscan_steer_get_autostart     (HyScanSteer               *steer);
+
+HYSCAN_API
+void                       hyscan_steer_set_autoselect    (HyScanSteer               *steer,
+                                                           gboolean                   autoselect);
+
+HYSCAN_API
+gboolean                   hyscan_steer_get_autoselect    (HyScanSteer               *steer);
 
 HYSCAN_API
 void                       hyscan_steer_calc_point        (HyScanSteerPoint          *point,

@@ -41,12 +41,19 @@
  * и определяет отклонение текущего положения и скорости движения от плановых
  * параметров.
  *
- * План галса должен быть установлен в модель выбора планировщика с помощью функции
- * hyscan_planner_selection_activate().
- *
  * При записи галса важно именно положение гидролокатора, а не судна как такового,
  * поэтому в виджете есть возможность вносить поправку на смещение антенны с
  * помощью функции hyscan_steer_sensor_set_offset().
+ *
+ * План галса должен быть установлен в модель выбора планировщика с помощью функции
+ * hyscan_planner_selection_activate().
+ *
+ * Модель может в автоматическом режиме активировать плановый галс, который находится
+ * ближе всего к текущему местоположению судна. Для включения автовыбора
+ * используется функция hyscan_steer_set_autoselect().
+ *
+ * Для автоматического старта работы локатора при выходе на текущий плановый галс
+ * используется функция hyscan_steer_set_autostart().
  *
  */
 
@@ -57,6 +64,8 @@
 
 #define DEG2RAD(deg) (deg / 180. * G_PI)  /* Перевод из градусов в радианы. */
 #define RAD2DEG(rad) (rad / G_PI * 180.)  /* Перевод из радиан в градусы. */
+#define AUTOSELECT_INTERVAL 2000          /* Интервал отслеживания ближайших плановых галсов, мс. */
+#define AUTOSELECT_DIST     100           /* Максимальное расстояние, на котором галс может быть выбран автоматом, м. */
 
 enum
 {
@@ -65,6 +74,7 @@ enum
   PROP_SELECTION,
   PROP_RECORDER,
   PROP_AUTOSTART,
+  PROP_AUTOSELECT,
   PROP_THRESHOLD,
   PROP_LAST
 };
@@ -100,6 +110,11 @@ struct _HyScanSteerPrivate
 
   gboolean                autostart;       /* Автоматический старт локатора включён. */
   gboolean                recording;       /* Локатор включён. */
+  gboolean                autoselect;      /* Автоматический выбор ближайшего плана галса. */
+
+  guint                   select_tag;      /* Тэг периодической функции по выбору галса для навигации. */
+  HyScanNavModelData     *nav_data;        /* Последние полученные данные навигации. */
+  GHashTable             *plan_geo;        /* Хэш-таблица объектов HyScanGeo по каждому из планов галсов. */
 };
 
 static void      hyscan_steer_set_property             (GObject               *object,
@@ -115,9 +130,12 @@ static void      hyscan_steer_object_finalize          (GObject               *o
 static void      hyscan_steer_set_track                (HyScanSteer           *steer);
 static void      hyscan_steer_nav_changed              (HyScanSteer           *steer);
 static void      hyscan_steer_start_stop               (HyScanSteer           *steer);
+static gboolean  hyscan_steer_plan_select              (HyScanSteer           *steer);
+static void      hyscan_steer_plan_geo_clear           (HyScanSteer *steer);
 
 static guint       hyscan_steer_signals[SIGNAL_LAST] = { 0 };
 static GParamSpec* hyscan_steer_prop_autostart;
+static GParamSpec* hyscan_steer_prop_autoselect;
 static GParamSpec* hyscan_steer_prop_threshold;
 
 G_DEFINE_TYPE_WITH_PRIVATE (HyScanSteer, hyscan_steer, G_TYPE_OBJECT)
@@ -150,14 +168,20 @@ hyscan_steer_class_init (HyScanSteerClass *klass)
 
   hyscan_steer_prop_autostart = g_param_spec_boolean ("autostart", "Auto start",
                                                       "Start sonar when approaching the plan track",
+                                                      FALSE,
+                                                      G_PARAM_CONSTRUCT | G_PARAM_READWRITE);
+  g_object_class_install_property (object_class, PROP_AUTOSTART, hyscan_steer_prop_autostart);
+
+  hyscan_steer_prop_autoselect = g_param_spec_boolean ("autoselect", "Plan auto-select",
+                                                       "Automatically select the next plan track",
                                                        FALSE,
                                                        G_PARAM_CONSTRUCT | G_PARAM_READWRITE);
-  g_object_class_install_property (object_class, PROP_AUTOSTART, hyscan_steer_prop_autostart);
+  g_object_class_install_property (object_class, PROP_AUTOSELECT, hyscan_steer_prop_autoselect);
 
   hyscan_steer_prop_threshold = g_param_spec_double ("threshold", "Threshold",
                                                      "Maximum allowed distance to the plan track",
-                                                      0, G_MAXDOUBLE, 2.0,
-                                                      G_PARAM_CONSTRUCT | G_PARAM_READWRITE);
+                                                     0, G_MAXDOUBLE, 2.0,
+                                                     G_PARAM_CONSTRUCT | G_PARAM_READWRITE);
   g_object_class_install_property (object_class, PROP_THRESHOLD, hyscan_steer_prop_threshold);
 
   /**
@@ -218,6 +242,10 @@ hyscan_steer_set_property (GObject      *object,
       hyscan_steer_set_autostart (steer, g_value_get_boolean (value));
       break;
 
+    case PROP_AUTOSELECT:
+      hyscan_steer_set_autoselect (steer, g_value_get_boolean (value));
+      break;
+
     case PROP_THRESHOLD:
       hyscan_steer_set_threshold (steer, g_value_get_double (value));
       break;
@@ -241,6 +269,10 @@ hyscan_steer_get_property (GObject    *object,
     {
     case PROP_AUTOSTART:
       g_value_set_boolean (value, priv->autostart);
+      break;
+
+    case PROP_AUTOSELECT:
+      g_value_set_boolean (value, priv->autoselect);
       break;
 
     case PROP_THRESHOLD:
@@ -275,7 +307,10 @@ hyscan_steer_object_constructed (GObject *object)
 
   g_signal_connect_swapped (priv->nav_model, "changed", G_CALLBACK (hyscan_steer_nav_changed), steer);
   g_signal_connect_swapped (priv->planner_model, "changed", G_CALLBACK (hyscan_steer_set_track), steer);
+  g_signal_connect_swapped (priv->planner_model, "changed", G_CALLBACK (hyscan_steer_plan_geo_clear), steer);
   g_signal_connect_swapped (priv->selection, "activated", G_CALLBACK (hyscan_steer_set_track), steer);
+
+  priv->select_tag = g_timeout_add (AUTOSELECT_INTERVAL, (GSourceFunc) hyscan_steer_plan_select, steer);
 }
 
 static void
@@ -290,8 +325,76 @@ hyscan_steer_object_finalize (GObject *object)
   g_clear_object (&priv->nav_model);
   g_clear_object (&priv->sonar_state);
   g_clear_object (&priv->geo);
+  g_clear_pointer (&priv->plan_geo, g_hash_table_unref);
+  g_clear_pointer (&priv->track, hyscan_planner_track_free);
+  g_free (priv->track_id);
+  g_free (priv->nav_data);
+  g_source_remove (priv->select_tag);
 
   G_OBJECT_CLASS (hyscan_steer_parent_class)->finalize (object);
+}
+
+/* Функция выбирает ближайший план галса для навигации. */
+static gboolean
+hyscan_steer_plan_select (HyScanSteer *steer)
+{
+  HyScanSteerPrivate *priv = steer->priv;
+  HyScanNavModelData *nav_data = priv->nav_data;
+
+  GHashTableIter iter;
+  gchar *key;
+  HyScanGeo *geo;
+
+  gdouble min_cost;
+  const gchar *track_id = NULL;
+
+  /* В некоторых случаях ничего не делаем. */
+  if (priv->recording || !priv->autoselect || nav_data == NULL)
+    return G_SOURCE_CONTINUE;
+
+  /* Заполняем таблицу из объектов HyScanGeo для планов галсов. 
+   * Она очищается каждый раз при изменении объектов планировщика. */
+  if (priv->plan_geo == NULL)
+    {
+      GHashTable *tracks;
+      HyScanPlannerTrack *track;
+
+      priv->plan_geo = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_object_unref);
+      tracks = hyscan_object_model_get (priv->planner_model);
+      g_hash_table_iter_init (&iter, tracks);
+      while (g_hash_table_iter_next (&iter, (gpointer *) &key, (gpointer *) &track))
+        {
+          if (HYSCAN_IS_PLANNER_TRACK (track))
+            g_hash_table_insert (priv->plan_geo, g_strdup (key), hyscan_planner_track_geo (&track->plan, NULL));
+        }
+
+      g_hash_table_unref (tracks);
+    }
+
+  /* Ищем ближайший плановый галс. */
+  min_cost = G_MAXDOUBLE;
+  g_hash_table_iter_init (&iter, priv->plan_geo);
+  while (g_hash_table_iter_next (&iter, (gpointer *) &key, (gpointer *) &geo))
+    {
+      gdouble cost;
+      HyScanGeoCartesian2D position;
+
+      if (!hyscan_geo_geo2topoXY (geo, &position, nav_data->coord))
+        continue;
+
+      cost = hypot (position.x, position.y);
+      if (cost > min_cost)
+        continue;
+
+      min_cost = cost;
+      track_id = key;
+    }
+
+  /* Если найденный галс недалеко и ешё не активирован, то активируем его. */
+  if (min_cost < AUTOSELECT_DIST && g_strcmp0 (priv->track_id, track_id) != 0)
+    hyscan_planner_selection_activate (priv->selection, track_id);
+
+  return G_SOURCE_CONTINUE;
 }
 
 /* Обработчик сигнала "start-stop". Синхронизирует статус работы локатора. */
@@ -313,13 +416,14 @@ hyscan_steer_nav_changed (HyScanSteer *steer)
   HyScanNavModelData data;
   HyScanSteerPoint point = { 0 };
 
-  if (!hyscan_nav_model_get (priv->nav_model, &data, NULL))
+  g_clear_pointer (&priv->nav_data, g_free);
+  if (hyscan_nav_model_get (priv->nav_model, &data, NULL))
+    priv->nav_data = g_memdup (&data, sizeof (data));
+
+  if (priv->nav_data == NULL || priv->geo == NULL)
     return;
 
-  if (priv->geo == NULL)
-    return;
-
-  point.nav_data = data;
+  point.nav_data = *priv->nav_data;
   hyscan_steer_calc_point (&point, steer);
 
   g_signal_emit (steer, hyscan_steer_signals[SIGNAL_POINT], 0, &point);
@@ -369,8 +473,19 @@ hyscan_steer_nav_changed (HyScanSteer *steer)
         {
           hyscan_sonar_recorder_stop (priv->recorder);
           priv->recording = FALSE;
+
+          /* Выбираем следующий галс. */
+          hyscan_steer_plan_select (steer);
         }
     }
+}
+
+/* Обработчик сигнала "changed" модели объектов планировщика.
+ * Функция очищает таблицу priv->plan_geo. */
+static void
+hyscan_steer_plan_geo_clear (HyScanSteer *steer)
+{
+  g_clear_pointer (&steer->priv->plan_geo, g_hash_table_unref);
 }
 
 /* Функция обновляет активный план галса. */
@@ -619,6 +734,49 @@ hyscan_steer_get_autostart (HyScanSteer *steer)
   g_return_val_if_fail (HYSCAN_IS_STEER (steer), FALSE);
 
   return steer->priv->autostart;
+}
+
+/**
+ * hyscan_steer_set_autoselect:
+ * @steer: указатель на #HyScanSteer
+ * @autoselect: признак включения автоматического выбора галса для навигации
+ *
+ * Функция включает систему автоматического выбора галса для навигации.
+ *
+ */
+void
+hyscan_steer_set_autoselect (HyScanSteer *steer,
+                            gboolean     autoselect)
+{
+  HyScanSteerPrivate *priv;
+
+  g_return_if_fail (HYSCAN_IS_STEER (steer));
+  priv = steer->priv;
+
+  if (autoselect && priv->sonar_state == NULL)
+    {
+      g_warning ("HyScanSteer: sonar must implement HyScanSonarState to enable autoselect");
+      return;
+    }
+
+  steer->priv->autoselect = autoselect;
+  g_object_notify_by_pspec (G_OBJECT (steer), hyscan_steer_prop_autoselect);
+}
+
+/**
+ * hyscan_steer_get_autoselect:
+ * @steer: указатель на #HyScanSteer
+ *
+ * Функция возвращает %TRUE, если включена система автоматического выбора галса для навигации.
+ *
+ * Returns: признак включенного автостарта.
+ */
+gboolean
+hyscan_steer_get_autoselect (HyScanSteer *steer)
+{
+  g_return_val_if_fail (HYSCAN_IS_STEER (steer), FALSE);
+
+  return steer->priv->autoselect;
 }
 
 /**
