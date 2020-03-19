@@ -35,7 +35,7 @@
 #ifndef __HYSCAN_STEER_H__
 #define __HYSCAN_STEER_H__
 
-#include <hyscan-nav-model.h>
+#include <hyscan-nav-state.h>
 #include <hyscan-planner-selection.h>
 #include <hyscan-sonar-recorder.h>
 
@@ -65,7 +65,7 @@ typedef struct _HyScanSteerPoint HyScanSteerPoint;
  */
 struct _HyScanSteerPoint
 {
-  HyScanNavModelData   nav_data;
+  HyScanNavStateData   nav_data;
   HyScanGeoCartesian2D position; 
   HyScanGeoCartesian2D track;
   gdouble              d_y;
@@ -89,7 +89,7 @@ HYSCAN_API
 GType                      hyscan_steer_get_type          (void);
 
 HYSCAN_API
-HyScanSteer *              hyscan_steer_new               (HyScanNavModel            *model,
+HyScanSteer *              hyscan_steer_new               (HyScanNavState            *nav_state,
                                                            HyScanPlannerSelection    *selection,
                                                            HyScanSonarRecorder       *recorder);
 

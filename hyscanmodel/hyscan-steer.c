@@ -70,7 +70,7 @@
 enum
 {
   PROP_O,
-  PROP_MODEL,
+  PROP_NAV_STATE,
   PROP_SELECTION,
   PROP_RECORDER,
   PROP_AUTOSTART,
@@ -88,7 +88,7 @@ enum
 
 struct _HyScanSteerPrivate
 {
-  HyScanNavModel         *nav_model;       /* Модель навигационных данных. */
+  HyScanNavState         *nav_model;       /* Модель навигационных данных. */
   HyScanObjectModel      *planner_model;   /* Модель объектов планировщика. */
   HyScanPlannerSelection *selection;       /* Модель выбранных объектов планировщика.  */
   HyScanSonarRecorder    *recorder;        /* Модель управления работой гидролокатора. */
@@ -113,7 +113,7 @@ struct _HyScanSteerPrivate
   gboolean                autoselect;      /* Автоматический выбор ближайшего плана галса. */
 
   guint                   select_tag;      /* Тэг периодической функции по выбору галса для навигации. */
-  HyScanNavModelData     *nav_data;        /* Последние полученные данные навигации. */
+  HyScanNavStateData     *nav_data;        /* Последние полученные данные навигации. */
   GHashTable             *plan_geo;        /* Хэш-таблица объектов HyScanGeo по каждому из планов галсов. */
 };
 
@@ -151,10 +151,10 @@ hyscan_steer_class_init (HyScanSteerClass *klass)
   object_class->constructed = hyscan_steer_object_constructed;
   object_class->finalize = hyscan_steer_object_finalize;
 
-  g_object_class_install_property (object_class, PROP_MODEL,
-    g_param_spec_object ("model", "HyScanNavModel", "Navigation model",
-                         HYSCAN_TYPE_NAV_MODEL,
-                         G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY));
+  g_object_class_install_property (object_class, PROP_NAV_STATE,
+                                   g_param_spec_object ("nav-state", "HyScanNavState", "Real-time navigation data",
+                                   HYSCAN_TYPE_NAV_STATE,
+                                   G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY));
 
   g_object_class_install_property (object_class, PROP_SELECTION,
     g_param_spec_object ("selection", "HyScanPlannerSelection", "Model of selected planner objects",
@@ -226,7 +226,7 @@ hyscan_steer_set_property (GObject      *object,
 
   switch (prop_id)
     {
-    case PROP_MODEL:
+    case PROP_NAV_STATE:
       priv->nav_model = g_value_dup_object (value);
       break;
 
@@ -305,7 +305,7 @@ hyscan_steer_object_constructed (GObject *object)
     }
   g_object_unref (sonar);
 
-  g_signal_connect_swapped (priv->nav_model, "changed", G_CALLBACK (hyscan_steer_nav_changed), steer);
+  g_signal_connect_swapped (priv->nav_model, "nav-changed", G_CALLBACK (hyscan_steer_nav_changed), steer);
   g_signal_connect_swapped (priv->planner_model, "changed", G_CALLBACK (hyscan_steer_set_track), steer);
   g_signal_connect_swapped (priv->planner_model, "changed", G_CALLBACK (hyscan_steer_plan_geo_clear), steer);
   g_signal_connect_swapped (priv->selection, "activated", G_CALLBACK (hyscan_steer_set_track), steer);
@@ -318,6 +318,10 @@ hyscan_steer_object_finalize (GObject *object)
 {
   HyScanSteer *steer = HYSCAN_STEER (object);
   HyScanSteerPrivate *priv = steer->priv;
+
+  g_signal_handlers_disconnect_by_data (priv->nav_model, steer);
+  g_signal_handlers_disconnect_by_data (priv->planner_model, steer);
+  g_signal_handlers_disconnect_by_data (priv->selection, steer);
 
   g_clear_object (&priv->recorder);
   g_clear_object (&priv->selection);
@@ -339,7 +343,7 @@ static gboolean
 hyscan_steer_plan_select (HyScanSteer *steer)
 {
   HyScanSteerPrivate *priv = steer->priv;
-  HyScanNavModelData *nav_data = priv->nav_data;
+  HyScanNavStateData *nav_data = priv->nav_data;
 
   GHashTableIter iter;
   gchar *key;
@@ -413,11 +417,11 @@ hyscan_steer_nav_changed (HyScanSteer *steer)
   HyScanSteerPrivate *priv = steer->priv;
   HyScanPlannerTrack *track = priv->track;
   HyScanPlannerZone *zone = priv->zone;
-  HyScanNavModelData data;
+  HyScanNavStateData data;
   HyScanSteerPoint point = { 0 };
 
   g_clear_pointer (&priv->nav_data, g_free);
-  if (hyscan_nav_model_get (priv->nav_model, &data, NULL))
+  if (hyscan_nav_state_get (priv->nav_model, &data, NULL))
     priv->nav_data = g_memdup (&data, sizeof (data));
 
   if (priv->nav_data == NULL || priv->geo == NULL)
@@ -526,7 +530,7 @@ hyscan_steer_set_track (HyScanSteer *steer)
 
 /**
  * hyscan_steer_new:
- * @model: модель данных навигации
+ * @nav_state: модель данных навигации
  * @selection: модель выбранных объектов планировщика
  * @recorder: объект управления записью галсов
  *
@@ -535,12 +539,12 @@ hyscan_steer_set_track (HyScanSteer *steer)
  * Returns: (transfer full): указатель на новый объект #HyScanSteer, для удаления g_object_unref().
  */
 HyScanSteer *
-hyscan_steer_new (HyScanNavModel         *model,
+hyscan_steer_new (HyScanNavState         *nav_state,
                   HyScanPlannerSelection *selection,
                   HyScanSonarRecorder    *recorder)
 {
   return g_object_new (HYSCAN_TYPE_STEER,
-                       "model", model,
+                       "nav-state", nav_state,
                        "selection", selection,
                        "recorder", recorder,
                        NULL);
@@ -835,7 +839,7 @@ hyscan_steer_calc_point (HyScanSteerPoint *point,
  * hyscan_steer_point_copy:
  * @point: указатель на структуру #HyScanSteerPoint
  *
- * Функция создаёт копию структурыы #HyScanSteerPoint
+ * Функция создаёт копию структуры #HyScanSteerPoint
  *
  * Returns: копия структуры, для удаления hyscan_steer_point_free().
  */
