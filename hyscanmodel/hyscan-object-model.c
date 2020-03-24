@@ -128,13 +128,12 @@ static void         hyscan_object_model_set_property           (GObject         
                                                                 GParamSpec                *pspec);
 static void         hyscan_object_model_clear_state            (HyScanObjectModelState    *state);
 static gboolean     hyscan_object_model_track_sync             (HyScanObjectModelPrivate  *priv);
-static GHashTable * hyscan_object_model_make_ht                (HyScanObjectModelPrivate  *priv);
+static GHashTable * hyscan_object_model_make_ht                (void);
 static void         hyscan_object_model_add_task               (HyScanObjectModel         *model,
                                                                 const gchar               *id,
                                                                 const HyScanObject        *object,
                                                                 HyScanObjectModelAction    action);
-static void         hyscan_object_model_free_task              (gpointer                   _task,
-                                                                gpointer                   _mdata);
+static void         hyscan_object_model_free_task              (gpointer                   _task);
 static void         hyscan_object_model_do_task                (gpointer                   data,
                                                                 gpointer                   user_data);
 static void         hyscan_object_model_do_all_tasks           (HyScanObjectModelPrivate  *priv,
@@ -276,16 +275,9 @@ hyscan_object_model_track_sync (HyScanObjectModelPrivate *priv)
 
 /* Функция создаёт хэш-таблицу для хранения объектов. */
 static GHashTable *
-hyscan_object_model_make_ht (HyScanObjectModelPrivate *priv)
+hyscan_object_model_make_ht (void)
 {
-  HyScanObjectDataClass *data_class;
-  GDestroyNotify destroy_func;
-
-  data_class = g_type_class_ref (priv->data_type);
-  destroy_func = (GDestroyNotify) data_class->object_destroy;
-  g_type_class_unref (data_class);
-
-  return g_hash_table_new_full (g_str_hash, g_str_equal, g_free, destroy_func);
+  return g_hash_table_new_full (g_str_hash, g_str_equal, g_free, (GDestroyNotify) hyscan_object_free);
 }
 
 /* Функция создаёт новое задание. */
@@ -305,7 +297,7 @@ hyscan_object_model_add_task (HyScanObjectModel       *model,
   task = g_slice_new (HyScanObjectModelTask);
   task->action = action;
   task->id = (id != NULL) ? g_strdup (id) : NULL;
-  task->object = klass->object_copy (object);
+  task->object = hyscan_object_copy (object);
 
   g_type_class_unref (klass);
 
@@ -322,15 +314,11 @@ hyscan_object_model_add_task (HyScanObjectModel       *model,
 
 /* Функция освобождает задание. */
 static void
-hyscan_object_model_free_task (gpointer _task,
-                               gpointer _mdata)
+hyscan_object_model_free_task (gpointer _task)
 {
   HyScanObjectModelTask *task = _task;
-  HyScanObjectData *mdata = _mdata;
-  HyScanObjectDataClass *klass = HYSCAN_OBJECT_DATA_GET_CLASS (mdata);
 
-  if (task->object != NULL)
-    klass->object_destroy (task->object);
+  hyscan_object_free (task->object);
   g_free (task->id);
   g_slice_free (HyScanObjectModelTask, task);
 }
@@ -378,7 +366,7 @@ hyscan_object_model_do_all_tasks (HyScanObjectModelPrivate  *priv,
 
   /* Все задания отправляем в БД и очищаем наш временный список. */
   g_slist_foreach (tasks, hyscan_object_model_do_task, data);
-  g_slist_foreach (tasks, hyscan_object_model_free_task, data);
+  g_slist_foreach (tasks, (GFunc) hyscan_object_model_free_task, NULL);
   g_slist_free (tasks);
 }
 
@@ -395,7 +383,7 @@ hyscan_object_model_get_all_objects (HyScanObjectModelPrivate *priv,
   /* Считываем список идентификаторов. Прошу обратить внимание, что
    * возврат хэш-таблицы с 0 элементов -- это нормальная ситуация, например,
    * если раньше был 1 объект, а потом его удалили. */
-  object_list = hyscan_object_model_make_ht (priv);
+  object_list = hyscan_object_model_make_ht ();
   id_list = hyscan_object_data_get_ids (data, &len);
 
   /* Поштучно копируем из БД в хэш-таблицу. */
@@ -721,7 +709,7 @@ hyscan_object_model_get_id (HyScanObjectModel *model,
   data_class = g_type_class_ref (priv->data_type);
 
   object = g_hash_table_lookup (priv->objects, id);
-  copy = data_class->object_copy (object);
+  copy = hyscan_object_copy (object);
   g_mutex_unlock (&priv->objects_lock);
 
   g_type_class_unref (data_class);
@@ -754,13 +742,13 @@ hyscan_object_model_copy (HyScanObjectModel *model,
   if (src == NULL)
     return NULL;
 
-  dst = hyscan_object_model_make_ht (priv);
+  dst = hyscan_object_model_make_ht ();
   data_class = g_type_class_ref (priv->data_type);
 
   /* Переписываем объекты. */
   g_hash_table_iter_init (&iter, src);
   while (g_hash_table_iter_next (&iter, &k, &v))
-    g_hash_table_insert (dst, g_strdup (k), data_class->object_copy (v));
+    g_hash_table_insert (dst, g_strdup (k), hyscan_object_copy (v));
 
   g_type_class_unref (data_class);
 
