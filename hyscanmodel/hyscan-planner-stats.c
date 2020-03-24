@@ -97,6 +97,8 @@ static void         hyscan_planner_stats_tracks_changed     (HyScanPlannerStats 
 static void         hyscan_planner_stats_planner_changed    (HyScanPlannerStats         *planner_stats);
 static void         hyscan_gtk_planner_list_update_tracks   (HyScanPlannerStats         *planner_stats);
 static void         hyscan_gtk_planner_list_update_zones    (HyScanPlannerStats         *planner_stats);
+static gint         hyscan_planner_stats_track_compare      (HyScanPlannerStatsTrack    *a,
+                                                             HyScanPlannerStatsTrack    *b);
 static gint         hyscan_planner_stats_interval_compare   (HyScanPlannerStatsInterval *a,
                                                              HyScanPlannerStatsInterval *b);
 
@@ -413,11 +415,30 @@ hyscan_gtk_planner_list_update_tracks (HyScanPlannerStats *planner_stats)
         hyscan_planner_stats_track_progress (track_info, &track_info->progress, &track_info->quality);
         g_hash_table_insert (zone_info->tracks, g_strdup (track_id), track_info);
       }
-
-      /* Суммируем информацию по полигону. */
-      zone_info->time += track_info->time;
-      zone_info->length += track_info->length;
     }
+}
+
+/* Функция для сортировки планов галсов в порядке их следования. */
+static gint
+hyscan_planner_stats_track_compare (HyScanPlannerStatsTrack *a,
+                                    HyScanPlannerStatsTrack *b)
+{
+  guint a_hash, b_hash;
+
+  if (a->object->number < b->object->number)
+    return -1;
+  else if (a->object->number > b->object->number)
+    return 1;
+
+  a_hash = g_str_hash (a->id);
+  b_hash = g_str_hash (b->id);
+
+  if (a_hash < b_hash)
+    return -1;
+  else if (a_hash > b_hash)
+    return 1;
+
+  return 0;
 }
 
 static void
@@ -457,13 +478,33 @@ hyscan_gtk_planner_list_update_zones (HyScanPlannerStats *planner_stats)
   while (g_hash_table_iter_next (&zone_iter, NULL, (gpointer *) &zone_info))
     {
       GHashTableIter track_iter;
+      GList *tracks = NULL, *link;
       HyScanPlannerStatsTrack *track_info;
       gdouble total_length = 0.0, quality_length = 0.0;
 
-      zone_info->velocity = (zone_info->time > 0) ? zone_info->length / zone_info->time : 0;
+      /* Формируем список галсов полигона в порядке их следования. */
       g_hash_table_iter_init (&track_iter, zone_info->tracks);
       while (g_hash_table_iter_next (&track_iter, NULL, (gpointer *) &track_info))
+        tracks = g_list_prepend (tracks, track_info);
+      tracks = g_list_sort (tracks, (GCompareFunc) hyscan_planner_stats_track_compare);
+
+      for (link = tracks; link != NULL; link = link->next)
         {
+          HyScanPlannerStatsTrack *next_track = link->next != NULL ? link->next->data : NULL;
+          gboolean transit_length;
+          track_info = link->data;
+
+          /* Считаем расстояние и время движения, включая переходы с галса на галс. */
+          zone_info->time += track_info->time;
+          zone_info->length += track_info->length;
+          if (next_track != NULL)
+            {
+              HyScanTrackPlan *cur_plan = &track_info->object->plan, *next_plan = &next_track->object->plan;
+              transit_length = hyscan_planner_track_transit (cur_plan, next_plan);
+              zone_info->length += transit_length;
+              zone_info->time += transit_length / (cur_plan->velocity > 0 ? cur_plan->velocity : 1.0);
+            }
+
           if (track_info->length == 0)
             continue;
 
@@ -477,6 +518,8 @@ hyscan_gtk_planner_list_update_zones (HyScanPlannerStats *planner_stats)
             }
         }
 
+        zone_info->velocity = (zone_info->time > 0) ? zone_info->length / zone_info->time : 0;
+
         if (total_length > 0)
           zone_info->progress /= total_length;
 
@@ -484,6 +527,8 @@ hyscan_gtk_planner_list_update_zones (HyScanPlannerStats *planner_stats)
           zone_info->quality /= quality_length;
         else
           zone_info->quality = -1.;
+
+        g_list_free (tracks);
     }
 }
 
