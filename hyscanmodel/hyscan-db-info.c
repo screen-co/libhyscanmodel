@@ -92,6 +92,7 @@ typedef struct
   HyScanDB                    *db;                     /* Интерфейс базы данных. */
   gint32                       id;                     /* Идентификатор открытого объекта. */
   guint32                      mod_counter;            /* Счётчик изменений. */
+  gboolean                     writeable;              /* Признак доступа к каналу на запись. */
 } HyScanDBInfoMonitor;
 
 struct _HyScanDBInfoPrivate
@@ -138,7 +139,8 @@ static HyScanTrackInfo *
 static void        hyscan_db_info_add_active_id        (GHashTable            *actives,
                                                         HyScanDB              *db,
                                                         gint32                 id,
-                                                        guint32                mod_counter);
+                                                        guint32                mod_counter,
+                                                        gboolean               writeable);
 
 static gboolean    hyscan_db_info_alerter              (gpointer               data);
 
@@ -273,7 +275,8 @@ static void
 hyscan_db_info_add_active_id (GHashTable *actives,
                               HyScanDB   *db,
                               gint32      id,
-                              guint32     mod_counter)
+                              guint32     mod_counter,
+                              gboolean    writeable)
 {
   HyScanDBInfoMonitor *info;
 
@@ -284,6 +287,7 @@ hyscan_db_info_add_active_id (GHashTable *actives,
   info->db = db;
   info->id = id;
   info->mod_counter = mod_counter;
+  info->writeable = writeable;
 
   g_hash_table_insert (actives, GINT_TO_POINTER (id), info);
 }
@@ -440,12 +444,22 @@ hyscan_db_info_watcher (gpointer data)
           HyScanDBInfoMonitor *info = value;
           guint32 mc;
 
-          mc = hyscan_db_get_mod_count (priv->db, info->id);
-          if (mc != info->mod_counter)
+          /* Проверяем, не пропал ли у канала режим доступа на запись. */
+          if (info->writeable)
             {
-              check_tracks = TRUE;
-              break;
+              if (!hyscan_db_channel_is_writable (priv->db, info->id))
+                check_tracks = TRUE;
             }
+          /* Проверяем другие изменения в объекте базы данных. */
+          else
+            {
+              mc = hyscan_db_get_mod_count (priv->db, info->id);
+              if (mc != info->mod_counter)
+                check_tracks = TRUE;
+            }
+
+          if (check_tracks)
+            break;
         }
 
       /* Проверяем изменение списка галсов. */
@@ -797,7 +811,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
   channels = hyscan_db_channel_list (db, track_id);
   if (channels == NULL)
     {
-      hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter);
+      hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter, FALSE);
       return NULL;
     }
 
@@ -917,14 +931,18 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
           n_sources += 1;
 
           if (active)
-            info->record = TRUE;
+            {
+              info->record = TRUE;
+              /* Следим, когда канал поменяет свой статус is_writeable. */
+              hyscan_db_info_add_active_id (actives, db, channel_id, 0, TRUE);
+          }
         }
 
       /* Ставим на карандаш, если канал открыт на запись. */
       else if (active)
         {
           guint32 channel_mod_counter = hyscan_db_get_mod_count (db, channel_id);
-          hyscan_db_info_add_active_id (actives, db, channel_id, channel_mod_counter);
+          hyscan_db_info_add_active_id (actives, db, channel_id, channel_mod_counter, FALSE);
         }
 
       hyscan_db_close (db, channel_id);
@@ -935,7 +953,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
   /* Если в галсе нет каналов, пропускаем его и добавляем в список проверяемых. */
   if (n_sources == 0)
     {
-      hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter);
+      hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter, FALSE);
       hyscan_db_info_track_info_free (info);
 
       return NULL;
@@ -943,7 +961,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
 
   /* Если в галсе есть открытый для записи канал, проверим этот галс позже. */
   if (info->record)
-    hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter);
+    hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter, FALSE);
   else
     hyscan_db_close (db, track_id);
 
