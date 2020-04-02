@@ -71,6 +71,7 @@ struct _HyScanProjectInfo
  * @description: описание галса
  * @operator_name: имя оператора записавшего галс
  * @sonar_info: общая информация о гидролокаторе
+ * @plan: информация о запланированных параметрах галса или NULL
  * @sources: список источников данных
  * @record: признак записи данных в галс
  * @error: признак ошибки в галсе
@@ -87,6 +88,7 @@ struct _HyScanTrackInfo
   const gchar         *description;
   const gchar         *operator_name;
   HyScanDataSchema    *sonar_info;
+  HyScanTrackPlan     *plan;
   gboolean             sources[HYSCAN_SOURCE_LAST];
   gboolean             record;
   gboolean             error;
@@ -127,6 +129,9 @@ void                   hyscan_db_info_set_project              (HyScanDBInfo    
 
 HYSCAN_API
 gchar *                hyscan_db_info_get_project              (HyScanDBInfo          *info);
+
+HYSCAN_API
+HyScanDB *             hyscan_db_info_get_db                   (HyScanDBInfo          *info);
 
 HYSCAN_API
 GHashTable *           hyscan_db_info_get_projects             (HyScanDBInfo          *info);

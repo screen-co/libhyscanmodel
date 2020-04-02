@@ -1,3 +1,24 @@
+find_program (MARSHAL_COMPILER glib-genmarshal)
+if (${MARSHAL_COMPILER} STREQUAL MARSHAL_COMPILER-NOTFOUND)
+  message (FATAL_ERROR "GLib marshallers compiler not found.")
+endif ()
+
+file (MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/marshallers")
+include_directories ("${CMAKE_BINARY_DIR}/marshallers")
+
+add_custom_command (OUTPUT "${CMAKE_BINARY_DIR}/marshallers/hyscan-model-marshallers.c"
+                    COMMAND ${MARSHAL_COMPILER} --header
+                            --prefix hyscan_model_marshal
+                            hyscan-model-marshallers.list >
+                            "${CMAKE_BINARY_DIR}/marshallers/hyscan-model-marshallers.h"
+                    COMMAND ${MARSHAL_COMPILER} --body
+                            --prefix hyscan_model_marshal
+                            hyscan-model-marshallers.list >
+                            "${CMAKE_BINARY_DIR}/marshallers/hyscan-model-marshallers.c"
+                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                    DEPENDS hyscan-model-marshallers.list
+                    VERBATIM)
+
 set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
      hyscan-db-info.c
      hyscan-async.c
@@ -6,6 +27,12 @@ set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
      hyscan-sonar-model.c
      hyscan-mark-location.c
      hyscan-mark-loc-model.c
+     hyscan-sonar-recorder.c
+     hyscan-track-stats.c
+     hyscan-planner-selection.c
+     hyscan-steer.c
+     hyscan-planner-stats.c
+     ${CMAKE_BINARY_DIR}/marshallers/hyscan-model-marshallers.c
      # hyscan-appearance.c
      # hyscan-serializable.c
      )
@@ -39,8 +66,16 @@ set (HYSCAN_MODEL_LIBRARY_INSTALL_FILES
      hyscan-sonar-state.h
      hyscan-sensor-state.h
      hyscan-sonar-model.h
+<<<<<<< HEAD
      hyscan-mark-location.h
      hyscan-mark-loc-model.h
+=======
+     hyscan-sonar-recorder.h
+     hyscan-track-stats.h
+     hyscan-planner-selection.h
+     hyscan-steer.h
+     hyscan-planner-stats.h
+>>>>>>> origin/wip/catfish
      # hyscan-appearance.h
      # hyscan-serializable.h
      )

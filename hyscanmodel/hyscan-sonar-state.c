@@ -53,6 +53,11 @@ G_DEFINE_INTERFACE (HyScanSonarState, hyscan_sonar_state, G_TYPE_OBJECT);
 static void
 hyscan_sonar_state_default_init (HyScanSonarStateInterface *iface)
 {
+  g_signal_new ("start-stop", HYSCAN_TYPE_SONAR_STATE,
+                G_SIGNAL_RUN_LAST, 0,
+                NULL, NULL,
+                g_cclosure_marshal_VOID__VOID,
+                G_TYPE_NONE, 0);
 }
 
 
@@ -144,4 +149,14 @@ hyscan_sonar_state_tvg_get_disabled (HyScanSonarState *sonar,
                                      HyScanSourceType  source)
 {
   HYSCAN_SONAR_STATE_FUNC (FALSE, tvg_get_disabled, source);
+}
+
+gboolean
+hyscan_sonar_state_get_start (HyScanSonarState  *sonar,
+                              gchar            **project_name,
+                              gchar            **track_name,
+                              HyScanTrackType   *track_type,
+                              HyScanTrackPlan  **plan)
+{
+  HYSCAN_SONAR_STATE_FUNC (FALSE, get_start, project_name, track_name, track_type, plan);
 }

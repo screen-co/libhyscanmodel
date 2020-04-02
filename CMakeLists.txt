@@ -83,6 +83,11 @@ endif ()
 
 include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/hyscanmodel")
 
+if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_definitions (-DG_DISABLE_ASSERT)
+  message (STATUS "G_ASSERT's are disabled!")
+endif ()
+
 add_definitions (-DG_LOG_DOMAIN="HyScanModel")
 add_subdirectory (hyscanmodel)
 add_subdirectory (tests)

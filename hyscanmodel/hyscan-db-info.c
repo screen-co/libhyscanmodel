@@ -92,6 +92,7 @@ typedef struct
   HyScanDB                    *db;                     /* Интерфейс базы данных. */
   gint32                       id;                     /* Идентификатор открытого объекта. */
   guint32                      mod_counter;            /* Счётчик изменений. */
+  gboolean                     writeable;              /* Признак доступа к каналу на запись. */
 } HyScanDBInfoMonitor;
 
 struct _HyScanDBInfoPrivate
@@ -138,7 +139,8 @@ static HyScanTrackInfo *
 static void        hyscan_db_info_add_active_id        (GHashTable            *actives,
                                                         HyScanDB              *db,
                                                         gint32                 id,
-                                                        guint32                mod_counter);
+                                                        guint32                mod_counter,
+                                                        gboolean               writeable);
 
 static gboolean    hyscan_db_info_alerter              (gpointer               data);
 
@@ -273,7 +275,8 @@ static void
 hyscan_db_info_add_active_id (GHashTable *actives,
                               HyScanDB   *db,
                               gint32      id,
-                              guint32     mod_counter)
+                              guint32     mod_counter,
+                              gboolean    writeable)
 {
   HyScanDBInfoMonitor *info;
 
@@ -284,6 +287,7 @@ hyscan_db_info_add_active_id (GHashTable *actives,
   info->db = db;
   info->id = id;
   info->mod_counter = mod_counter;
+  info->writeable = writeable;
 
   g_hash_table_insert (actives, GINT_TO_POINTER (id), info);
 }
@@ -440,12 +444,22 @@ hyscan_db_info_watcher (gpointer data)
           HyScanDBInfoMonitor *info = value;
           guint32 mc;
 
-          mc = hyscan_db_get_mod_count (priv->db, info->id);
-          if (mc != info->mod_counter)
+          /* Проверяем, не пропал ли у канала режим доступа на запись. */
+          if (info->writeable)
             {
-              check_tracks = TRUE;
-              break;
+              if (!hyscan_db_channel_is_writable (priv->db, info->id))
+                check_tracks = TRUE;
             }
+          /* Проверяем другие изменения в объекте базы данных. */
+          else
+            {
+              mc = hyscan_db_get_mod_count (priv->db, info->id);
+              if (mc != info->mod_counter)
+                check_tracks = TRUE;
+            }
+
+          if (check_tracks)
+            break;
         }
 
       /* Проверяем изменение списка галсов. */
@@ -581,6 +595,32 @@ hyscan_db_info_get_project (HyScanDBInfo *info)
   g_mutex_unlock (&priv->lock);
 
   return project_name;
+}
+
+/**
+ * hyscan_db_info_get_db:
+ * @info: указатель на #HyScanDBInfo
+ *
+ * Функция считывает базу данных для которой в данный момент
+ * отслеживаются изменения.
+ *
+ * Returns: (nullable): Указатель на #HyScanDB или %NULL. Для удаления #g_object_unref.
+ */
+HyScanDB *
+hyscan_db_info_get_db (HyScanDBInfo *info)
+{
+  HyScanDBInfoPrivate *priv;
+  HyScanDB *db;
+
+  g_return_val_if_fail (HYSCAN_IS_DB_INFO (info), NULL);
+
+  priv = info->priv;
+
+  g_mutex_lock (&priv->lock);
+  db = g_object_ref (priv->db);
+  g_mutex_unlock (&priv->lock);
+
+  return db;
 }
 
 /**
@@ -771,7 +811,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
   channels = hyscan_db_channel_list (db, track_id);
   if (channels == NULL)
     {
-      hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter);
+      hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter, FALSE);
       return NULL;
     }
 
@@ -791,14 +831,28 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
       hyscan_param_list_add (list, "/type");
       hyscan_param_list_add (list, "/operator");
       hyscan_param_list_add (list, "/sonar");
+      hyscan_param_list_add (list, "/plan/start/lat");
+      hyscan_param_list_add (list, "/plan/start/lon");
+      hyscan_param_list_add (list, "/plan/end/lat");
+      hyscan_param_list_add (list, "/plan/end/lon");
+      hyscan_param_list_add (list, "/plan/velocity");
 
       if ((hyscan_db_param_get (db, param_id, NULL, list)) &&
           (hyscan_param_list_get_integer (list, "/schema/id") == TRACK_SCHEMA_ID) &&
           (hyscan_param_list_get_integer (list, "/schema/version") == TRACK_SCHEMA_VERSION))
         {
+          HyScanTrackPlan plan;
           const gchar *track_type = hyscan_param_list_get_string (list, "/type");
           const gchar *sonar_info = hyscan_param_list_get_string (list, "/sonar");
           gint64 ctime = hyscan_param_list_get_integer (list, "/ctime") / G_USEC_PER_SEC;
+
+          plan.start.lat = hyscan_param_list_get_double (list, "/plan/start/lat");
+          plan.start.lon = hyscan_param_list_get_double (list, "/plan/start/lon");
+          plan.end.lat = hyscan_param_list_get_double (list, "/plan/end/lat");
+          plan.end.lon = hyscan_param_list_get_double (list, "/plan/end/lon");
+          plan.velocity = hyscan_param_list_get_double (list, "/plan/velocity");
+          if (plan.velocity > 0)
+            info->plan = hyscan_track_plan_copy (&plan);
 
           info->id = hyscan_param_list_dup_string (list, "/id");
           info->ctime = g_date_time_new_from_unix_utc (ctime);
@@ -877,14 +931,18 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
           n_sources += 1;
 
           if (active)
-            info->record = TRUE;
+            {
+              info->record = TRUE;
+              /* Следим, когда канал поменяет свой статус is_writeable. */
+              hyscan_db_info_add_active_id (actives, db, channel_id, 0, TRUE);
+          }
         }
 
       /* Ставим на карандаш, если канал открыт на запись. */
       else if (active)
         {
           guint32 channel_mod_counter = hyscan_db_get_mod_count (db, channel_id);
-          hyscan_db_info_add_active_id (actives, db, channel_id, channel_mod_counter);
+          hyscan_db_info_add_active_id (actives, db, channel_id, channel_mod_counter, FALSE);
         }
 
       hyscan_db_close (db, channel_id);
@@ -895,7 +953,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
   /* Если в галсе нет каналов, пропускаем его и добавляем в список проверяемых. */
   if (n_sources == 0)
     {
-      hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter);
+      hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter, FALSE);
       hyscan_db_info_track_info_free (info);
 
       return NULL;
@@ -903,7 +961,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
 
   /* Если в галсе есть открытый для записи канал, проверим этот галс позже. */
   if (info->record)
-    hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter);
+    hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter, FALSE);
   else
     hyscan_db_close (db, track_id);
 
@@ -996,6 +1054,7 @@ hyscan_db_info_track_info_copy (HyScanTrackInfo *info)
   new_info->operator_name = g_strdup (info->operator_name);
   if (info->sonar_info != NULL)
     new_info->sonar_info = g_object_ref (info->sonar_info);
+  new_info->plan = hyscan_track_plan_copy (info->plan);
   memcpy (new_info->sources, info->sources, sizeof (info->sources));
   new_info->record = info->record;
 
@@ -1018,6 +1077,7 @@ hyscan_db_info_track_info_free (HyScanTrackInfo *info)
   g_clear_pointer (&info->ctime, g_date_time_unref);
   g_clear_pointer (&info->mtime, g_date_time_unref);
   g_clear_object (&info->sonar_info);
+  hyscan_track_plan_free (info->plan);
 
   g_slice_free (HyScanTrackInfo, info);
 }

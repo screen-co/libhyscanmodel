@@ -65,10 +65,17 @@ struct _HyScanSonarModelClass
 };
 
 HYSCAN_API
-GType                     hyscan_sonar_model_get_type      (void);
+GType                     hyscan_sonar_model_get_type          (void);
 
 HYSCAN_API
-HyScanSonarModel *        hyscan_sonar_model_new           (HyScanControl *control);
+HyScanSonarModel *        hyscan_sonar_model_new               (HyScanControl *control);
+
+HYSCAN_API
+void                      hyscan_sonar_model_set_sync_timeout (HyScanSonarModel *model,
+                                                               guint             msec);
+
+HYSCAN_API
+guint                     hyscan_sonar_model_get_sync_timeout (HyScanSonarModel *model);
 
 G_END_DECLS
 
