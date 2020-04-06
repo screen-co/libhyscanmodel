@@ -466,13 +466,16 @@ hyscan_track_stats_load_xy (HyScanTrackStatsInternal *intern,
            * из первой попавшейся точки и средним азимутом движения. */
           if (geo == NULL)
             {
-              HyScanGeoGeodetic origin = coord;
+              HyScanGeoGeodetic origin;
+
+              origin.lat = coord.lat;
+              origin.lon = coord.lon;
               origin.h = sinfo->angle;
 
               geo = hyscan_geo_new (origin, HYSCAN_GEO_ELLIPSOID_WGS84);
             }
 
-          hyscan_geo_geo2topoXY (geo, &topo, coord);
+          hyscan_geo_geo2topoXY0 (geo, &topo, coord);
           g_array_append_val (y_arr, topo.y);
           min_x = MIN (min_x, topo.x);
           max_x = MAX (max_x, topo.x);
@@ -544,7 +547,7 @@ hyscan_track_stats_load_range (HyScanTrackStatsInternal *stats_intern,
    * x = 0 соответствует началу планового галса,
    * x = length соответствует концу галса. */
   geo = hyscan_planner_track_geo (sinfo->plan, NULL);
-  hyscan_geo_geo2topoXY (geo, &topo, sinfo->plan->end);
+  hyscan_geo_geo2topoXY0 (geo, &topo, sinfo->plan->end);
   length = topo.x;
 
   /* Ищем точки на галсе, которые соответствуют началу и концу планового галса. */
@@ -558,7 +561,7 @@ hyscan_track_stats_load_range (HyScanTrackStatsInternal *stats_intern,
           continue;
         }
 
-      if (!hyscan_geo_geo2topoXY (geo, &topo, coord))
+      if (!hyscan_geo_geo2topoXY0 (geo, &topo, coord))
         continue;
 
       /* Пересекли линию старта планового галса. */

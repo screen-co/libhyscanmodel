@@ -7,7 +7,8 @@ typedef struct
 {
   gint64                     time;          /* Время фиксации положения. */
   HyScanGeoCartesian2D       c2d;           /* Декартовы координаты точки. */
-  HyScanGeoGeodetic          geod;          /* Геогрфические координаты точки. */
+  HyScanGeoPoint             geod;          /* Геогрфические координаты точки. */
+  gdouble                    course;        /* Курс движения. */
   gdouble                    velocity;      /* Скорость движения, м/c. */
 } WayPoint;
 
@@ -22,7 +23,8 @@ gchar *           waypoint_write              (HyScanDB         *db,
 WayPoint *        waypoint_generate           (gint              start_idx,
                                                gint              end_idx,
                                                gdouble           velocity,
-                                               HyScanGeoGeodetic start,
+                                               HyScanGeoPoint    start,
+                                               gboolean          course,
                                                gdouble           dv,
                                                gdouble           dtrack);
 

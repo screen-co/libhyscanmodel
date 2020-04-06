@@ -114,7 +114,7 @@ hyscan_nav_state_dummy_set (HyScanNavStateDummy *dummy,
                             gdouble              speed)
 {
   dummy->data.loaded = TRUE;
-  hyscan_geo_topoXY2geo (dummy->geo, &dummy->data.coord, coord, 0);
+  hyscan_geo_topoXY2geo0 (dummy->geo, &dummy->data.coord, coord);
   dummy->data.heading = heading;
   dummy->data.speed = speed;
 
@@ -205,8 +205,8 @@ set_up_tracks (gpointer user_data)
       track.number = i+1;
       track.plan.velocity = 1.0;
 
-      hyscan_geo_topoXY2geo (nav_dummy->geo, &track.plan.start, tracks[i].start, 0);
-      hyscan_geo_topoXY2geo (nav_dummy->geo, &track.plan.end, tracks[i].end, 0);
+      hyscan_geo_topoXY2geo0 (nav_dummy->geo, &track.plan.start, tracks[i].start);
+      hyscan_geo_topoXY2geo0 (nav_dummy->geo, &track.plan.end, tracks[i].end);
       hyscan_object_model_add_object (HYSCAN_OBJECT_MODEL (planner_model), (HyScanObject *) &track);
     }
 

@@ -30,7 +30,7 @@ waypoint_write (HyScanDB        *db,
     {
       gchar *sentence;
 
-      sentence = hyscan_nmea_helper_make_rmc (points[i].geod, points[i].velocity, points[i].time);
+      sentence = hyscan_nmea_helper_make_rmc (points[i].geod, points[i].course, points[i].velocity, points[i].time);
       hyscan_buffer_wrap (buffer, HYSCAN_DATA_STRING, sentence, strlen (sentence));
       if (!hyscan_data_writer_sensor_add_data (writer, sensor_name, HYSCAN_SOURCE_NMEA, 1, points[i].time, buffer))
         g_error ("Failed to add data");
@@ -48,16 +48,18 @@ waypoint_write (HyScanDB        *db,
 }
 
 /* Функция генерирует тестовые данные: движение со скоростю velocity
- * по направлению origin.h и соответствующими дисперсиями dv и dtrack. */
+ * по направлению course и соответствующими дисперсиями dv и dtrack. */
 WayPoint *
 waypoint_generate (gint              start_idx,
                    gint              end_idx,
                    gdouble           velocity,
-                   HyScanGeoGeodetic start,
+                   HyScanGeoPoint    start,
+                   gboolean          course,
                    gdouble           dv,
                    gdouble           dtrack)
 {
   WayPoint *points;
+  HyScanGeoGeodetic origin;
 
   HyScanGeo *geo;
   gint i, n_points;
@@ -65,17 +67,20 @@ waypoint_generate (gint              start_idx,
   n_points = end_idx - start_idx + 1;
   points = g_new (WayPoint, n_points);
 
-  geo = hyscan_geo_new (start, HYSCAN_GEO_ELLIPSOID_WGS84);
+  origin.lat = start.lat;
+  origin.lon = start.lon;
+  origin.h = course;
+  geo = hyscan_geo_new (origin, HYSCAN_GEO_ELLIPSOID_WGS84);
   for (i = 0; i < n_points; i++)
     {
       points[i].time = i * G_TIME_SPAN_SECOND;
       points[i].c2d.x = velocity * (i + start_idx);
       points[i].c2d.y = 0;
 
-      hyscan_geo_topoXY2geo (geo, &points[i].geod, points[i].c2d, 0);
+      hyscan_geo_topoXY2geo0 (geo, &points[i].geod, points[i].c2d);
 
       /* В курс и скорость добавляем "случайные" ошибки. */
-      points[i].geod.h = start.h + (i % 2 ? -1 : 1) * dtrack;
+      points[i].course = course + (i % 2 ? -1 : 1) * dtrack;
       points[i].velocity = velocity + (i % 2 ? -1 : 1) * dv;
     }
 

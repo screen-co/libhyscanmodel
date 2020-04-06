@@ -38,10 +38,15 @@ static gchar *db_uri;
 static gchar *project_name = "planner-stats-test";
 static gint timeout = 5000;
 
-static HyScanGeoGeodetic origin[] = {
-  { .lat =  30.51, .lon =  40.11, .h = 44 },
-  { .lat =  50.44, .lon = -35.13, .h = 180 },
-  { .lat = -20.12, .lon =  39.92, .h = 330 },
+static struct
+{
+  HyScanGeoPoint coord;
+  gdouble        course;
+} origin[] =
+{
+  { { 30.51,  40.11}, 44 },
+  { { 50.44, -35.13}, 180 },
+  { {-20.12,  39.92}, 330 },
 };
 
 static void
@@ -208,7 +213,7 @@ main (int    argc,
   /* Генерируем тестовые данные и пишем их в БД. */
   data = g_new0 (TestData, 1);
   data->title = "Track 1 (Std. Dev. = 0)";
-  data->points = waypoint_generate (0, 99, 1.1, origin[0], 0, 0);
+  data->points = waypoint_generate (0, 99, 1.1, origin[0].coord, origin[0].course, 0, 0);
   data->done_status = DONE_0;
   data->track_name = waypoint_write (db, project_name, SENSOR_NAME, data->points, 0, 99, NULL);
 
@@ -219,14 +224,14 @@ main (int    argc,
   data->expect.x_max = 99.0 * 1.1;
   data->expect.x_length = 99.0 * 1.1;
   data->expect.velocity_var = 0.0;
-  data->expect.angle = origin[0].h;
+  data->expect.angle = origin[0].course;
   data->expect.angle_var = 0.0;
 
   data_list = g_list_append (data_list, data);
 
   data = g_new0 (TestData, 1);
   data->title = "Track 2 (Std. Dev. > 0)";
-  data->points = waypoint_generate (0, 99, 1.1, origin[1], 1.7, 2.3);
+  data->points = waypoint_generate (0, 99, 1.1, origin[1].coord, origin[1].course, 1.7, 2.3);
   data->done_status = DONE_0;
   data->track_name = waypoint_write (db, project_name, SENSOR_NAME, data->points, 0, 99, NULL);
 
@@ -237,7 +242,7 @@ main (int    argc,
   data->expect.x_max = 99.0 * 1.1;
   data->expect.x_length = 99.0 * 1.1;
   data->expect.velocity_var = 1.7;
-  data->expect.angle = origin[1].h;
+  data->expect.angle = origin[1].course;
   data->expect.angle_var = 2.3;
 
   data_list = g_list_append (data_list, data);
@@ -246,7 +251,7 @@ main (int    argc,
   data = g_new0 (TestData, 1);
   data->title = "Plan track, 100% done";
   data->done_status = DONE_100;
-  data->points = waypoint_generate (0, 99, 1.0, origin[2], 0.9, 1.2);
+  data->points = waypoint_generate (0, 99, 1.0, origin[2].coord, origin[2].course, 0.9, 1.2);
   plan.start = data->points[1].geod;
   plan.end = data->points[98].geod;
   plan.velocity = 1.0;
@@ -259,7 +264,7 @@ main (int    argc,
   data->expect.x_max = 97.0;
   data->expect.x_length = 97.0;
   data->expect.velocity_var = 0.9;
-  data->expect.angle = origin[2].h;
+  data->expect.angle = origin[2].course;
   data->expect.angle_var = 1.2;
 
   data_list = g_list_append (data_list, data);
@@ -268,7 +273,7 @@ main (int    argc,
   data = g_new0 (TestData, 1);
   data->title = "Plan track, 50% done";
   data->done_status = DONE_PART;
-  data->points = waypoint_generate (0, 99, 2.0, origin[2], 0.7, 1.4);
+  data->points = waypoint_generate (0, 99, 2.0, origin[2].coord, origin[2].course, 0.7, 1.4);
   plan.start = data->points[0].geod;
   plan.end = data->points[99].geod;
   plan.velocity = 1.0;
@@ -281,7 +286,7 @@ main (int    argc,
   data->expect.x_max = 98.0;
   data->expect.x_length = 98.0;
   data->expect.velocity_var = 0.7;
-  data->expect.angle = origin[2].h;
+  data->expect.angle = origin[2].course;
   data->expect.angle_var = 1.4;
 
   data_list = g_list_append (data_list, data);
@@ -290,7 +295,7 @@ main (int    argc,
   data = g_new0 (TestData, 1);
   data->title = "Plan track, 0% done (before start)";
   data->done_status = DONE_0;
-  data->points = waypoint_generate (0, 99, 2.0, origin[2], 0.7, 1.4);
+  data->points = waypoint_generate (0, 99, 2.0, origin[2].coord, origin[2].course, 0.7, 1.4);
   plan.start = data->points[50].geod;
   plan.end = data->points[99].geod;
   plan.velocity = 1.0;
@@ -312,7 +317,7 @@ main (int    argc,
   data = g_new0 (TestData, 1);
   data->title = "Plan track, 0% done (after end)";
   data->done_status = DONE_0;
-  data->points = waypoint_generate (0, 99, 2.0, origin[2], 0.7, 1.4);
+  data->points = waypoint_generate (0, 99, 2.0, origin[2].coord, origin[2].course, 0.7, 1.4);
   plan.start = data->points[0].geod;
   plan.end = data->points[49].geod;
   plan.velocity = 1.0;

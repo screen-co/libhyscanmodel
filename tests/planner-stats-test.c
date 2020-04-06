@@ -20,11 +20,11 @@ static gchar *test_track2_id;
 
 static HyScanTrackPlan plan[] =
 {
-  { .start = { 50.0, 30.0, 0.0 }, .end = { 50.008, 30.008, 0.0 }, .velocity = 1.0 },
-  { .start = { 50.1, 30.1, 0.0 }, .end = { 50.108, 30.108, 0.0 }, .velocity = 1.5 },
+  { .start = { 50.0, 30.0 }, .end = { 50.008, 30.008 }, .velocity = 1.0 },
+  { .start = { 50.1, 30.1 }, .end = { 50.108, 30.108 }, .velocity = 1.5 },
 };
 
-static gboolean   add_zone         (void);
+static gboolean   add_zone         (gpointer     user_data);
 static void       add_track_record (const gchar *plan_id,
                                     gdouble      start_progress,
                                     gdouble      end_progress);
@@ -73,7 +73,9 @@ add_track_record (const gchar *plan_id,
   HyScanPlannerTrack *plan_track;
   HyScanTrackInfo *track_info;
   HyScanTrackPlan *plan_params;
-  HyScanGeoGeodetic start;
+  HyScanGeoPoint start;
+  gdouble course;
+  gdouble length;
   gchar *track_name;
   gint start_idx, end_idx;
   gint32 project_id;
@@ -83,12 +85,11 @@ add_track_record (const gchar *plan_id,
 
   /* Создаем путевые точки и пишем их в БД. */
   start = plan_params->start;
-  geo = hyscan_planner_track_geo (plan_params, &start.h);
-  gdouble length;
+  geo = hyscan_planner_track_geo (plan_params, &course);
   length = hyscan_planner_track_length (plan_params);
   start_idx = length / plan_params->velocity * start_progress;
   end_idx = length / plan_params->velocity * end_progress;
-  waypoints = waypoint_generate (start_idx, end_idx, plan_params->velocity, start, 0, 0);
+  waypoints = waypoint_generate (start_idx, end_idx, plan_params->velocity, start, course, 0, 0);
 
   track_name = waypoint_write (db, project_name, SENSOR_NAME, waypoints, 0, end_idx - start_idx, plan_params);
   g_free (waypoints);
@@ -429,7 +430,7 @@ add_track_1 (void)
 }
 
 static gboolean 
-add_zone (void)
+add_zone (gpointer user_data)
 {
   HyScanPlannerZone zone = { .type = HYSCAN_PLANNER_ZONE };
   
