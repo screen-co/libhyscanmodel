@@ -119,7 +119,7 @@ db_info_test (gpointer data)
 
   /* Создаём галс и каналы данных в нём. */
   hyscan_data_writer_set_operator_name (writer, project_name);
-  if (!hyscan_data_writer_start (writer, project_name, track_name, HYSCAN_TRACK_CALIBRATION + (sub_step % 3), ctime))
+  if (!hyscan_data_writer_start (writer, project_name, track_name, HYSCAN_TRACK_CALIBRATION + (sub_step % 3), NULL, ctime))
     g_error ("can't create track %s.%s", project_name, track_name);
 
   /* Время изменения проекта. */
