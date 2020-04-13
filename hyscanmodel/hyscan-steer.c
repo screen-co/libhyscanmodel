@@ -300,7 +300,7 @@ hyscan_steer_object_constructed (GObject *object)
   sonar = hyscan_sonar_recorder_get_sonar (priv->recorder);
   if (HYSCAN_IS_SONAR_STATE (sonar))
     {
-      priv->sonar_state = g_object_ref (sonar);
+      priv->sonar_state = g_object_ref (HYSCAN_SONAR_STATE (sonar));
       g_signal_connect_swapped (priv->sonar_state, "start-stop", G_CALLBACK (hyscan_steer_start_stop), steer);
     }
   g_object_unref (sonar);
@@ -383,7 +383,7 @@ hyscan_steer_plan_select (HyScanSteer *steer)
       gdouble cost;
       HyScanGeoCartesian2D position;
 
-      if (!hyscan_geo_geo2topoXY (geo, &position, nav_data->coord))
+      if (!hyscan_geo_geo2topoXY0 (geo, &position, nav_data->coord))
         continue;
 
       cost = hypot (position.x, position.y);
@@ -520,8 +520,8 @@ hyscan_steer_set_track (HyScanSteer *steer)
 
       plan = &track->plan;
       priv->geo = hyscan_planner_track_geo (plan, &priv->azimuth);
-      hyscan_geo_geo2topoXY (priv->geo, &priv->start, plan->start);
-      hyscan_geo_geo2topoXY (priv->geo, &priv->end, plan->end);
+      hyscan_geo_geo2topoXY0 (priv->geo, &priv->start, plan->start);
+      hyscan_geo_geo2topoXY0 (priv->geo, &priv->end, plan->end);
       priv->length = hyscan_cartesian_distance (&priv->start, &priv->end);
     }
 
@@ -807,7 +807,7 @@ hyscan_steer_calc_point (HyScanSteerPoint *point,
 
   point->d_angle = point->nav_data.heading - DEG2RAD (priv->azimuth);
 
-  if (!hyscan_geo_geo2topoXY (priv->geo, &ship_pos, point->nav_data.coord))
+  if (!hyscan_geo_geo2topoXY0 (priv->geo, &ship_pos, point->nav_data.coord))
     return;
 
   /* Смещение антенны учитываем только для расчёта её местоположения.
@@ -830,7 +830,7 @@ hyscan_steer_calc_point (HyScanSteerPoint *point,
   side = hyscan_cartesian_side (&priv->start, &priv->end, &point->position);
   point->d_y = side * distance;
 
-  hyscan_geo_geo2topoXY (priv->geo, &track_end, priv->track->plan.end);
+  hyscan_geo_geo2topoXY0 (priv->geo, &track_end, priv->track->plan.end);
   distance_to_end = hyscan_cartesian_distance (&track_end, &point->track);
   point->time_left = distance_to_end / priv->track->plan.velocity;
 }
