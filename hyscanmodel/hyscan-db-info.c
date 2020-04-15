@@ -935,6 +935,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
               info->record = TRUE;
               /* Следим, когда канал поменяет свой статус is_writeable. */
               hyscan_db_info_add_active_id (actives, db, channel_id, 0, TRUE);
+              channel_id = 0;
           }
         }
 
@@ -943,9 +944,12 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
         {
           guint32 channel_mod_counter = hyscan_db_get_mod_count (db, channel_id);
           hyscan_db_info_add_active_id (actives, db, channel_id, channel_mod_counter, FALSE);
+          channel_id = 0;
         }
 
-      hyscan_db_close (db, channel_id);
+      /* Если канал не был добавлен в список проверяемых, то закрываем его. */
+      if (channel_id > 0)
+        hyscan_db_close (db, channel_id);
     }
 
   g_strfreev (channels);
