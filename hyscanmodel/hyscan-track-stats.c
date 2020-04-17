@@ -331,7 +331,7 @@ hyscan_track_stats_load_time (HyScanTrackStatsInternal *intern,
                               HyScanCancellable        *hcancellable)
 {
   HyScanTrackStatsInfo *sinfo = intern->sinfo;
-  guint32 i;
+  gint64 i;
   gboolean start_found = FALSE, end_found = FALSE;
   gint64 start_time = 0, end_time = 0;
 
