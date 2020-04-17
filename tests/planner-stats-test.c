@@ -20,8 +20,8 @@ static gchar *test_track2_id;
 
 static HyScanTrackPlan plan[] =
 {
-  { .start = { 50.0, 30.0 }, .end = { 50.008, 30.008 }, .velocity = 1.0 },
-  { .start = { 50.1, 30.1 }, .end = { 50.108, 30.108 }, .velocity = 1.5 },
+  { .start = { 50.0, 30.0 }, .end = { 50.008, 30.008 }, .speed = 1.0 },
+  { .start = { 50.1, 30.1 }, .end = { 50.108, 30.108 }, .speed = 1.5 },
 };
 
 static gboolean   add_zone         (gpointer     user_data);
@@ -87,9 +87,9 @@ add_track_record (const gchar *plan_id,
   start = plan_params->start;
   geo = hyscan_planner_track_geo (plan_params, &course);
   length = hyscan_planner_track_length (plan_params);
-  start_idx = length / plan_params->velocity * start_progress;
-  end_idx = length / plan_params->velocity * end_progress;
-  waypoints = waypoint_generate (start_idx, end_idx, plan_params->velocity, start, course, 0, 0);
+  start_idx = length / plan_params->speed * start_progress;
+  end_idx = length / plan_params->speed * end_progress;
+  waypoints = waypoint_generate (start_idx, end_idx, plan_params->speed, start, course, 0, 0);
 
   track_name = waypoint_write (db, project_name, SENSOR_NAME, waypoints, 0, end_idx - start_idx, plan_params);
   g_free (waypoints);

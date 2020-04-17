@@ -203,7 +203,7 @@ set_up_tracks (gpointer user_data)
     {
       HyScanPlannerTrack track = { .type = HYSCAN_PLANNER_TRACK };
       track.number = i+1;
-      track.plan.velocity = 1.0;
+      track.plan.speed = 1.0;
 
       hyscan_geo_topoXY2geo0 (nav_dummy->geo, &track.plan.start, tracks[i].start);
       hyscan_geo_topoXY2geo0 (nav_dummy->geo, &track.plan.end, tracks[i].end);

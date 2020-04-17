@@ -70,13 +70,13 @@ test_data (TestData   *data,
           else
             g_assert_null (info->plan);
 
-          FLOAT_EQUAL (info, expect, x_length,     expect->velocity * 2.0);
-          FLOAT_EQUAL (info, expect, x_min,        expect->velocity * 2.0);
-          FLOAT_EQUAL (info, expect, x_max,        expect->velocity * 2.0);
+          FLOAT_EQUAL (info, expect, x_length,     expect->speed * 2.0);
+          FLOAT_EQUAL (info, expect, x_min,        expect->speed * 2.0);
+          FLOAT_EQUAL (info, expect, x_max,        expect->speed * 2.0);
           FLOAT_EQUAL (info, expect, angle,        0.1);
           FLOAT_EQUAL (info, expect, angle_var,    1e-3);
-          FLOAT_EQUAL (info, expect, velocity,     0.1);
-          FLOAT_EQUAL (info, expect, velocity_var, 1e-3);
+          FLOAT_EQUAL (info, expect, speed,        0.1);
+          FLOAT_EQUAL (info, expect, speed_var,    1e-3);
 
           switch (data->done_status)
             {
@@ -219,11 +219,11 @@ main (int    argc,
 
   data->expect.progress = 0.0;
   data->expect_planned = FALSE;
-  data->expect.velocity = 1.1;
+  data->expect.speed = 1.1;
   data->expect.x_min = 0.0;
   data->expect.x_max = 99.0 * 1.1;
   data->expect.x_length = 99.0 * 1.1;
-  data->expect.velocity_var = 0.0;
+  data->expect.speed_var = 0.0;
   data->expect.angle = origin[0].course;
   data->expect.angle_var = 0.0;
 
@@ -237,11 +237,11 @@ main (int    argc,
 
   data->expect.progress = 0.0;
   data->expect_planned = FALSE;
-  data->expect.velocity = 1.1;
+  data->expect.speed = 1.1;
   data->expect.x_min = 0.0;
   data->expect.x_max = 99.0 * 1.1;
   data->expect.x_length = 99.0 * 1.1;
-  data->expect.velocity_var = 1.7;
+  data->expect.speed_var = 1.7;
   data->expect.angle = origin[1].course;
   data->expect.angle_var = 2.3;
 
@@ -254,16 +254,16 @@ main (int    argc,
   data->points = waypoint_generate (0, 99, 1.0, origin[2].coord, origin[2].course, 0.9, 1.2);
   plan.start = data->points[1].geod;
   plan.end = data->points[98].geod;
-  plan.velocity = 1.0;
+  plan.speed = 1.0;
   data->track_name = waypoint_write (db, project_name, SENSOR_NAME, data->points, 0, 99, &plan);
 
   data->expect.progress = 1.0;
   data->expect_planned = TRUE;
-  data->expect.velocity = 1.0;
+  data->expect.speed = 1.0;
   data->expect.x_min = 0.0;
   data->expect.x_max = 97.0;
   data->expect.x_length = 97.0;
-  data->expect.velocity_var = 0.9;
+  data->expect.speed_var = 0.9;
   data->expect.angle = origin[2].course;
   data->expect.angle_var = 1.2;
 
@@ -276,16 +276,16 @@ main (int    argc,
   data->points = waypoint_generate (0, 99, 2.0, origin[2].coord, origin[2].course, 0.7, 1.4);
   plan.start = data->points[0].geod;
   plan.end = data->points[99].geod;
-  plan.velocity = 1.0;
+  plan.speed = 1.0;
   data->track_name = waypoint_write (db, project_name, SENSOR_NAME, data->points, 0, 49, &plan);
 
   data->expect.progress = 0.4949; /* 98 / 198 */
   data->expect_planned = TRUE;
-  data->expect.velocity = 2.0;
+  data->expect.speed = 2.0;
   data->expect.x_min = 0.0;
   data->expect.x_max = 98.0;
   data->expect.x_length = 98.0;
-  data->expect.velocity_var = 0.7;
+  data->expect.speed_var = 0.7;
   data->expect.angle = origin[2].course;
   data->expect.angle_var = 1.4;
 
@@ -298,16 +298,16 @@ main (int    argc,
   data->points = waypoint_generate (0, 99, 2.0, origin[2].coord, origin[2].course, 0.7, 1.4);
   plan.start = data->points[50].geod;
   plan.end = data->points[99].geod;
-  plan.velocity = 1.0;
+  plan.speed = 1.0;
   data->track_name = waypoint_write (db, project_name, SENSOR_NAME, data->points, 0, 49, &plan);
 
   data->expect_planned = TRUE;
   data->expect.progress = 0.0;
-  data->expect.velocity = 0.0;
+  data->expect.speed = 0.0;
   data->expect.x_min = 0.0;
   data->expect.x_max = 0.0;
   data->expect.x_length = 0.0;
-  data->expect.velocity_var = 0.0;
+  data->expect.speed_var = 0.0;
   data->expect.angle = 0.0;
   data->expect.angle_var = 0.0;
 
@@ -320,16 +320,16 @@ main (int    argc,
   data->points = waypoint_generate (0, 99, 2.0, origin[2].coord, origin[2].course, 0.7, 1.4);
   plan.start = data->points[0].geod;
   plan.end = data->points[49].geod;
-  plan.velocity = 1.0;
+  plan.speed = 1.0;
   data->track_name = waypoint_write (db, project_name, SENSOR_NAME, data->points, 50, 99, &plan);
 
   data->expect_planned = TRUE;
   data->expect.progress = 0.0;
-  data->expect.velocity = 0.0;
+  data->expect.speed = 0.0;
   data->expect.x_min = 0.0;
   data->expect.x_max = 0.0;
   data->expect.x_length = 0.0;
-  data->expect.velocity_var = 0.0;
+  data->expect.speed_var = 0.0;
   data->expect.angle = 0.0;
   data->expect.angle_var = 0.0;
 
