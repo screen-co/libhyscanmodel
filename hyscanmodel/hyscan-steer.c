@@ -832,7 +832,7 @@ hyscan_steer_calc_point (HyScanSteerPoint *point,
 
   hyscan_geo_geo2topoXY0 (priv->geo, &track_end, priv->track->plan.end);
   distance_to_end = hyscan_cartesian_distance (&track_end, &point->track);
-  point->time_left = distance_to_end / priv->track->plan.velocity;
+  point->time_left = distance_to_end / priv->track->plan.speed;
 }
 
 /**

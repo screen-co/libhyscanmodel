@@ -72,8 +72,8 @@ struct _HyScanTrackStatsClass
  * @start_time: время начала учитываемого диапазона в канале навигационных данных, мкс
  * @end_time: время конца учитываемого диапазона в канале навигационных данных, мкс
  * @progress: доля покрытия запланированного галса по расстоянию, от 0 до 1
- * @velocity: средняя скорость, м/с
- * @velocity_var: среднеквадратическое отклонение скорости, м/с
+ * @speed: средняя скорость, м/с
+ * @speed_var: среднеквадратическое отклонение скорости, м/с
  * @angle: средний курс движения, градусы
  * @angle_var: среднеквадратическое отклонение курса, градусы
  * @length: длина галса (криволинейная), м
@@ -105,8 +105,8 @@ struct _HyScanTrackStatsInfo
   gint64              end_time;
   gdouble             progress;
 
-  gdouble             velocity;
-  gdouble             velocity_var;
+  gdouble             speed;
+  gdouble             speed_var;
   gdouble             angle;
   gdouble             angle_var;
   gdouble             length;

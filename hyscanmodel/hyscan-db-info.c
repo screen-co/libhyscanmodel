@@ -835,7 +835,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
       hyscan_param_list_add (list, "/plan/start/lon");
       hyscan_param_list_add (list, "/plan/end/lat");
       hyscan_param_list_add (list, "/plan/end/lon");
-      hyscan_param_list_add (list, "/plan/velocity");
+      hyscan_param_list_add (list, "/plan/speed");
 
       if ((hyscan_db_param_get (db, param_id, NULL, list)) &&
           (hyscan_param_list_get_integer (list, "/schema/id") == TRACK_SCHEMA_ID) &&
@@ -850,8 +850,8 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
           plan.start.lon = hyscan_param_list_get_double (list, "/plan/start/lon");
           plan.end.lat = hyscan_param_list_get_double (list, "/plan/end/lat");
           plan.end.lon = hyscan_param_list_get_double (list, "/plan/end/lon");
-          plan.velocity = hyscan_param_list_get_double (list, "/plan/velocity");
-          if (plan.velocity > 0)
+          plan.speed = hyscan_param_list_get_double (list, "/plan/speed");
+          if (plan.speed > 0)
             info->plan = hyscan_track_plan_copy (&plan);
 
           info->id = hyscan_param_list_dup_string (list, "/id");

@@ -396,7 +396,7 @@ hyscan_gtk_planner_list_update_tracks (HyScanPlannerStats *planner_stats)
         track_info->id = g_strdup (track_id);
         track_info->object = hyscan_planner_track_copy (track);
         track_info->length = hyscan_planner_track_length (&track->plan);
-        track_info->time = track_info->length / track->plan.velocity;
+        track_info->time = track_info->length / track->plan.speed;
         track_info->angle = RAD2DEG (hyscan_planner_track_angle (track));
 
         /* Формируем список записей галса и рассчитываем по ним прогресс выполнения. */
@@ -502,7 +502,7 @@ hyscan_gtk_planner_list_update_zones (HyScanPlannerStats *planner_stats)
               HyScanTrackPlan *cur_plan = &track_info->object->plan, *next_plan = &next_track->object->plan;
               transit_length = hyscan_planner_track_transit (cur_plan, next_plan);
               zone_info->length += transit_length;
-              zone_info->time += transit_length / (cur_plan->velocity > 0 ? cur_plan->velocity : 1.0);
+              zone_info->time += transit_length / (cur_plan->speed > 0 ? cur_plan->speed : 1.0);
             }
 
           if (track_info->length == 0)

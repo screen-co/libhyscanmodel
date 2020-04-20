@@ -146,7 +146,7 @@ static void            hyscan_track_stats_ready                (HyScanTrackStats
 static inline HyScanTrackPlan *
                        hyscan_track_stats_get_plan             (GHashTable               *tracks_map,
                                                                 HyScanTrackInfo          *info);
-static gdouble         hyscan_track_stats_calc_quality         (gdouble                   velocity_var,
+static gdouble         hyscan_track_stats_calc_quality         (gdouble                   speed_var,
                                                                 gdouble                   angle_var);
 
 static guint           hyscan_track_stats_signals[SIGNAL_LAST];
@@ -331,7 +331,7 @@ hyscan_track_stats_load_time (HyScanTrackStatsInternal *intern,
                               HyScanCancellable        *hcancellable)
 {
   HyScanTrackStatsInfo *sinfo = intern->sinfo;
-  guint32 i;
+  gint64 i;
   gboolean start_found = FALSE, end_found = FALSE;
   gint64 start_time = 0, end_time = 0;
 
@@ -360,7 +360,7 @@ hyscan_track_stats_load_time (HyScanTrackStatsInternal *intern,
  *   b = x0 / (pow (2, 1 / n) - 1).
  */
 static gdouble
-hyscan_track_stats_calc_quality (gdouble velocity_var,
+hyscan_track_stats_calc_quality (gdouble speed_var,
                                  gdouble angle_var)
 {
   gdouble quality;
@@ -368,7 +368,7 @@ hyscan_track_stats_calc_quality (gdouble velocity_var,
   gdouble velocity_q, angle_q;
 
   v_b = QUALITY_VELOCITY0 / (pow (2, 1. / QUALITY_N) - 1);
-  velocity_q = pow (v_b / (velocity_var + v_b), QUALITY_N);
+  velocity_q = pow (v_b / (speed_var + v_b), QUALITY_N);
 
   a_b = QUALITY_ANGLE0 / (pow (2, 1. / QUALITY_N) - 1);
   angle_q = pow (a_b / (angle_var + a_b), QUALITY_N);
@@ -416,17 +416,17 @@ hyscan_track_stats_load_spd_trk (HyScanTrackStatsInternal *intern,
           g_array_append_val (trk_arr, angle);
     }
 
-  sinfo->velocity = hyscan_track_stats_avg ((const gdouble *) velocity_arr->data, velocity_arr->len);
-  sinfo->velocity_var = hyscan_track_stats_var (sinfo->velocity, (const gdouble *) velocity_arr->data, velocity_arr->len);
+  sinfo->speed = hyscan_track_stats_avg ((const gdouble *) velocity_arr->data, velocity_arr->len);
+  sinfo->speed_var = hyscan_track_stats_var (sinfo->speed, (const gdouble *) velocity_arr->data, velocity_arr->len);
   sinfo->angle = hyscan_stats_avg_circular ((const gdouble *) trk_arr->data, trk_arr->len);
   sinfo->angle_var = hyscan_stats_var_circular (sinfo->angle, (const gdouble *) trk_arr->data, trk_arr->len);
 
   /* Переводим из узлов в м/с. */
-  sinfo->velocity *= KNOTS_TO_METER_PER_SEC;
-  sinfo->velocity_var *= KNOTS_TO_METER_PER_SEC;
+  sinfo->speed *= KNOTS_TO_METER_PER_SEC;
+  sinfo->speed_var *= KNOTS_TO_METER_PER_SEC;
   sinfo->length *= KNOTS_TO_METER_PER_SEC;
 
-  sinfo->quality = hyscan_track_stats_calc_quality (sinfo->velocity_var, sinfo->angle_var);
+  sinfo->quality = hyscan_track_stats_calc_quality (sinfo->speed_var, sinfo->angle_var);
 
   g_array_free (velocity_arr, TRUE);
   g_array_free (trk_arr, TRUE);
