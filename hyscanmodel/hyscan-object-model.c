@@ -447,10 +447,7 @@ hyscan_object_model_processing (HyScanObjectModelPrivate *priv)
           /* Создаём объект работы с объектами. */
           if (priv->cur_state.db != NULL && priv->cur_state.project != NULL)
             {
-              object_data = g_object_new (priv->data_type,
-                                          "db", priv->cur_state.db,
-                                          "project", priv->cur_state.project,
-                                          NULL);
+              object_data = hyscan_object_data_new (priv->data_type, priv->cur_state.db, priv->cur_state.project);
 
               if (!hyscan_object_data_is_ready (object_data))
                 g_clear_object (&object_data);
