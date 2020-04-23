@@ -34,6 +34,7 @@ set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
      hyscan-planner-selection.c
      hyscan-steer.c
      hyscan-planner-stats.c
+     hyscan-map-track-model.c
      ${CMAKE_BINARY_DIR}/marshallers/hyscan-model-marshallers.c
      # hyscan-appearance.c
      # hyscan-serializable.c
@@ -77,6 +78,7 @@ set (HYSCAN_MODEL_LIBRARY_INSTALL_FILES
      hyscan-planner-selection.h
      hyscan-steer.h
      hyscan-planner-stats.h
+     hyscan-map-track-model.h
      # hyscan-appearance.h
      # hyscan-serializable.h
      )
