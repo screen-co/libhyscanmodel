@@ -1,3 +1,59 @@
+/* hyscan-map-track-model.c
+ *
+ * Copyright 2020 Screen LLC, Alexey Sakhnov <alexsakhnov@gmail.com>
+ *
+ * This file is part of HyScanModel library.
+ *
+ * HyScanModel is dual-licensed: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * HyScanModel is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this library. If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Alternatively, you can license this code under a commercial license.
+ * Contact the Screen LLC in this case - <info@screen-co.ru>.
+ */
+
+/* HyScanModel имеет двойную лицензию.
+ *
+ * Во-первых, вы можете распространять HyScanModel на условиях Стандартной
+ * Общественной Лицензии GNU версии 3, либо по любой более поздней версии
+ * лицензии (по вашему выбору). Полные положения лицензии GNU приведены в
+ * <http://www.gnu.org/licenses/>.
+ *
+ * Во-вторых, этот программный код можно использовать по коммерческой
+ * лицензии. Для этого свяжитесь с ООО Экран - <info@screen-co.ru>.
+ */
+
+/**
+ * SECTION: hyscan-map-track-model
+ * @Short_description: Модель проекций галсов на карту
+ * @Title: HyScanMapTrackModel
+ *
+ * Модель управляет доступом к объектам проекции галса на карту #HyScanMapTrack, а также следит за изменениями
+ * в данных и параметрах этих объектов.
+ *
+ * #HyScanMapTrackModel создаёт и хранит в себе указатели на обработчики #HyScanMapTrack, и предоставляет к ним доступ
+ * через структуры #HyScanMapTrackModelInfo. Таким образом класс позволяет повторно использовать уже созданные обработчики,
+ * при этом предоставляя доступ к каждому из них одновременно только одному клиенту.
+ *
+ * Функции:
+ * - hyscan_map_track_model_set_project() - установка текущего проекта;
+ * - hyscan_map_track_model_set_tracks() - установка списка активных галсов;
+ * - hyscan_map_track_model_get() - получение структуры доступа к #HyScanMapTrack;
+ * - hyscan_map_track_model_lock() - получение монопольного доступа к #HyScanMapTrack;
+ * - hyscan_map_track_model_param() - получение параметров галса;
+ * - hyscan_map_track_model_set_projection() - устанавливает картографическую проекцию;
+ *
+ */
+
 #include "hyscan-map-track-model.h"
 
 #define REFRESH_INTERVAL              300000     /* Период обновления данных, мкс. */
@@ -19,16 +75,17 @@ enum
 
 struct _HyScanMapTrackModelPrivate
 {
-  gboolean                 shutdown;
-  gboolean                 suspend; // todo: надо ли эту функциональность?
-  GHashTable              *tracks;
-  GThread                 *watcher;
-  GMutex                   lock;          /* Доступ к tracks и project. */
-  gchar                   *project;
-  HyScanDB                *db;
-  HyScanCache             *cache;
-  HyScanGeoProjection     *projection;
-  gchar                  **active_tracks;
+  HyScanDB                *db;             /* База данных. */
+  HyScanCache             *cache;          /* Кэш. */
+
+  gchar                   *project;        /* Имя проекта. */
+  gchar                  **active_tracks;  /* NULL-терминированный список активных галсов. */
+  HyScanGeoProjection     *projection;     /* Текущая картографическая проекция. */
+  GMutex                   lock;           /* Доступ к active_tracks, project и projection. */
+
+  GHashTable              *tracks;         /* Таблица созданных обработчиков: { имя галса: #HyScanMapTrackModelInfo }. */
+  GThread                 *watcher;        /* Поток проверки изменений. */
+  gboolean                 shutdown;       /* Признак завершения работы. */
 };
 
 static void        hyscan_map_track_model_set_property        (GObject       *object,
@@ -134,7 +191,6 @@ hyscan_map_track_model_get_property (GObject      *object,
                                      GParamSpec   *pspec)
 {
   HyScanMapTrackModel *map_track_model = HYSCAN_MAP_TRACK_MODEL (object);
-  HyScanMapTrackModelPrivate *priv = map_track_model->priv;
 
   switch (prop_id)
     {
@@ -179,22 +235,7 @@ hyscan_map_track_model_object_finalize (GObject *object)
   G_OBJECT_CLASS (hyscan_map_track_model_parent_class)->finalize (object);
 }
 
-static HyScanMapTrackModelInfo *
-hyscan_map_track_model_get_info (HyScanMapTrackModel *model,
-                                 const gchar         *track_name)
-{
-  HyScanMapTrackModelPrivate *priv = model->priv;
-  HyScanMapTrackModelInfo *info;
-
-  g_mutex_lock (&priv->lock);
-  info = g_hash_table_lookup (priv->tracks, track_name);
-  info = hyscan_map_track_model_info_ref (info);
-  g_mutex_unlock (&priv->lock);
-
-  return info;
-}
-
-/* Запрашивает перерисовку слоя, если есть изменения в каналах данных. */
+/* Следит за изменениями в данных и параметрах проекции и отправляет сигналы, если есть изменения. */
 static gpointer
 hyscan_map_track_model_watcher (gpointer data)
 {
@@ -205,14 +246,9 @@ hyscan_map_track_model_watcher (gpointer data)
   gchar **active_tracks = NULL;
   gint i;
 
-  HyScanMapTrackModelInfo *info;
-
   while (!g_atomic_int_get (&priv->shutdown))
     {
       g_usleep (REFRESH_INTERVAL);
-
-      if (priv->suspend)
-        continue;
 
       g_mutex_lock (&priv->lock);
       g_clear_pointer (&active_tracks, g_strfreev);
@@ -223,9 +259,15 @@ hyscan_map_track_model_watcher (gpointer data)
       data_changed = param_changed = FALSE;
       for (i = 0; active_tracks[i] != NULL; i++)
         {
+          HyScanMapTrackModelInfo *info;
           guint32 mod_count, param_mod_count;
 
-          info = hyscan_map_track_model_get_info (model, active_tracks[i]);
+          /* Поулчает объект доступа к проекции галса. */
+          g_mutex_lock (&priv->lock);
+          info = g_hash_table_lookup (priv->tracks, active_tracks[i]);
+          hyscan_map_track_model_info_ref (info);
+          g_mutex_unlock (&priv->lock);
+
           if (info == NULL)
             continue;
 
@@ -256,9 +298,18 @@ hyscan_map_track_model_watcher (gpointer data)
   return NULL;
 }
 
+/**
+ * hyscan_map_track_model_new:
+ * @db: указатель на базу данных #HyScanDB
+ * @cache: указатель на кэш #HyScanCache
+ *
+ * Функция создаёт новый объект #HyScanMapTrackModel
+ *
+ * Returns: (transfer full): указатель на #HyScanMapTrackModel, для удаления g_object_unref().
+ */
 HyScanMapTrackModel *
-hyscan_map_track_model_new (HyScanDB                  *db,
-                            HyScanCache               *cache)
+hyscan_map_track_model_new (HyScanDB    *db,
+                            HyScanCache *cache)
 {
   return g_object_new (HYSCAN_TYPE_MAP_TRACK_MODEL,
                        "db", db,
@@ -266,6 +317,13 @@ hyscan_map_track_model_new (HyScanDB                  *db,
                        NULL);
 }
 
+/**
+ * hyscan_map_track_model_set_project:
+ * @model: указатель на #HyScanMapTrackModel
+ * @project: имя проекта
+ *
+ * Функция устанавливает имя проекта.
+ */
 void
 hyscan_map_track_model_set_project (HyScanMapTrackModel *model,
                                     const gchar         *project)
@@ -275,14 +333,21 @@ hyscan_map_track_model_set_project (HyScanMapTrackModel *model,
   g_return_if_fail (HYSCAN_IS_MAP_TRACK_MODEL (model));
   priv = model->priv;
 
-  /* Удаляем текущие галсы. */
   g_mutex_lock (&priv->lock);
+  /* Удаляем текущие обработчики галсов. */
   g_hash_table_remove_all (priv->tracks);
   g_free (priv->project);
   priv->project = g_strdup (project);
   g_mutex_unlock (&priv->lock);
 }
 
+/**
+ * hyscan_map_track_model_set_tracks:
+ * @model: указатель на #HyScanMapTrackModel
+ * @tracks: NULL-терминированный список активных галсов
+ *
+ * Функция устанавливает список активных галсов.
+ */
 void
 hyscan_map_track_model_set_tracks (HyScanMapTrackModel  *model,
                                    gchar               **tracks)
@@ -316,19 +381,16 @@ hyscan_map_track_model_get_tracks (HyScanMapTrackModel *model)
   return active_tracks;
 }
 
-static void
-hyscan_map_track_model_emit_param_changed (HyScanMapTrackModel *model)
-{
-  g_signal_emit (model, hyscan_map_track_model_signals[SIGNAL_PARAM_SET], 0);
-}
-
-static void
-hyscan_map_track_model_mutex_free (GMutex *mutex)
-{
-  g_mutex_clear (mutex);
-  g_free (mutex);
-}
-
+/**
+ * hyscan_map_track_model_get:
+ * @model: указатель на #HyScanMapTrackModel
+ * @track_name: имя галса
+ *
+ * Функция получает структуру доступа к #HyScanMapTrack. Для получения сконфигурированного объекта #HyScanMapTrack
+ * и эксклюзивного доступа к нему воспользуйтесь функцией hyscan_map_track_model_lock().
+ *
+ * Returns: указатель на #HyScanMapTrackModelInfo, для удаления hyscan_map_track_model_info_unref()
+ */
 HyScanMapTrackModelInfo *
 hyscan_map_track_model_get (HyScanMapTrackModel  *model,
                             const gchar          *track_name)
@@ -356,34 +418,67 @@ hyscan_map_track_model_get (HyScanMapTrackModel  *model,
   return info;
 }
 
+/**
+ * hyscan_map_track_model_lock:
+ * @model: указатель на #HyScanMapTrackModelInfo
+ * @track_name: имя галса
+ *
+ * Функция блокирует доступ к проекции галса на карт, конфигурирует её и возвращает указать на структуру
+ * доступа к этой проекции.
+ *
+ * По окончанию использования объекта необходимо вызвать hyscan_map_track_model_unlock() для разблокировки.
+ *
+ * Returns: (transfer none): указатель на #HyScanMapTrackModelInfo
+ */
 HyScanMapTrackModelInfo *
-hyscan_map_track_model_lookup (HyScanMapTrackModel  *model,
-                               const gchar          *track_name)
+hyscan_map_track_model_lock (HyScanMapTrackModel  *model,
+                             const gchar          *track_name)
 {
   HyScanMapTrackModelPrivate *priv = model->priv;
   HyScanMapTrackModelInfo *info;
+  HyScanGeoProjection *projection;
 
   g_return_val_if_fail (HYSCAN_IS_MAP_TRACK_MODEL (model), NULL);
 
   info = hyscan_map_track_model_get (model, track_name);
 
   g_mutex_lock (&info->mutex);
-  hyscan_map_track_set_projection (info->track, priv->projection);
+
+  g_mutex_lock (&priv->lock);
+  projection = g_object_ref (priv->projection);
+  g_mutex_unlock (&priv->lock);
+
+  hyscan_map_track_set_projection (info->track, projection);
 
   return info;
 }
 
+/**
+ * hyscan_map_track_model_unlock:
+ * @track_info: указатель на #HyScanMapTrackModelInfo
+ *
+ * Функия разблокирует доступ к #HyScanMapTrackModelInfo. Функцию необходимо вызывать после завершения работы
+ * со структурой, полученной из hyscan_map_track_model_lock().
+ */
 void
-hyscan_map_track_model_release (HyScanMapTrackModel *model,
-                                HyScanMapTrackModelInfo *track)
+hyscan_map_track_model_unlock (HyScanMapTrackModelInfo *track_info)
 {
-  g_mutex_unlock (&track->mutex);
-  hyscan_map_track_model_info_unref (track);
+  g_mutex_unlock (&track_info->mutex);
+  hyscan_map_track_model_info_unref (track_info);
 }
 
+/**
+ * hyscan_map_track_model_param:
+ * @model: указатель на #HyScanMapTrackModel
+ * @track_name: имя галса
+ *
+ * Функция получает параметры указанного галса.
+ *
+ * Returns: (transfer full): указатель на новый объект #HyScanMapTrackParam, для удаления g_object_unref().
+ */
 HyScanMapTrackParam *
-hyscan_map_track_model_param (HyScanMapTrackModel       *model,
-                              const gchar               *track_name)
+hyscan_map_track_model_param (HyScanMapTrackModel *model,
+                              const gchar         *track_name)
 {
   HyScanMapTrackModelPrivate *priv = model->priv;
   HyScanMapTrackParam *param;
@@ -401,6 +496,37 @@ hyscan_map_track_model_param (HyScanMapTrackModel       *model,
   return param;
 }
 
+/**
+ * hyscan_map_track_model_set_projection:
+ * @model: указатель на #HyScanMapTrackModel
+ * @projection: картографическая проекция #HyScanGeoProjection
+ *
+ * Функция устанавливает текущую картографическую проекцию.
+ */
+void
+hyscan_map_track_model_set_projection (HyScanMapTrackModel *model,
+                                       HyScanGeoProjection *projection)
+{
+  HyScanMapTrackModelPrivate *priv;
+
+  g_return_if_fail (HYSCAN_IS_MAP_TRACK_MODEL (model));
+  priv = model->priv;
+
+  g_mutex_lock (&priv->lock);
+  g_clear_object (&priv->projection);
+  priv->projection = g_object_ref (projection);
+  g_mutex_unlock (&priv->lock);
+}
+
+
+/**
+ * hyscan_map_track_model_info_ref:
+ * @info: указатель на  #HyScanMapTrackModelInfo
+ *
+ * Функция атомарно увеличивает счётчик ссылок на объект #HyScanMapTrackModelInfo.
+ *
+ * Returns: указатель на полученный объект
+ */
 HyScanMapTrackModelInfo *
 hyscan_map_track_model_info_ref (HyScanMapTrackModelInfo *info)
 {
@@ -414,10 +540,15 @@ hyscan_map_track_model_info_ref (HyScanMapTrackModelInfo *info)
   already_finalized = (old_value == 0);
   g_return_val_if_fail (!already_finalized, NULL);
 
-
   return info;
 }
 
+/**
+ * hyscan_map_track_model_info_unref:
+ * @info: указатель на #HyScanMapTrackModelInfo
+ *
+ * Функция уменьшает счётчик ссылок на #HyScanMapTrackModelInfo. Если ссылок больше не осталось, объект удаляется.
+ */
 void
 hyscan_map_track_model_info_unref (HyScanMapTrackModelInfo *info)
 {
@@ -426,19 +557,4 @@ hyscan_map_track_model_info_unref (HyScanMapTrackModelInfo *info)
 
   g_object_unref (info->track);
   g_mutex_clear (&info->mutex);
-}
-
-void
-hyscan_map_track_model_set_projection (HyScanMapTrackModel *model,
-                                       HyScanGeoProjection *projection)
-{
-  HyScanMapTrackModelPrivate *priv;
-  GHashTableIter iter;
-  HyScanMapTrack *track;
-
-  g_return_if_fail (HYSCAN_IS_MAP_TRACK_MODEL (model));
-  priv = model->priv;
-
-  g_clear_object (&priv->projection);
-  priv->projection = g_object_ref (projection);
 }
