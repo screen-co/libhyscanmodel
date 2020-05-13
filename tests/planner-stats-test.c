@@ -99,7 +99,7 @@ add_track_record (const gchar *plan_id,
   hyscan_db_close (db, project_id);
 
   /* Добавляем к плановому галсу запись. */
-  hyscan_planner_track_add_record (plan_track, track_info->id);
+  hyscan_planner_track_record_append (plan_track, track_info->id);
   hyscan_object_model_modify_object (model, plan_id, (const HyScanObject *) plan_track);
 
   hyscan_db_info_track_info_free (track_info);
@@ -294,7 +294,7 @@ check_progress_2 (void)
 static gboolean
 add_track_2 (void)
 {
-  HyScanPlannerTrack track = { .type = HYSCAN_PLANNER_TRACK };
+  HyScanPlannerTrack track = { .type = HYSCAN_TYPE_PLANNER_TRACK };
 
   g_message ("Add track #2");
 
@@ -407,7 +407,7 @@ add_track_1 (void)
   GHashTable *objects;
   GHashTableIter iter;
   gchar *key;
-  HyScanPlannerTrack track = { .type = HYSCAN_PLANNER_TRACK };
+  HyScanPlannerTrack track = { .type = HYSCAN_TYPE_PLANNER_TRACK };
 
   objects = hyscan_object_model_get (model);
   g_hash_table_iter_init (&iter, objects);
@@ -432,7 +432,7 @@ add_track_1 (void)
 static gboolean 
 add_zone (gpointer user_data)
 {
-  HyScanPlannerZone zone = { .type = HYSCAN_PLANNER_ZONE };
+  HyScanPlannerZone zone = { .type = HYSCAN_TYPE_PLANNER_ZONE };
   
   /* Добавляем зону, галсы, записи галсов. */
   g_message ("Add zone");

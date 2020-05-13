@@ -201,7 +201,7 @@ set_up_tracks (gpointer user_data)
   hyscan_object_model_set_project (HYSCAN_OBJECT_MODEL (planner_model), db, PROJET_NAME);
   for (guint i = 0; i < G_N_ELEMENTS (tracks); i++)
     {
-      HyScanPlannerTrack track = { .type = HYSCAN_PLANNER_TRACK };
+      HyScanPlannerTrack track = { .type = HYSCAN_TYPE_PLANNER_TRACK };
       track.number = i+1;
       track.plan.speed = 1.0;
 
