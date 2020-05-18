@@ -85,7 +85,6 @@ struct _HyScanTrackInfo
   const gchar         *name;
   GDateTime           *ctime;
   GDateTime           *mtime;
-  /*const gchar         *description;*/
   gchar               *description;
   const gchar         *operator_name;
   guint64              labels;
