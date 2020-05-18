@@ -85,8 +85,10 @@ struct _HyScanTrackInfo
   const gchar         *name;
   GDateTime           *ctime;
   GDateTime           *mtime;
-  const gchar         *description;
+  /*const gchar         *description;*/
+  gchar               *description;
   const gchar         *operator_name;
+  guint64              labels;
   HyScanDataSchema    *sonar_info;
   HyScanTrackPlan     *plan;
   gboolean             sources[HYSCAN_SOURCE_LAST];
@@ -150,6 +152,10 @@ HYSCAN_API
 HyScanTrackInfo *      hyscan_db_info_get_track_info           (HyScanDB              *db,
                                                                 gint32                 project_id,
                                                                 const gchar           *track_name);
+
+HYSCAN_API
+void                   hyscan_db_info_modify_track_info        (HyScanDBInfo          *db_info,
+                                                                HyScanTrackInfo       *track_info);
 
 HYSCAN_API
 HyScanProjectInfo *    hyscan_db_info_project_info_copy        (HyScanProjectInfo     *info);
