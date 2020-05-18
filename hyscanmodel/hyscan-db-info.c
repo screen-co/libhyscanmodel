@@ -1024,6 +1024,8 @@ hyscan_db_info_modify_track_info (HyScanDBInfo     *db_info,
           (hyscan_param_list_get_integer (list, "/schema/id") == TRACK_INFO_SCHEMA_ID) &&
           (hyscan_param_list_get_integer (list, "/schema/version") == TRACK_INFO_SCHEMA_VERSION))
         {
+          HyScanTrackInfo *track;
+
           hyscan_param_list_clear (list);
 
           hyscan_param_list_add (list, "/mtime");
@@ -1038,24 +1040,24 @@ hyscan_db_info_modify_track_info (HyScanDBInfo     *db_info,
 
           g_object_unref (list);
 
-          if (priv->tracks != NULL)
-            {
-              HyScanTrackInfo *track = g_hash_table_lookup (priv->tracks, track_info->name);
-              if (track != NULL)
-                {
-                  if (track->mtime != NULL)
-                    {
-                      g_date_time_unref (track->mtime);
-                    }
-                  track->mtime = g_date_time_ref (track_info->mtime);
-                  if (track->description != NULL)
-                    {
-                      g_free (track->description);
-                    }
-                  track->description = g_strdup (track_info->description);
-                  track->labels = track_info->labels;
-                }
-            }
+          if (priv->tracks == NULL)
+            return;
+
+          track = g_hash_table_lookup (priv->tracks, track_info->name);
+
+          if (track == NULL)
+            return;
+
+          if (track->mtime != NULL)
+            g_date_time_unref (track->mtime);
+
+          track->mtime = g_date_time_ref (track_info->mtime);
+
+          if (track->description != NULL)
+            g_free (track->description);
+
+          track->description = g_strdup (track_info->description);
+          track->labels = track_info->labels;
 
           g_signal_emit (db_info, hyscan_db_info_signals[SIGNAL_TRACKS_CHANGED], 0);
         }
