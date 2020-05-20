@@ -70,16 +70,13 @@ set (HYSCAN_MODEL_LIBRARY_INSTALL_FILES
      hyscan-sonar-state.h
      hyscan-sensor-state.h
      hyscan-sonar-model.h
-<<<<<<< HEAD
      hyscan-mark-location.h
      hyscan-mark-loc-model.h
-=======
      hyscan-sonar-recorder.h
      hyscan-track-stats.h
      hyscan-planner-selection.h
      hyscan-steer.h
      hyscan-planner-stats.h
->>>>>>> origin/wip/catfish
      # hyscan-appearance.h
      # hyscan-serializable.h
      )
