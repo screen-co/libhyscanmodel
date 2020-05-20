@@ -21,6 +21,8 @@ add_custom_command (OUTPUT "${CMAKE_BINARY_DIR}/marshallers/hyscan-model-marshal
 
 set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
      hyscan-db-info.c
+     hyscan-object-model.c
+     hyscan-planner-model.c
      hyscan-async.c
      hyscan-sonar-state.c
      hyscan-sensor-state.c
@@ -62,6 +64,8 @@ install (FILES "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/hyscanmodel-${HYSCAN_MAJOR_VER
 
 set (HYSCAN_MODEL_LIBRARY_INSTALL_FILES
      hyscan-db-info.h
+     hyscan-object-model.h
+     hyscan-planner-model.h
      hyscan-async.h
      hyscan-sonar-state.h
      hyscan-sensor-state.h
