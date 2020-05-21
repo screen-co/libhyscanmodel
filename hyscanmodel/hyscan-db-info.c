@@ -1001,67 +1001,79 @@ hyscan_db_info_get_track_info (HyScanDB    *db,
  * Функция изменяет объект в параметрах проекта.
  * В результате этой функции все поля объекта будут перезаписаны
  * и в базе данных, и в списке галсов.
+ *
+ * Returns: TRUE - объект успешно добавлен в базу данных,
+ *          FALSE - объект в базу данных не добавлен или произошла ошибка.
+ *          Возвращаемое значение ничего не говорит об успешном добавлении
+ *          объекта во внутреннюю хэш-таблицу.
  */
-void
+gboolean
 hyscan_db_info_modify_track_info (HyScanDBInfo     *db_info,
                                   HyScanTrackInfo  *track_info)
 {
   HyScanDBInfoPrivate *priv = db_info->priv;
-  gint32 project_id = hyscan_db_project_open (priv->db, priv->project_name);
-  gint32 param_id = hyscan_db_project_param_open (priv->db, project_id, PROJECT_INFO_GROUP);
+  HyScanParamList *list;
+  gint32 project_id = hyscan_db_project_open (priv->db, priv->project_name),
+         param_id;
+  gboolean result = FALSE;
 
-  if (param_id > 0)
+  if (project_id > 0)
+    param_id = hyscan_db_project_param_open (priv->db, project_id, PROJECT_INFO_GROUP);
+  else
+    return result;
+
+  hyscan_db_close (priv->db, project_id);
+
+  if (param_id <= 0)
+    return result;
+
+  list = hyscan_param_list_new ();
+
+  hyscan_param_list_add (list, "/schema/id");
+  hyscan_param_list_add (list, "/schema/version");
+  hyscan_param_list_add (list, "/mtime");
+  hyscan_param_list_add (list, "/description");
+  hyscan_param_list_add (list, "/label");
+
+  if ((hyscan_db_param_get (priv->db, param_id, track_info->id, list)) &&
+      (hyscan_param_list_get_integer (list, "/schema/id") == TRACK_INFO_SCHEMA_ID) &&
+      (hyscan_param_list_get_integer (list, "/schema/version") == TRACK_INFO_SCHEMA_VERSION))
     {
-      HyScanParamList *list = hyscan_param_list_new ();
+      HyScanTrackInfo *track;
 
-      hyscan_param_list_add (list, "/schema/id");
-      hyscan_param_list_add (list, "/schema/version");
-      hyscan_param_list_add (list, "/mtime");
-      hyscan_param_list_add (list, "/description");
-      hyscan_param_list_add (list, "/label");
+      hyscan_param_list_clear (list);
 
-      if ((hyscan_db_param_get (priv->db, param_id, track_info->id, list)) &&
-          (hyscan_param_list_get_integer (list, "/schema/id") == TRACK_INFO_SCHEMA_ID) &&
-          (hyscan_param_list_get_integer (list, "/schema/version") == TRACK_INFO_SCHEMA_VERSION))
+      hyscan_param_list_set_integer (list, "/mtime", G_TIME_SPAN_SECOND * g_date_time_to_unix (track_info->mtime));
+      hyscan_param_list_set_string  (list, "/description", track_info->description);
+      hyscan_param_list_set_integer (list, "/label", track_info->labels);
+
+      result = hyscan_db_param_set (priv->db, param_id, track_info->id, list);
+
+      if (priv->tracks != NULL)
         {
-          HyScanTrackInfo *track;
-
-          hyscan_param_list_clear (list);
-
-          hyscan_param_list_add (list, "/mtime");
-          hyscan_param_list_add (list, "/description");
-          hyscan_param_list_add (list, "/label");
-
-          hyscan_param_list_set_integer (list, "/mtime", G_TIME_SPAN_SECOND * g_date_time_to_unix (track_info->mtime));
-          hyscan_param_list_set_string  (list, "/description", track_info->description);
-          hyscan_param_list_set_integer (list, "/label", track_info->labels);
-
-          hyscan_db_param_set (priv->db, param_id, track_info->id, list);
-
-          g_object_unref (list);
-
-          if (priv->tracks == NULL)
-            return;
-
           track = g_hash_table_lookup (priv->tracks, track_info->name);
 
-          if (track == NULL)
-            return;
+          if (track != NULL)
+            {
 
-          if (track->mtime != NULL)
-            g_date_time_unref (track->mtime);
+              if (track->mtime != NULL)
+                g_date_time_unref (track->mtime);
 
-          track->mtime = g_date_time_ref (track_info->mtime);
+              track->mtime = g_date_time_ref (track_info->mtime);
 
-          if (track->description != NULL)
-            g_free (track->description);
+              if (track->description != NULL)
+                g_free (track->description);
 
-          track->description = g_strdup (track_info->description);
-          track->labels = track_info->labels;
+              track->description = g_strdup (track_info->description);
+              track->labels = track_info->labels;
 
-          g_signal_emit (db_info, hyscan_db_info_signals[SIGNAL_TRACKS_CHANGED], 0);
+              g_signal_emit (db_info, hyscan_db_info_signals[SIGNAL_TRACKS_CHANGED], 0);
+            }
         }
     }
+  g_object_unref (list);
+  hyscan_db_close (priv->db, param_id);
+  return result;
 }
 
 /**
@@ -1152,7 +1164,6 @@ hyscan_db_info_track_info_free (HyScanTrackInfo *info)
   g_clear_pointer ((gchar**)&info->name, g_free);
   g_clear_pointer ((gchar**)&info->description, g_free);
   g_clear_pointer ((gchar**)&info->operator_name, g_free);
-  info->labels = 0;
   g_clear_pointer (&info->ctime, g_date_time_unref);
   g_clear_pointer (&info->mtime, g_date_time_unref);
   g_clear_object (&info->sonar_info);
