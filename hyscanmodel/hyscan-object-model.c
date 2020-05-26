@@ -61,7 +61,8 @@
 #include "hyscan-object-model.h"
 
 #define CHECK_INTERVAL_US (250 * G_TIME_SPAN_MILLISECOND)    /* Период проверки изменений в параметрах проекта, мкс. */
-#define ALERT_INTERVAL_MS (500)                              /* Период проверки для отправки сигнала "changed". */
+#define FLUSH_INTERVAL_US (2 * G_TIME_SPAN_SECOND)           /* Период сброса промежуточных изменений, мкс. */
+#define ALERT_INTERVAL_MS (500)                              /* Период проверки для отправки сигнала "changed", мс. */
 
 enum
 {
@@ -138,8 +139,13 @@ static void         hyscan_object_model_do_task                (gpointer        
                                                                 gpointer                   user_data);
 static void         hyscan_object_model_do_all_tasks           (HyScanObjectModelPrivate  *priv,
                                                                 HyScanObjectData          *data);
-static GHashTable * hyscan_object_model_get_all_objects        (HyScanObjectModelPrivate  *priv,
-                                                                HyScanObjectData          *data);
+static GHashTable * hyscan_object_model_merge_ht               (HyScanObjectModelPrivate  *priv,
+                                                                GHashTable                *objects,
+                                                                gchar                    **ids);
+static void         hyscan_object_model_set_objects           (HyScanObjectModelPrivate   *priv,
+                                                               GHashTable                 *object_list);
+static void         hyscan_object_model_update_objects        (HyScanObjectModelPrivate   *priv,
+                                                               HyScanObjectData           *data);
 static gpointer     hyscan_object_model_processing             (HyScanObjectModelPrivate  *priv);
 static gboolean     hyscan_object_model_signaller              (gpointer                   data);
 
@@ -370,15 +376,66 @@ hyscan_object_model_do_all_tasks (HyScanObjectModelPrivate  *priv,
   g_slist_free (tasks);
 }
 
-/* Функция забирает объекты из БД. */
+/* Функция формирует промежуточную хэш-таблицу, состоящую как из новых объектов из таблицы objects,
+ * так и старых из таблицы priv->objects. */
 static GHashTable *
-hyscan_object_model_get_all_objects (HyScanObjectModelPrivate *priv,
-                                     HyScanObjectData         *data)
+hyscan_object_model_merge_ht (HyScanObjectModelPrivate  *priv,
+                              GHashTable                *objects,
+                              gchar                    **ids)
+{
+  gint i;
+  GHashTable *ht;
+
+  ht = hyscan_object_model_make_ht ();
+
+  for (i = 0; ids[i] != NULL; i++)
+    {
+      const HyScanObject *object;
+
+      object = g_hash_table_lookup (objects, ids[i]);
+
+      /* Если в новой таблице объекта нет, то берём его из старой.
+       * Тут мы не делаем блокировку priv->objects_lock, т.к. priv->objects может измениться только в этом же потоке. */
+      if (object == NULL && priv->objects != NULL)
+        object = g_hash_table_lookup (priv->objects, ids[i]);
+
+      if (object == NULL)
+        continue;
+
+      g_hash_table_insert (ht, g_strdup (ids[i]), hyscan_object_copy (object));
+    }
+
+  return ht;
+}
+
+/* Функция устанавливает новую хэш-таблицу объектов и инициирует отправление сигнала "changed". */
+static void
+hyscan_object_model_set_objects (HyScanObjectModelPrivate  *priv,
+                                 GHashTable                *object_list)
+{
+  GHashTable *temp;
+
+  g_mutex_lock (&priv->objects_lock);
+  temp = priv->objects;
+  priv->objects = g_hash_table_ref (object_list);
+  priv->objects_changed = TRUE;
+  g_mutex_unlock (&priv->objects_lock);
+
+  g_clear_pointer (&temp, g_hash_table_unref);
+}
+
+/* Функция забирает объекты из БД. */
+static void
+hyscan_object_model_update_objects (HyScanObjectModelPrivate *priv,
+                                    HyScanObjectData         *data)
 {
   HyScanObject *object;
   GHashTable *object_list;
   gchar **id_list;
   guint len, i;
+  gint64 start;
+
+  start = g_get_monotonic_time ();
 
   /* Считываем список идентификаторов. Прошу обратить внимание, что
    * возврат хэш-таблицы с 0 элементов -- это нормальная ситуация, например,
@@ -394,11 +451,24 @@ hyscan_object_model_get_all_objects (HyScanObjectModelPrivate *priv,
         continue;
 
       g_hash_table_insert (object_list, g_strdup (id_list[i]), object);
+
+      /* Если мы уже достатчно долго выгружаем объекты, то передадим пользователям класса промежуточные результаты. */
+      if (g_get_monotonic_time() - start > FLUSH_INTERVAL_US)
+        {
+          GHashTable *mixed;
+
+          mixed = hyscan_object_model_merge_ht (priv, object_list, id_list);
+          hyscan_object_model_set_objects (priv, mixed);
+          g_hash_table_unref (mixed);
+
+          start = g_get_monotonic_time ();
+        }
     }
 
-  g_strfreev (id_list);
+  hyscan_object_model_set_objects (priv, object_list);
 
-  return object_list;
+  g_strfreev (id_list);
+  g_hash_table_unref (object_list);
 }
 
 /* Поток асинхронной работы с БД. */
@@ -470,24 +540,7 @@ hyscan_object_model_processing (HyScanObjectModelPrivate *priv)
 
       /* Запоминаем мод_каунт перед(!) забором объектов. */
       oldmc = hyscan_object_data_get_mod_count (object_data);
-      {
-        GHashTable *object_list;        /* Объекты из параметров проекта БД. */
-        GHashTable *temp;               /* Для обмена списка объектов. */
-
-        object_list = hyscan_object_model_get_all_objects (priv, object_data);
-
-        /* Воруем хэш-таблицу из привата, помещаем туда свежесозданную,
-         * инициируем отправление сигнала. */
-        g_mutex_lock (&priv->objects_lock);
-        temp = priv->objects;
-        priv->objects = g_hash_table_ref (object_list);
-        priv->objects_changed = TRUE;
-        g_mutex_unlock (&priv->objects_lock);
-
-        /* Убираем свои ссылки на хэш-таблицы. */
-        g_clear_pointer (&temp, g_hash_table_unref);
-        g_clear_pointer (&object_list, g_hash_table_unref);
-      }
+      hyscan_object_model_update_objects (priv, object_data);
     }
 
   g_clear_object (&object_data);
