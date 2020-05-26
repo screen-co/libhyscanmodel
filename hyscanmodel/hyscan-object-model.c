@@ -49,7 +49,7 @@
  *
  * Получить объекты можно двумя способами:
  * - hyscan_object_model_get() - получение всех объектов в виде хэш-таблицы,
- * - hyscan_object_model_get_id() - получение одного объекта по его идентификатору.
+ * - hyscan_object_model_get_by_id() - получение одного объекта по его идентификатору.
  *
  * Сигнал HyScanObjectModel::changed сигнализирует о том, что есть изменения в списке объектов.
  * Прямо в обработчике сигнала можно получить актуальный список объектов.
@@ -142,7 +142,7 @@ static GHashTable * hyscan_object_model_get_all_objects        (HyScanObjectMode
                                                                 HyScanObjectData          *data);
 static gpointer     hyscan_object_model_processing             (HyScanObjectModelPrivate  *priv);
 static gboolean     hyscan_object_model_signaller              (gpointer                   data);
-                    
+
 static guint        hyscan_object_model_signals[SIGNAL_LAST] = {0};
 
 G_DEFINE_TYPE_WITH_PRIVATE (HyScanObjectModel, hyscan_object_model, G_TYPE_OBJECT);
@@ -169,7 +169,7 @@ hyscan_object_model_class_init (HyScanObjectModelClass *klass)
    */
   hyscan_object_model_signals[SIGNAL_CHANGED] =
     g_signal_new ("changed", HYSCAN_TYPE_OBJECT_MODEL,
-                  G_SIGNAL_RUN_FIRST, G_STRUCT_OFFSET (HyScanObjectModelClass, changed), NULL, NULL,
+                  G_SIGNAL_RUN_FIRST, 0, NULL, NULL,
                   g_cclosure_marshal_VOID__VOID,
                   G_TYPE_NONE, 0);
 }
@@ -335,17 +335,17 @@ hyscan_object_model_do_task (gpointer data,
     {
     case OBJECT_ADD:
       if (!hyscan_object_data_add (mdata, task->object, NULL))
-        g_warning ("Failed to add object");
+        g_warning ("HyScanObjectModel: failed to add object");
       break;
 
     case OBJECT_MODIFY:
       if (!hyscan_object_data_modify (mdata, task->id, task->object))
-        g_warning ("Failed to modify object <%s>", task->id);
+        g_warning ("HyScanObjectModel: failed to modify object <%s>", task->id);
       break;
 
     case OBJECT_REMOVE:
       if (!hyscan_object_data_remove (mdata, task->id))
-        g_warning ("Failed to remove object <%s>", task->id);
+        g_warning ("HyScanObjectModel: failed to remove object <%s>", task->id);
       break;
     }
 }
@@ -586,7 +586,7 @@ hyscan_object_model_refresh (HyScanObjectModel *model)
  * hyscan_object_model_add_object:
  * @model: указатель на #HyScanObjectModel
  * @object: создаваемый объект.
- * 
+ *
  * Функция создает объект в параметрах проекта.
  *
  */
@@ -605,7 +605,7 @@ hyscan_object_model_add_object (HyScanObjectModel  *model,
  * @model: указатель на #HyScanObjectModel
  * @id: идентификатор объекта
  * @object: новые значения.
- * 
+ *
  * Функция изменяет объект в параметрах проекта.
  * В результате этой функции все поля объекта будут перезаписаны.
  */
@@ -624,7 +624,7 @@ hyscan_object_model_modify_object (HyScanObjectModel  *model,
  * hyscan_object_model_remove_object:
  * @model: указатель на #HyScanObjectModel
  * @id: идентификатор объекта.
- * 
+ *
  * Функция удаляет объект из параметров проекта.
  *
  */
@@ -641,7 +641,7 @@ hyscan_object_model_remove_object (HyScanObjectModel *model,
 /**
  * hyscan_object_model_get:
  * @model: указатель на #HyScanObjectModel
- * 
+ *
  * Функция возвращает список объектов из внутреннего буфера.
  *
  * Returns: (transfer full): GHashTable, где ключом является идентификатор объекта,
@@ -666,14 +666,14 @@ hyscan_object_model_get (HyScanObjectModel *model)
     }
 
   /* Копируем объекты. */
-  objects = hyscan_object_model_copy (model, priv->objects);
+  objects = hyscan_object_model_copy (priv->objects);
   g_mutex_unlock (&priv->objects_lock);
 
   return objects;
 }
 
 /**
- * hyscan_object_model_get_id:
+ * hyscan_object_model_get_by_id:
  * @model: указатель на модель #HyScanObjectModel
  * @id: идентификатор объекта
  *
@@ -682,11 +682,10 @@ hyscan_object_model_get (HyScanObjectModel *model)
  * Returns: (transfer full) (nullable): указатель на объект или %NULL, если объект не найден
  */
 HyScanObject *
-hyscan_object_model_get_id (HyScanObjectModel *model,
-                            const gchar       *id)
+hyscan_object_model_get_by_id (HyScanObjectModel *model,
+                               const gchar       *id)
 {
   HyScanObjectModelPrivate *priv;
-  HyScanObjectDataClass *data_class;
   HyScanObject *object, *copy = NULL;
 
   g_return_val_if_fail (HYSCAN_IS_OBJECT_MODEL (model), NULL);
@@ -702,21 +701,15 @@ hyscan_object_model_get_id (HyScanObjectModel *model,
       return NULL;
     }
 
-  /* Копируем объект. */
-  data_class = g_type_class_ref (priv->data_type);
-
   object = g_hash_table_lookup (priv->objects, id);
   copy = hyscan_object_copy (object);
   g_mutex_unlock (&priv->objects_lock);
-
-  g_type_class_unref (data_class);
 
   return copy;
 }
 
 /**
  * hyscan_object_model_copy:
- * @model: указатель на #HyScanObjectModel
  * @src: таблица объектов
  *
  * Вспомогательная функция для создания копии таблицы объектов.
@@ -724,30 +717,21 @@ hyscan_object_model_get_id (HyScanObjectModel *model,
  * Returns: (transfer full): новая таблица, для удаления g_hash_table_unref().
  */
 GHashTable *
-hyscan_object_model_copy (HyScanObjectModel *model,
-                          GHashTable        *src)
+hyscan_object_model_copy (GHashTable *src)
 {
-  HyScanObjectModelPrivate *priv;
-  HyScanObjectDataClass *data_class;
   GHashTable *dst;
   GHashTableIter iter;
   gpointer k, v;
-
-  g_return_val_if_fail (HYSCAN_IS_OBJECT_MODEL (model), NULL);
-  priv = model->priv;
 
   if (src == NULL)
     return NULL;
 
   dst = hyscan_object_model_make_ht ();
-  data_class = g_type_class_ref (priv->data_type);
 
   /* Переписываем объекты. */
   g_hash_table_iter_init (&iter, src);
   while (g_hash_table_iter_next (&iter, &k, &v))
     g_hash_table_insert (dst, g_strdup (k), hyscan_object_copy (v));
-
-  g_type_class_unref (data_class);
 
   return dst;
 }

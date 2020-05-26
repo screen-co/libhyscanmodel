@@ -3,14 +3,14 @@
  * Copyright 2017-2019 Screen LLC, Dmitriev Alexander <m1n7@yandex.ru>
  * Copyright 2019 Screen LLC, Alexey Sakhnov <alexsakhnov@gmail.com>
  *
- * This file is part of HyScanGui library.
+ * This file is part of HyScanModel library.
  *
- * HyScanGui is dual-licensed: you can redistribute it and/or modify
+ * HyScanModel is dual-licensed: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * HyScanGui is distributed in the hope that it will be useful,
+ * HyScanModel is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
@@ -22,9 +22,9 @@
  * Contact the Screen LLC in this case - <info@screen-co.ru>.
  */
 
-/* HyScanGui имеет двойную лицензию.
+/* HyScanModel имеет двойную лицензию.
  *
- * Во-первых, вы можете распространять HyScanGui на условиях Стандартной
+ * Во-первых, вы можете распространять HyScanModel на условиях Стандартной
  * Общественной Лицензии GNU версии 3, либо по любой более поздней версии
  * лицензии (по вашему выбору). Полные положения лицензии GNU приведены в
  * <http://www.gnu.org/licenses/>.
@@ -64,9 +64,6 @@ struct _HyScanObjectModel
 struct _HyScanObjectModelClass
 {
   GObjectClass parent_class;
-
-  /* Сигналы. */
-  void         (*changed)             (HyScanObjectModel  *model);
 };
 
 HYSCAN_API
@@ -100,12 +97,11 @@ HYSCAN_API
 GHashTable *            hyscan_object_model_get               (HyScanObjectModel         *model);
 
 HYSCAN_API
-HyScanObject *          hyscan_object_model_get_id            (HyScanObjectModel         *model,
+HyScanObject *          hyscan_object_model_get_by_id         (HyScanObjectModel         *model,
                                                                const gchar               *id);
 
 HYSCAN_API
-GHashTable *            hyscan_object_model_copy              (HyScanObjectModel         *model,
-                                                               GHashTable                *objects);
+GHashTable *            hyscan_object_model_copy              (GHashTable                *objects);
 
 G_END_DECLS
 
