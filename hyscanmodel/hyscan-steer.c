@@ -502,7 +502,7 @@ hyscan_steer_set_track (HyScanSteer *steer)
 
   active_id = hyscan_planner_selection_get_active_track (priv->selection);
   if (active_id != NULL)
-    track = (HyScanPlannerTrack *) hyscan_object_model_get_id (priv->planner_model, active_id);
+    track = (HyScanPlannerTrack *) hyscan_object_model_get_by_id (priv->planner_model, active_id);
 
   g_free (priv->track_id);
   hyscan_planner_track_free (priv->track);
@@ -511,7 +511,7 @@ hyscan_steer_set_track (HyScanSteer *steer)
 
   g_clear_pointer (&priv->zone, hyscan_planner_zone_free);
   if (track != NULL && track->zone_id != NULL)
-    priv->zone = (HyScanPlannerZone *) hyscan_object_model_get_id (priv->planner_model, track->zone_id);
+    priv->zone = (HyScanPlannerZone *) hyscan_object_model_get_by_id (priv->planner_model, track->zone_id);
 
   g_clear_object (&priv->geo);
   if (track != NULL)
