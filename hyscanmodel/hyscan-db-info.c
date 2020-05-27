@@ -1017,6 +1017,8 @@ hyscan_db_info_modify_track_info (HyScanDBInfo     *db_info,
          param_id;
   gboolean result = FALSE;
 
+  g_return_val_if_fail (HYSCAN_IS_DB_INFO (db_info), FALSE);
+
   if (project_id > 0)
     param_id = hyscan_db_project_param_open (priv->db, project_id, PROJECT_INFO_GROUP);
   else
@@ -1051,6 +1053,8 @@ hyscan_db_info_modify_track_info (HyScanDBInfo     *db_info,
 
       if (priv->tracks != NULL)
         {
+          g_mutex_lock (&priv->lock);
+
           track = g_hash_table_lookup (priv->tracks, track_info->name);
 
           if (track != NULL)
@@ -1066,9 +1070,11 @@ hyscan_db_info_modify_track_info (HyScanDBInfo     *db_info,
 
               track->description = g_strdup (track_info->description);
               track->labels = track_info->labels;
-
-              g_signal_emit (db_info, hyscan_db_info_signals[SIGNAL_TRACKS_CHANGED], 0);
+              /* Флаг изменения внутренней хэш-таблицы. */
+              priv->tracks_update = TRUE;
             }
+
+          g_mutex_unlock (&priv->lock);
         }
     }
   g_object_unref (list);
