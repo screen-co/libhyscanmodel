@@ -252,7 +252,7 @@ test_activated (void)
   /* Отключаемся от сигнала. */
   g_signal_handlers_disconnect_by_func (selection, test_activated, NULL);
 
-  track = (HyScanPlannerTrack *) hyscan_object_model_get_id (HYSCAN_OBJECT_MODEL (planner_model), active_id);
+  track = (HyScanPlannerTrack *) hyscan_object_model_get_by_id (HYSCAN_OBJECT_MODEL (planner_model), active_id);
   if (!HYSCAN_IS_PLANNER_TRACK (track))
     g_error ("Active track is not found");
 

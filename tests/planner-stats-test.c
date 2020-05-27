@@ -80,7 +80,7 @@ add_track_record (const gchar *plan_id,
   gint start_idx, end_idx;
   gint32 project_id;
 
-  plan_track = (HyScanPlannerTrack *) hyscan_object_model_get_id (model, plan_id);
+  plan_track = (HyScanPlannerTrack *) hyscan_object_model_get_by_id (model, plan_id);
   plan_params = &plan_track->plan;
 
   /* Создаем путевые точки и пишем их в БД. */

@@ -55,6 +55,7 @@ struct _HyScanPlannerModelPrivate
   HyScanGeo                   *geo;
 };
 
+static void    hyscan_planner_model_object_constructed (GObject               *object);
 static void    hyscan_planner_model_object_finalize    (GObject               *object);
 static void    hyscan_planner_model_changed            (HyScanObjectModel     *model);
 
@@ -64,9 +65,8 @@ static void
 hyscan_planner_model_class_init (HyScanPlannerModelClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
-  HyScanObjectModelClass *model_class = HYSCAN_OBJECT_MODEL_CLASS (klass);
 
-  model_class->changed = hyscan_planner_model_changed;
+  object_class->constructed = hyscan_planner_model_object_constructed;
   object_class->finalize = hyscan_planner_model_object_finalize;
 }
 
@@ -74,6 +74,16 @@ static void
 hyscan_planner_model_init (HyScanPlannerModel *planner_model)
 {
   planner_model->priv = hyscan_planner_model_get_instance_private (planner_model);
+}
+
+static void
+hyscan_planner_model_object_constructed (GObject *object)
+{
+  HyScanPlannerModel *planner_model = HYSCAN_PLANNER_MODEL (object);
+
+  G_OBJECT_CLASS (hyscan_planner_model_parent_class)->constructed (object);
+
+  g_signal_connect (planner_model, "changed", G_CALLBACK (hyscan_planner_model_changed), NULL);
 }
 
 static void
@@ -97,7 +107,7 @@ hyscan_planner_model_changed (HyScanObjectModel *model)
 
   g_clear_object (&priv->geo);
 
-  object = (HyScanPlannerOrigin *) hyscan_object_model_get_id (model, HYSCAN_PLANNER_ORIGIN_ID);
+  object = (HyScanPlannerOrigin *) hyscan_object_model_get_by_id (model, HYSCAN_PLANNER_ORIGIN_ID);
   if (object == NULL)
     return;
 
@@ -198,7 +208,7 @@ hyscan_planner_model_get_origin (HyScanPlannerModel *pmodel)
 
   g_return_val_if_fail (HYSCAN_IS_PLANNER_MODEL (pmodel), NULL);
 
-  object = (HyScanPlannerOrigin *) hyscan_object_model_get_id (HYSCAN_OBJECT_MODEL (pmodel), HYSCAN_PLANNER_ORIGIN_ID);
+  object = (HyScanPlannerOrigin *) hyscan_object_model_get_by_id (HYSCAN_OBJECT_MODEL (pmodel), HYSCAN_PLANNER_ORIGIN_ID);
   if (object == NULL)
     return NULL;
 
