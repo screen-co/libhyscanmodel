@@ -881,7 +881,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
       hyscan_param_list_add (list, "/schema/version");
       hyscan_param_list_add (list, "/mtime");
       hyscan_param_list_add (list, "/description");
-      hyscan_param_list_add (list, "/label");
+      hyscan_param_list_add (list, "/labels");
 
       if ((hyscan_db_param_get (db, param_id, info->id, list)) &&
           (hyscan_param_list_get_integer (list, "/schema/id") == TRACK_INFO_SCHEMA_ID) &&
@@ -891,7 +891,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
 
           info->mtime = g_date_time_new_from_unix_utc (mtime);
           info->description = hyscan_param_list_dup_string (list, "/description");
-          info->labels = hyscan_param_list_get_integer (list, "/label");
+          info->labels = hyscan_param_list_get_integer (list, "/labels");
         }
       else
         {
@@ -1011,74 +1011,82 @@ gboolean
 hyscan_db_info_modify_track_info (HyScanDBInfo     *db_info,
                                   HyScanTrackInfo  *track_info)
 {
-  HyScanDBInfoPrivate *priv = db_info->priv;
+  HyScanDBInfoPrivate *priv;
   HyScanParamList *list;
-  gint32 project_id = hyscan_db_project_open (priv->db, priv->project_name),
-         param_id;
+  HyScanTrackInfo *track;
+  gint32 project_id;
+  gint32 param_id;
   gboolean result = FALSE;
+
+  if (track_info == NULL)
+    return FALSE;
+
+  if (db_info == NULL)
+    return FALSE;
 
   g_return_val_if_fail (HYSCAN_IS_DB_INFO (db_info), FALSE);
 
-  if (project_id > 0)
-    param_id = hyscan_db_project_param_open (priv->db, project_id, PROJECT_INFO_GROUP);
-  else
-    return result;
+  priv = db_info->priv;
+  project_id = hyscan_db_project_open (priv->db, priv->project_name);
+
+  if (project_id <= 0)
+    return FALSE;
+
+  param_id = hyscan_db_project_param_open (priv->db, project_id, PROJECT_INFO_GROUP);
 
   hyscan_db_close (priv->db, project_id);
 
   if (param_id <= 0)
-    return result;
+    return FALSE;
 
   list = hyscan_param_list_new ();
 
   hyscan_param_list_add (list, "/schema/id");
   hyscan_param_list_add (list, "/schema/version");
-  hyscan_param_list_add (list, "/mtime");
-  hyscan_param_list_add (list, "/description");
-  hyscan_param_list_add (list, "/label");
 
   if ((hyscan_db_param_get (priv->db, param_id, track_info->id, list)) &&
       (hyscan_param_list_get_integer (list, "/schema/id") == TRACK_INFO_SCHEMA_ID) &&
       (hyscan_param_list_get_integer (list, "/schema/version") == TRACK_INFO_SCHEMA_VERSION))
     {
-      HyScanTrackInfo *track;
-
       hyscan_param_list_clear (list);
 
       hyscan_param_list_set_integer (list, "/mtime", G_TIME_SPAN_SECOND * g_date_time_to_unix (track_info->mtime));
       hyscan_param_list_set_string  (list, "/description", track_info->description);
-      hyscan_param_list_set_integer (list, "/label", track_info->labels);
+      hyscan_param_list_set_integer (list, "/labels", track_info->labels);
 
       result = hyscan_db_param_set (priv->db, param_id, track_info->id, list);
-
-      if (priv->tracks != NULL)
-        {
-          g_mutex_lock (&priv->lock);
-
-          track = g_hash_table_lookup (priv->tracks, track_info->name);
-
-          if (track != NULL)
-            {
-
-              if (track->mtime != NULL)
-                g_date_time_unref (track->mtime);
-
-              track->mtime = g_date_time_ref (track_info->mtime);
-
-              if (track->description != NULL)
-                g_free (track->description);
-
-              track->description = g_strdup (track_info->description);
-              track->labels = track_info->labels;
-              /* Флаг изменения внутренней хэш-таблицы. */
-              priv->tracks_update = TRUE;
-            }
-
-          g_mutex_unlock (&priv->lock);
-        }
     }
+
   g_object_unref (list);
   hyscan_db_close (priv->db, param_id);
+
+  if (!result)
+    return FALSE;
+
+  if (priv->tracks == NULL)
+    return result;
+
+  g_mutex_lock (&priv->lock);
+
+  track = g_hash_table_lookup (priv->tracks, track_info->name);
+
+  if (track == NULL)
+    {
+      g_mutex_unlock (&priv->lock);
+      return result;
+    }
+
+  g_clear_pointer (&track->mtime, g_date_time_unref);
+  g_clear_pointer ((gchar**)&track->description, g_free);
+
+  track->mtime = g_date_time_ref (track_info->mtime);
+  track->description = g_strdup (track_info->description);
+  track->labels = track_info->labels;
+  /* Флаг изменения внутренней хэш-таблицы. */
+  priv->tracks_update = TRUE;
+
+  g_mutex_unlock (&priv->lock);
+
   return result;
 }
 
