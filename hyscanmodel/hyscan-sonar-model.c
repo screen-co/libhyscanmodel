@@ -400,7 +400,6 @@ hyscan_sonar_model_start_stop (HyScanSonarModel *self)
 
   g_signal_emit (self, hyscan_sonar_model_signals[SIGNAL_START_STOP], 0);
 
-
   return G_SOURCE_REMOVE;
 }
 
@@ -1173,7 +1172,10 @@ hyscan_sonar_model_start (HyScanSonar           *sonar,
   /* Сигнал "before-start" для подготовки всех систем к началу записи и возможности отменить запись. */
   g_signal_emit (self, hyscan_sonar_model_signals[SIGNAL_BEFORE_START], 0, &cancel);
   if (cancel)
-    return FALSE;
+    {
+      g_info ("HyScanSonarModel: sonar start cancelled in \"before-start\" signal");
+      return FALSE;
+    }
 
   start.track_type = track_type;
   start.project = (gchar *) project_name;
@@ -1341,7 +1343,10 @@ hyscan_sonar_model_param_thread (gpointer data)
                                        start->track_type, start->plan);
 
           if (!status)
-            g_clear_pointer (&start, &hyscan_sonar_model_start_free);
+            {
+              g_warning ("HyScanSonarModel: internal sonar failed to start");
+              g_clear_pointer (&start, &hyscan_sonar_model_start_free);
+            }
         }
 
       /* Выключаем локатор. */
