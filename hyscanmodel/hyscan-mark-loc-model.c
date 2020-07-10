@@ -611,10 +611,8 @@ hyscan_mark_loc_model_process (gpointer data)
   HyScanMarkLocModel *ml_model = HYSCAN_MARK_LOC_MODEL (data);
   HyScanMarkLocModelPrivate *priv = ml_model->priv;
 
-  HyScanMarkLocModelState new_state;
+  HyScanMarkLocModelState new_state = {0};
   HyScanMarkLocModelState *state = &priv->state;
-
-  memset (&new_state, 0, sizeof (new_state));
 
   priv->amp_factory = hyscan_factory_amplitude_new (priv->cache);
 
@@ -638,9 +636,9 @@ hyscan_mark_loc_model_process (gpointer data)
         
         /* Проверяем, не изменились ли параметры обработчиков данных. */
         if (hyscan_mark_loc_model_track_param_changed (priv->track_params))
-          changed = TRUE;
-        
-        if (!changed)
+          new_state.changed |= CHANGED_MARKS;
+
+        if (new_state.changed == CHANGED_NONE)
           continue;
       }
 
@@ -723,6 +721,9 @@ hyscan_mark_loc_model_process (gpointer data)
           g_idle_add_full (G_PRIORITY_DEFAULT_IDLE, hyscan_mark_loc_model_emit_changed,
                            g_object_ref (ml_model), g_object_unref);
         }
+
+      /* Сбрасываем текущее состояние. */
+      memset (&new_state, 0, sizeof (new_state));
     }
 
   g_clear_object (&priv->amp_factory);
