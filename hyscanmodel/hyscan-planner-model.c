@@ -179,14 +179,14 @@ hyscan_planner_model_set_origin (HyScanPlannerModel        *pmodel,
   if (origin == NULL)
     {
       if (prev_value != NULL)
-        hyscan_object_model_remove_object (model, HYSCAN_PLANNER_ORIGIN_ID);
+        hyscan_object_model_remove (model, HYSCAN_PLANNER_ORIGIN_ID);
     }
   else
     {
       if (prev_value != NULL)
-        hyscan_object_model_modify_object (model, HYSCAN_PLANNER_ORIGIN_ID, (const HyScanObject *) origin);
+        hyscan_object_model_modify (model, HYSCAN_PLANNER_ORIGIN_ID, (const HyScanObject *) origin);
       else
-        hyscan_object_model_add_object (model, (const HyScanObject *) origin);
+        hyscan_object_model_add (model, (const HyScanObject *) origin);
     }
 
   g_clear_pointer (&prev_value, hyscan_planner_origin_free);
@@ -214,7 +214,7 @@ hyscan_planner_model_get_origin (HyScanPlannerModel *pmodel)
 
   if (!HYSCAN_IS_PLANNER_ORIGIN (object))
     {
-      hyscan_object_model_remove_object (HYSCAN_OBJECT_MODEL (pmodel), HYSCAN_PLANNER_ORIGIN_ID);
+      hyscan_object_model_remove (HYSCAN_OBJECT_MODEL (pmodel), HYSCAN_PLANNER_ORIGIN_ID);
       object = NULL;
     }
 
@@ -377,7 +377,7 @@ hyscan_planner_model_assign_number (HyScanPlannerModel *pmodel,
           track->plan.start = track->plan.end;
           track->plan.end = tmp;
         }
-      hyscan_object_model_modify_object (HYSCAN_OBJECT_MODEL (pmodel), track_id, (HyScanObject *) track);
+      hyscan_object_model_modify (HYSCAN_OBJECT_MODEL (pmodel), track_id, (HyScanObject *) track);
     }
 
   g_free (distances);

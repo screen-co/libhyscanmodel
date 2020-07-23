@@ -100,7 +100,7 @@ add_track_record (const gchar *plan_id,
 
   /* Добавляем к плановому галсу запись. */
   hyscan_planner_track_record_append (plan_track, track_info->id);
-  hyscan_object_model_modify_object (model, plan_id, (const HyScanObject *) plan_track);
+  hyscan_object_model_modify (model, plan_id, (const HyScanObject *) plan_track);
 
   hyscan_db_info_track_info_free (track_info);
   hyscan_planner_track_free (plan_track);
@@ -300,7 +300,7 @@ add_track_2 (void)
 
   track.zone_id = test_zone_id;
   track.plan = plan[1];
-  hyscan_object_model_add_object (model, (const HyScanObject *) &track);
+  hyscan_object_model_add (model, (const HyScanObject *) &track);
 
   g_signal_connect (stats, "changed", G_CALLBACK (check_progress_2), NULL);
 
@@ -421,22 +421,22 @@ add_track_1 (void)
 
   track.zone_id = test_zone_id;
   track.plan = plan[0];
-  hyscan_object_model_add_object (model, (const HyScanObject *) &track);
+  hyscan_object_model_add (model, (const HyScanObject *) &track);
 
   g_signal_handlers_disconnect_by_func (model, G_CALLBACK (add_track_1), NULL);
   g_signal_connect (stats, "changed", G_CALLBACK (check_progress_0), NULL);
-  
+
   g_hash_table_destroy (objects);
 }
 
-static gboolean 
+static gboolean
 add_zone (gpointer user_data)
 {
   HyScanPlannerZone zone = { .type = HYSCAN_TYPE_PLANNER_ZONE };
-  
+
   /* Добавляем зону, галсы, записи галсов. */
   g_message ("Add zone");
-  hyscan_object_model_add_object (model, (const HyScanObject *) &zone);
+  hyscan_object_model_add (model, (const HyScanObject *) &zone);
   g_signal_connect (model, "changed", G_CALLBACK (add_track_1), NULL);
 
   return G_SOURCE_REMOVE;
@@ -488,7 +488,7 @@ main (int    argc,
   db = hyscan_db_new (db_uri);
   if (db == NULL)
     g_error ("Can't open db: %s", db_uri);
-  
+
   /* Проводим тесты. */
   project_name = create_project ();
 

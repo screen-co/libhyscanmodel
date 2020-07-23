@@ -178,7 +178,7 @@ append_tracks (HyScanPlannerModel *model)
   make_track (&test_tracks[6], NULL, NULL, 6.0, 0.0, 6.0, 1.0);
 
   for (i = 0; i < G_N_ELEMENTS (test_tracks); i++)
-    hyscan_object_model_add_object (HYSCAN_OBJECT_MODEL (model), (const HyScanObject *) &test_tracks[i]);
+    hyscan_object_model_add (HYSCAN_OBJECT_MODEL (model), (const HyScanObject *) &test_tracks[i]);
 
   return G_SOURCE_REMOVE;
 }

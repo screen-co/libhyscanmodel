@@ -82,17 +82,21 @@ HYSCAN_API
 void                    hyscan_object_model_refresh           (HyScanObjectModel         *model);
 
 HYSCAN_API
-void                    hyscan_object_model_add_object        (HyScanObjectModel         *model,
+void                    hyscan_object_model_add               (HyScanObjectModel         *model,
                                                                const HyScanObject        *object);
 
 HYSCAN_API
-void                    hyscan_object_model_modify_object     (HyScanObjectModel         *model,
+void                    hyscan_object_model_modify            (HyScanObjectModel         *model,
                                                                const gchar               *id,
                                                                const HyScanObject        *object);
 
 HYSCAN_API
-void                    hyscan_object_model_remove_object     (HyScanObjectModel         *model,
+void                    hyscan_object_model_remove            (HyScanObjectModel         *model,
                                                                const gchar               *id);
+HYSCAN_API
+void                    hyscan_object_model_set               (HyScanObjectModel         *model,
+                                                               const gchar               *id,
+                                                               const HyScanObject        *object);
 
 HYSCAN_API
 GHashTable *            hyscan_object_model_get               (HyScanObjectModel         *model);

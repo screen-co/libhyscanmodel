@@ -207,7 +207,7 @@ set_up_tracks (gpointer user_data)
 
       hyscan_geo_topoXY2geo0 (nav_dummy->geo, &track.plan.start, tracks[i].start);
       hyscan_geo_topoXY2geo0 (nav_dummy->geo, &track.plan.end, tracks[i].end);
-      hyscan_object_model_add_object (HYSCAN_OBJECT_MODEL (planner_model), (HyScanObject *) &track);
+      hyscan_object_model_add (HYSCAN_OBJECT_MODEL (planner_model), (HyScanObject *) &track);
     }
 
   /* Добавляем следующий коллбэк. */
@@ -224,7 +224,7 @@ test_autoselect (void)
   g_message (TAG_INFO "Objects size: %u", objects != NULL ? g_hash_table_size (objects) : 0);
   if (objects == NULL || g_hash_table_size (objects) != G_N_ELEMENTS (tracks))
     goto exit;
-  
+
   g_message (TAG_OK "Test planner tracks have been added");
 
   g_signal_handlers_disconnect_by_func (planner_model, test_autoselect, NULL);

@@ -37,15 +37,15 @@
  * SECTION: hyscan-object-model
  * @Short_description: класс асинхронной работы с объектами параметров проекта
  * @Title: HyScanObjectModel
- * 
+ *
  * HyScanObjectModel представляет собой асинхронную обертку для #HyScanObjectData.
  * Класс содержит все методы, необходимые для создания, изменения и удаления
  * объектов из определённой группы параметров проекта.
  *
  * Изменение списка объектов выполняется при помощи функций:
- * - hyscan_object_model_add_object(),
- * - hyscan_object_model_modify_object(),
- * - hyscan_object_model_remove_object().
+ * - hyscan_object_model_add(),
+ * - hyscan_object_model_modify(),
+ * - hyscan_object_model_remove().
  *
  * Получить объекты можно двумя способами:
  * - hyscan_object_model_get() - получение всех объектов в виде хэш-таблицы,
@@ -77,9 +77,10 @@ enum
 
 typedef enum
 {
-  OBJECT_ADD    = 1001,                      /* Добавление объекта. */
-  OBJECT_MODIFY = 1002,                      /* Изменение объекта. */
-  OBJECT_REMOVE = 1003                       /* Удаление объекта. */
+  TASK_ADD,       /* Добавить объект. */
+  TASK_MODIFY,    /* Изменить объект. */
+  TASK_REMOVE,    /* Удалить объект. */
+  TASK_AUTOMATIC  /* Автоматически определить стратегию. */
 } HyScanObjectModelAction;
 
 /* Задание, структура с информацией о том, что требуется сделать. */
@@ -333,20 +334,25 @@ hyscan_object_model_do_task (gpointer data,
 
   switch (task->action)
     {
-      case OBJECT_ADD:
+      case TASK_ADD:
         if (!hyscan_object_data_add (mdata, task->object, NULL))
           g_warning ("HyScanObjectModel: failed to add object");
-      break;
+        break;
 
-      case OBJECT_MODIFY:
+      case TASK_MODIFY:
         if (!hyscan_object_data_modify (mdata, task->id, task->object))
           g_warning ("HyScanObjectModel: failed to modify object <%s>", task->id);
-      break;
+        break;
 
-      case OBJECT_REMOVE:
+      case TASK_REMOVE:
         if (!hyscan_object_data_remove (mdata, task->id))
           g_warning ("HyScanObjectModel: failed to remove object <%s>", task->id);
-      break;
+        break;
+
+      case TASK_AUTOMATIC:
+        if (!hyscan_object_data_set (mdata, task->id, task->object))
+          g_warning ("HyScanObjectModel: failed to set object <%s>", task->id);
+        break;
     }
 }
 
@@ -583,25 +589,24 @@ hyscan_object_model_refresh (HyScanObjectModel *model)
 }
 
 /**
- * hyscan_object_model_add_object:
+ * hyscan_object_model_add:
  * @model: указатель на #HyScanObjectModel
  * @object: создаваемый объект.
  *
  * Функция создает объект в параметрах проекта.
- *
  */
 void
-hyscan_object_model_add_object (HyScanObjectModel  *model,
-                                const HyScanObject *object)
+hyscan_object_model_add (HyScanObjectModel  *model,
+                         const HyScanObject *object)
 {
   g_return_if_fail (HYSCAN_IS_OBJECT_MODEL (model));
   g_return_if_fail (object != NULL);
 
-  hyscan_object_model_add_task (model, NULL, object, OBJECT_ADD);
+  hyscan_object_model_add_task (model, NULL, object, TASK_ADD);
 }
 
 /**
- * hyscan_object_model_modify_object:
+ * hyscan_object_model_modify:
  * @model: указатель на #HyScanObjectModel
  * @id: идентификатор объекта
  * @object: новые значения.
@@ -610,32 +615,56 @@ hyscan_object_model_add_object (HyScanObjectModel  *model,
  * В результате этой функции все поля объекта будут перезаписаны.
  */
 void
-hyscan_object_model_modify_object (HyScanObjectModel  *model,
-                                   const gchar        *id,
-                                   const HyScanObject *object)
+hyscan_object_model_modify (HyScanObjectModel  *model,
+                            const gchar        *id,
+                            const HyScanObject *object)
 {
   g_return_if_fail (HYSCAN_IS_OBJECT_MODEL (model));
   g_return_if_fail (id != NULL && object != NULL);
 
-  hyscan_object_model_add_task (model, id, object, OBJECT_MODIFY);
+  hyscan_object_model_add_task (model, id, object, TASK_MODIFY);
 }
 
 /**
- * hyscan_object_model_remove_object:
+ * hyscan_object_model_remove:
  * @model: указатель на #HyScanObjectModel
  * @id: идентификатор объекта.
  *
  * Функция удаляет объект из параметров проекта.
- *
  */
 void
-hyscan_object_model_remove_object (HyScanObjectModel *model,
-                                   const gchar       *id)
+hyscan_object_model_remove (HyScanObjectModel *model,
+                            const gchar       *id)
 {
   g_return_if_fail (HYSCAN_IS_OBJECT_MODEL (model));
   g_return_if_fail (id != NULL);
 
-  hyscan_object_model_add_task (model, id, NULL, OBJECT_REMOVE);
+  hyscan_object_model_add_task (model, id, NULL, TASK_REMOVE);
+}
+
+/**
+ * hyscan_object_model_set:
+ * @model: указатель на #HyScanObjectModel
+ * @id: (allow-none): идентификатор объекта
+ * @object: (allow-none): новые значения.
+ *
+ * Функция автоматически определяет, что сделать с объектом. Это асинхронная
+ * обертка над #hyscan_object_data_auto
+ * Если id задан, то объект создается или модифицируется (при наличии и
+ * отсутствии в БД соответственно).
+ * Если id не задан, объект создается. Если id задан, а object не задан, объект
+ * удаляется.
+ * Ошибкой является не задать и id, и object.
+ */
+void
+hyscan_object_model_set (HyScanObjectModel  *model,
+                         const gchar        *id,
+                         const HyScanObject *object)
+{
+  g_return_if_fail (HYSCAN_IS_OBJECT_MODEL (model));
+  g_return_if_fail (id == NULL && object == NULL);
+
+  hyscan_object_model_add_task (model, id, object, TASK_AUTOMATIC);
 }
 
 /**

@@ -229,7 +229,7 @@ test_function (HyScanObjectModel *model)
   if (action == ADD)
     {
       if_verbose ("Add <%s>\n", mark->name);
-      hyscan_object_model_add_object (model, (HyScanObject*)mark);
+      hyscan_object_model_add (model, (HyScanObject*)mark);
     }
   else
     {
@@ -245,12 +245,12 @@ test_function (HyScanObjectModel *model)
           if (action == REMOVE)
             {
               if_verbose ("Remove <%s>\n", ((HyScanMarkWaterfall*)value)->name);
-              hyscan_object_model_remove_object (model, key);
+              hyscan_object_model_remove (model, key);
             }
           else if (action == MODIFY)
             {
               if_verbose ("Modify <%s> to <%s>\n", ((HyScanMarkWaterfall*)value)->name, mark->name);
-              hyscan_object_model_modify_object (model, key, (HyScanObject*)mark);
+              hyscan_object_model_modify (model, key, (HyScanObject*)mark);
             }
           break;
         }
