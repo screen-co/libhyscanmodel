@@ -662,7 +662,7 @@ hyscan_object_model_set (HyScanObjectModel  *model,
                          const HyScanObject *object)
 {
   g_return_if_fail (HYSCAN_IS_OBJECT_MODEL (model));
-  g_return_if_fail (id == NULL && object == NULL);
+  g_return_if_fail (id != NULL || object != NULL);
 
   hyscan_object_model_add_task (model, id, object, TASK_AUTOMATIC);
 }

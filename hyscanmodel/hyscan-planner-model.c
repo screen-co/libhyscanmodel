@@ -169,27 +169,11 @@ hyscan_planner_model_set_origin (HyScanPlannerModel        *pmodel,
                                  const HyScanPlannerOrigin *origin)
 {
   HyScanObjectModel *model;
-  HyScanPlannerOrigin *prev_value;
 
   g_return_if_fail (HYSCAN_IS_PLANNER_MODEL (pmodel));
   model = HYSCAN_OBJECT_MODEL (pmodel);
 
-  prev_value = hyscan_planner_model_get_origin (pmodel);
-
-  if (origin == NULL)
-    {
-      if (prev_value != NULL)
-        hyscan_object_model_remove (model, HYSCAN_PLANNER_ORIGIN_ID);
-    }
-  else
-    {
-      if (prev_value != NULL)
-        hyscan_object_model_modify (model, HYSCAN_PLANNER_ORIGIN_ID, (const HyScanObject *) origin);
-      else
-        hyscan_object_model_add (model, (const HyScanObject *) origin);
-    }
-
-  g_clear_pointer (&prev_value, hyscan_planner_origin_free);
+  hyscan_object_model_set (model, HYSCAN_PLANNER_ORIGIN_ID, (const HyScanObject *) origin);
 }
 
 /**
