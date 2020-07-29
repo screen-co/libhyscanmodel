@@ -33,7 +33,7 @@
  */
 
 #include <hyscan-steer.h>
-#include <hyscan-sonar-model.h>
+#include <hyscan-control-model.h>
 
 #define TAG_NAV_STATE "[NavState] "
 #define TAG_INFO      "[Info] "
@@ -72,7 +72,7 @@ struct _HyScanNavStateDummyClass
 
 static GMainLoop              *loop;                           /* Главный цикл. */
 static HyScanDB               *db;                             /* База данных. */
-static HyScanSonarModel       *sonar;                          /* Модель управления локатором. */
+static HyScanControlModel     *sonar;                          /* Модель управления локатором. */
 static HyScanSonarRecorder    *recorder;                       /* Запись галса. */
 static HyScanNavStateDummy    *nav_dummy;                      /* Навигационные данные. */
 static HyScanSteer            *steer;                          /* Модель навигации по галсу. */
@@ -346,7 +346,7 @@ int main (int    argc,
   hyscan_control_writer_set_db (control, db);
   hyscan_control_device_bind (control);
 
-  sonar = hyscan_sonar_model_new (control);
+  sonar = hyscan_control_model_new (control);
 
   recorder = hyscan_sonar_recorder_new (HYSCAN_SONAR (sonar), db);
   hyscan_sonar_recorder_set_project (recorder, PROJET_NAME);

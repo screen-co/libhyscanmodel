@@ -1,6 +1,7 @@
 /* hyscan-sonar-state.h
  *
  * Copyright 2019 Screen LLC, Alexander Dmitriev <m1n7@yandex.ru>
+ * Copyright 2020 Screen LLC, Alexey Sakhnov <alexsakhnov@gmail.com>
  *
  * This file is part of HyScanModel.
  *
@@ -35,7 +36,10 @@
 /**
  * SECTION: hyscan-sonar-state
  * @Title HyScanSonarState
- * @Short_description
+ * @Short_description состояние локатора
+ *
+ * Интерфейс #HySonarState определяет функции для получения статуса локатора
+ * #HyScanSonar.
  *
  */
 #include "hyscan-sonar-state.h"
@@ -60,7 +64,15 @@ hyscan_sonar_state_default_init (HyScanSonarStateInterface *iface)
                 G_TYPE_NONE, 0);
 }
 
-
+/**
+ * hyscan_sonar_state_receiver_get_mode:
+ * @sonar: указатель на #HyScanSonarState
+ * @source: идентификатор источника данных #HyScanSourceType
+ *
+ * Функция возвращает режим работы приёмника.
+ *
+ * Returns: режим работы приёмника
+ */
 HyScanSonarReceiverModeType
 hyscan_sonar_state_receiver_get_mode (HyScanSonarState *sonar,
                                       HyScanSourceType  source)
@@ -68,7 +80,17 @@ hyscan_sonar_state_receiver_get_mode (HyScanSonarState *sonar,
   HYSCAN_SONAR_STATE_FUNC (HYSCAN_SONAR_RECEIVER_MODE_NONE, receiver_get_mode, source)
 }
 
-
+/**
+ * hyscan_sonar_state_receiver_get_time:
+ * @sonar: указатель на #HyScanSonarState
+ * @source: идентификатор источника данных #HyScanSourceType
+ * @receive_time: (out): время приёма эхосигнала, секунды
+ * @wait_time: (out): время задержки излучения после приёма, секунды
+ *
+ * Функция возвращает время приёма эхосигнала.
+ *
+ * Returns: %TRUE если команда выполнена успешно, иначе %FALSE.
+ */
 gboolean
 hyscan_sonar_state_receiver_get_time (HyScanSonarState *sonar,
                                       HyScanSourceType  source,
@@ -78,6 +100,15 @@ hyscan_sonar_state_receiver_get_time (HyScanSonarState *sonar,
   HYSCAN_SONAR_STATE_FUNC (FALSE, receiver_get_time, source, receive_time, wait_time)
 }
 
+/**
+ * hyscan_sonar_state_receiver_get_disabled:
+ * @sonar: указатель на #HyScanSonarState
+ * @source: идентификатор источника данных #HyScanSourceType
+ *
+ * Функция возвращает признак того, что приём эхосигнала выключен.
+ *
+ * Returns: %TRUE если команда выполнена успешно, иначе %FALSE.
+ */
 gboolean
 hyscan_sonar_state_receiver_get_disabled (HyScanSonarState *sonar,
                                           HyScanSourceType  source)
@@ -85,6 +116,16 @@ hyscan_sonar_state_receiver_get_disabled (HyScanSonarState *sonar,
   HYSCAN_SONAR_STATE_FUNC (FALSE, receiver_get_disabled, source);
 }
 
+/**
+ * hyscan_sonar_state_generator_get_preset:
+ * @sonar: указатель на #HyScanSonarState
+ * @source: идентификатор источника данных #HyScanSourceType
+ * @preset: (out): идентификатор режима работы генератора
+ *
+ * Функция возвращает режим работы генератора.
+ *
+ * Returns: %TRUE если команда выполнена успешно, иначе %FALSE.
+ */
 gboolean
 hyscan_sonar_state_generator_get_preset (HyScanSonarState *sonar,
                                          HyScanSourceType  source,
@@ -93,7 +134,15 @@ hyscan_sonar_state_generator_get_preset (HyScanSonarState *sonar,
   HYSCAN_SONAR_STATE_FUNC (FALSE, generator_get_preset, source, preset);
 }
 
-
+/**
+ * hyscan_sonar_state_generator_get_disabled:
+ * @sonar: указатель на #HyScanSonarState
+ * @source: идентификатор источника данных #HyScanSourceType
+ *
+ * Функция возвращает признак того, что излучение эхосигнала выключено.
+ *
+ * Returns: %TRUE если команда выполнена успешно, иначе %FALSE.
+ */
 gboolean
 hyscan_sonar_state_generator_get_disabled (HyScanSonarState *sonar,
                                            HyScanSourceType  source)
@@ -101,6 +150,15 @@ hyscan_sonar_state_generator_get_disabled (HyScanSonarState *sonar,
   HYSCAN_SONAR_STATE_FUNC (FALSE, generator_get_disabled, source);
 }
 
+/**
+ * hyscan_sonar_state_tvg_get_mode:
+ * @sonar: указатель на #HyScanSonarState
+ * @source: идентификатор источника данных #HyScanSourceType
+ *
+ * Функция возвращает режим работы системы ВАРУ.
+ *
+ * Returns: режим работы системы ВАРУ.
+ */
 HyScanSonarTVGModeType
 hyscan_sonar_state_tvg_get_mode (HyScanSonarState *sonar,
                                  HyScanSourceType  source)
@@ -108,6 +166,18 @@ hyscan_sonar_state_tvg_get_mode (HyScanSonarState *sonar,
   HYSCAN_SONAR_STATE_FUNC (FALSE, tvg_get_mode, source);
 }
 
+/**
+ * hyscan_sonar_state_tvg_get_auto:
+ * @sonar: указатель на #HyScanSonar
+ * @source: идентификатор источника данных #HyScanSourceType
+ * @level: (out): целевой уровень сигнала
+ * @sensitivity: (out): чувствительность автомата регулировки
+ *
+ * Функция возвращает параметры автоматического режима управления системой ВАРУ.
+ * Подробное описание параметров в hyscan_sonar_tvg_set_auto().
+ *
+ * Returns: %TRUE если команда выполнена успешно, иначе %FALSE.
+ */
 gboolean
 hyscan_sonar_state_tvg_get_auto (HyScanSonarState *sonar,
                                  HyScanSourceType  source,
@@ -117,6 +187,16 @@ hyscan_sonar_state_tvg_get_auto (HyScanSonarState *sonar,
   HYSCAN_SONAR_STATE_FUNC (FALSE, tvg_get_auto, source, level, sensitivity);
 }
 
+/**
+ * hyscan_sonar_state_tvg_get_constant:
+ * @sonar: указатель на #HyScanSonar
+ * @source: идентификатор источника данных #HyScanSourceType
+ * @gain: (out): уровень усиления, дБ
+ *
+ * Функция возвращает уровень усиления, если установлен постоянный уровень.
+ *
+ * Returns: %TRUE если команда выполнена успешно, иначе %FALSE.
+ */
 gboolean
 hyscan_sonar_state_tvg_get_constant (HyScanSonarState *sonar,
                                      HyScanSourceType  source,
@@ -125,6 +205,18 @@ hyscan_sonar_state_tvg_get_constant (HyScanSonarState *sonar,
   HYSCAN_SONAR_STATE_FUNC (FALSE, tvg_get_constant, source, gain);
 }
 
+/**
+ * hyscan_sonar_state_tvg_get_linear_db:
+ * @sonar: указатель на #HyScanSonar
+ * @source: идентификатор источника данных #HyScanSourceType
+ * @gain0: (out): начальный уровень усиления, дБ
+ * @step: (out): величина изменения усиления каждые 100 метров, дБ
+ *
+ * Функция возвращает параметры линейного усиления.
+ * Подробное описание параметров в hyscan_sonar_tvg_set_linear_db().
+ *
+ * Returns: %TRUE если команда выполнена успешно, иначе %FALSE.
+ */
 gboolean
 hyscan_sonar_state_tvg_get_linear_db (HyScanSonarState *sonar,
                                       HyScanSourceType  source,
@@ -134,6 +226,19 @@ hyscan_sonar_state_tvg_get_linear_db (HyScanSonarState *sonar,
   HYSCAN_SONAR_STATE_FUNC (FALSE, tvg_get_linear_db, source, gain0, gain_step);
 }
 
+/**
+ * hyscan_sonar_state_tvg_get_logarithmic:
+ * @sonar: указатель на #HyScanSonar
+ * @source: идентификатор источника данных #HyScanSourceType
+ * @gain0: (out): начальный уровень усиления, дБ
+ * @beta: (out): коэффициент поглощения цели, дБ
+ * @alpha: (out): коэффициент затухания, дБ/м
+ *
+ * Функция возвращает параметры логарифмический режима работы ВАРУ.
+ * Подробное описание параметров в hyscan_sonar_state_tvg_get_logarithmic().
+ *
+ * Returns: %TRUE если команда выполнена успешно, иначе %FALSE.
+ */
 gboolean
 hyscan_sonar_state_tvg_get_logarithmic (HyScanSonarState *sonar,
                                         HyScanSourceType  source,
@@ -144,6 +249,15 @@ hyscan_sonar_state_tvg_get_logarithmic (HyScanSonarState *sonar,
   HYSCAN_SONAR_STATE_FUNC (FALSE, tvg_get_logarithmic, source, gain0, beta, alpha);
 }
 
+/**
+ * hyscan_sonar_state_tvg_get_disabled:
+ * @sonar: указатель на #HySCanSonarType
+ * @source: идентификатор источника данных #HyScanSourceType
+ *
+ * Функция возвращает признак того, что управление усилением выключено.
+ *
+ * Returns: %TRUE, если управление усилением выключено
+ */
 gboolean
 hyscan_sonar_state_tvg_get_disabled (HyScanSonarState *sonar,
                                      HyScanSourceType  source)
@@ -151,6 +265,18 @@ hyscan_sonar_state_tvg_get_disabled (HyScanSonarState *sonar,
   HYSCAN_SONAR_STATE_FUNC (FALSE, tvg_get_disabled, source);
 }
 
+/**
+ * hyscan_sonar_state_get_start:
+ * @sonar: указатель на #HyScanSonarState
+ * @project_name: (out): название проекта, в который записывать данные
+ * @track_name: (out): название галса, в который записывать данные
+ * @track_type: (out): тип галса
+ * @track_plan: (out): (nullable): запланированные параметры галса
+ *
+ * Функция возвращает параметры рабочего режима гидролокатора.
+ *
+ * Returns: %TRUE если локатор работает, иначе %FALSE.
+ */
 gboolean
 hyscan_sonar_state_get_start (HyScanSonarState  *sonar,
                               gchar            **project_name,

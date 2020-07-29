@@ -26,7 +26,7 @@ set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
      hyscan-async.c
      hyscan-sonar-state.c
      hyscan-sensor-state.c
-     hyscan-sonar-model.c
+        hyscan-control-model.c
      hyscan-mark-location.c
      hyscan-mark-loc-model.c
      hyscan-sonar-recorder.c
@@ -70,7 +70,7 @@ set (HYSCAN_MODEL_LIBRARY_INSTALL_FILES
      hyscan-async.h
      hyscan-sonar-state.h
      hyscan-sensor-state.h
-     hyscan-sonar-model.h
+        hyscan-control-model.h
      hyscan-mark-location.h
      hyscan-mark-loc-model.h
      hyscan-sonar-recorder.h

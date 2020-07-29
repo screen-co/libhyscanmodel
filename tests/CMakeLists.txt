@@ -36,15 +36,15 @@ set (HYSCAN_MODEL_TEST_INSTALL_TARGETS
      )
 
 if (NOT HYSCAN_USE_SYS_LIBS)
-  add_executable (sonar-model-test sonar-model-test.c
+  add_executable (control-model-test control-model-test.c
                   ${CMAKE_CURRENT_SOURCE_DIR}/../../libhyscancore/tests/hyscan-dummy-device.c)
   include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/../../libhyscancore/tests")
-  target_link_libraries (sonar-model-test ${TEST_LIBRARIES})
-  set (HYSCAN_MODEL_TEST_INSTALL_TARGETS ${HYSCAN_SONAR_MODEL_TEST_INSTALL_TARGETS} sonar-model-test)
-  add_test (NAME SonarModelTest COMMAND sonar-model-test
+  target_link_libraries (control-model-test ${TEST_LIBRARIES})
+  set (HYSCAN_MODEL_TEST_INSTALL_TARGETS ${HYSCAN_MODEL_TEST_INSTALL_TARGETS} control-model-test)
+  add_test (NAME SonarModelTest COMMAND control-model-test
           WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 else()
-  message(STATUS Skip target sonar-model-test because HYSCAN_USE_SYS_LIBS is enabled)
+  message(STATUS Skip target control-model-test because HYSCAN_USE_SYS_LIBS is enabled)
 endif()
 
 install (TARGETS ${HYSCAN_MODEL_TEST_INSTALL_TARGETS}

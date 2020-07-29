@@ -1,6 +1,7 @@
 /* hyscan-sensor-state.h
  *
  * Copyright 2019 Screen LLC, Alexander Dmitriev <m1n7@yandex.ru>
+ * Copyright 2020 Screen LLC, Alexey Sakhnov <alexsakhnov@gmail.com>
  *
  * This file is part of HyScanModel.
  *
@@ -33,9 +34,12 @@
  */
 
 /**
- * SECTION: hyscan-@class-name@
- * @Title HyScan@Class@
- * @Short_description
+ * SECTION: hyscan-sensor-state
+ * @Title HyScanSensorState
+ * @Short_description состояние датчика
+ *
+ * Интерфейс #HySensorState определяет функции для получения статуса датчика
+ * #HyScanSensor.
  *
  */
 #include "hyscan-sensor-state.h"
@@ -47,6 +51,13 @@ hyscan_sensor_state_default_init (HyScanSensorStateInterface *iface)
 {
 }
 
+/**
+ * hyscan_sensor_state_get_enabled
+ * @state: указатель на #HyScanSensorState
+ * @name: название датчика
+ *
+ * Returns: %TRUE, если датчик включен, иначе %FALSE.
+ */
 gboolean
 hyscan_sensor_state_get_enabled (HyScanSensorState *state,
                                  const gchar       *name)

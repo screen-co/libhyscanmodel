@@ -1,6 +1,7 @@
 /* hyscan-control-model.h
  *
  * Copyright 2019 Screen LLC, Alexander Dmitriev <m1n7@yandex.ru>
+ * Copyright 2020 Screen LLC, Alexey Sakhnov <alexsakhnov@gmail.com>
  *
  * This file is part of HyScanModel.
  *
@@ -35,8 +36,9 @@
 #ifndef __HYSCAN_CONTROL_MODEL_H__
 #define __HYSCAN_CONTROL_MODEL_H__
 
-#include <glib-object.h>
-#include <hyscan-api.h>
+#include <hyscan-control.h>
+#include "hyscan-sonar-state.h"
+#include "hyscan-sensor-state.h"
 
 G_BEGIN_DECLS
 
@@ -64,10 +66,17 @@ struct _HyScanControlModelClass
 };
 
 HYSCAN_API
-GType                  hyscan_control_model_get_type         (void);
+GType                     hyscan_control_model_get_type         (void);
 
 HYSCAN_API
-HyScanControlModel *        hyscan_control_model_new              (void);
+HyScanControlModel *      hyscan_control_model_new              (HyScanControl      *control);
+
+HYSCAN_API
+void                      hyscan_control_model_set_sync_timeout (HyScanControlModel *model,
+                                                                 guint               msec);
+
+HYSCAN_API
+guint                     hyscan_control_model_get_sync_timeout (HyScanControlModel *model);
 
 G_END_DECLS
 

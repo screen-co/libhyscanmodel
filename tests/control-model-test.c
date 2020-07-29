@@ -1,11 +1,11 @@
-#include <hyscan-sonar-model.h>
+#include <hyscan-control-model.h>
 #include <hyscan-dummy-device.h>
 
 #define TEST_SOURCE HYSCAN_SOURCE_SIDE_SCAN_PORT
 #define SYNC_PERIOD (100 * G_TIME_SPAN_MILLISECOND / 1000) /* Период синхронизации параметров ГЛ. */
 #define WAIT_PERIOD (SYNC_PERIOD * 4)                      /* Период ожидания синхронизации ГЛ. */
 
-static HyScanSonarModel *sonar_model;
+static HyScanControlModel *sonar_model;
 static HyScanControl *control;
 static HyScanDummyDevice *dummy_device;
 static GMainLoop *loop;
@@ -302,8 +302,8 @@ main (int    argc,
   hyscan_control_device_add (control, HYSCAN_DEVICE (dummy_device));
   hyscan_control_device_bind (control);
 
-  sonar_model = hyscan_sonar_model_new (control);
-  hyscan_sonar_model_set_sync_timeout (sonar_model, SYNC_PERIOD);
+  sonar_model = hyscan_control_model_new (control);
+  hyscan_control_model_set_sync_timeout (sonar_model, SYNC_PERIOD);
 
   loop = g_main_new (FALSE);
 
