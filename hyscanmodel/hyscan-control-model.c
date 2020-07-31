@@ -371,10 +371,10 @@ hyscan_control_model_object_constructed (GObject *object)
   /* Ретрансляция сигналов. */
   g_signal_connect (HYSCAN_SENSOR (priv->control), "sensor-data",
                     G_CALLBACK (hyscan_control_model_sensor_data), self);
-  g_signal_connect (HYSCAN_DEVICE (priv->control), "device-state",
-                    G_CALLBACK (hyscan_control_model_device_state), self);
-  g_signal_connect (HYSCAN_DEVICE (priv->control), "device-log",
-                    G_CALLBACK (hyscan_control_model_device_log), self);
+  // g_signal_connect (HYSCAN_DEVICE (priv->control), "device-state",
+  //                   G_CALLBACK (hyscan_control_model_device_state), self);
+  // g_signal_connect (HYSCAN_DEVICE (priv->control), "device-log",
+  //                   G_CALLBACK (hyscan_control_model_device_log), self);
   g_signal_connect (HYSCAN_SONAR (priv->control), "sonar-signal",
                     G_CALLBACK (hyscan_control_model_sonar_signal), self);
   g_signal_connect (HYSCAN_SONAR (priv->control), "sonar-tvg",
