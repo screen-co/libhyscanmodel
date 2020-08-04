@@ -290,20 +290,24 @@ hyscan_steer_object_constructed (GObject *object)
 {
   HyScanSteer *steer = HYSCAN_STEER (object);
   HyScanSteerPrivate *priv = steer->priv;
-  HyScanSonar *sonar;
 
   G_OBJECT_CLASS (hyscan_steer_parent_class)->constructed (object);
 
   priv->planner_model = HYSCAN_OBJECT_MODEL (hyscan_planner_selection_get_model (priv->selection));
 
   /* Сигнал "start-stop" позволяет отслеживать статус работы локатора и необходим для функции автостарта. */
-  sonar = hyscan_sonar_recorder_get_sonar (priv->recorder);
-  if (HYSCAN_IS_SONAR_STATE (sonar))
+  if (priv->recorder != NULL)
     {
-      priv->sonar_state = g_object_ref (HYSCAN_SONAR_STATE (sonar));
-      g_signal_connect_swapped (priv->sonar_state, "start-stop", G_CALLBACK (hyscan_steer_start_stop), steer);
+      HyScanSonar *sonar;
+
+      sonar = hyscan_sonar_recorder_get_sonar (priv->recorder);
+      if (HYSCAN_IS_SONAR_STATE (sonar))
+        {
+          priv->sonar_state = g_object_ref (HYSCAN_SONAR_STATE (sonar));
+          g_signal_connect_swapped (priv->sonar_state, "start-stop", G_CALLBACK (hyscan_steer_start_stop), steer);
+        }
+      g_object_unref (sonar);
     }
-  g_object_unref (sonar);
 
   g_signal_connect_swapped (priv->nav_model, "nav-changed", G_CALLBACK (hyscan_steer_nav_changed), steer);
   g_signal_connect_swapped (priv->planner_model, "changed", G_CALLBACK (hyscan_steer_set_track), steer);
@@ -750,7 +754,7 @@ hyscan_steer_get_autostart (HyScanSteer *steer)
  */
 void
 hyscan_steer_set_autoselect (HyScanSteer *steer,
-                            gboolean     autoselect)
+                             gboolean     autoselect)
 {
   HyScanSteerPrivate *priv;
 
