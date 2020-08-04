@@ -531,3 +531,37 @@ hyscan_planner_selection_contains (HyScanPlannerSelection  *selection,
 
   return FALSE;
 }
+
+/**
+ * hyscan_gtk_map_kit_add_record:
+ * @selection: указатель на #HyScanPlannerSelection
+ * @track_id: идентификатор записываемого галса
+ *
+ * Функция добавляет в активному плану галс с идентификатором @track_id.
+ */
+void
+hyscan_planner_selection_record (HyScanPlannerSelection *selection,
+                                 const gchar            *track_id)
+{
+  HyScanPlannerSelectionPrivate *priv = selection->priv;
+  gchar *active_track;
+  HyScanPlannerTrack *track = NULL;
+
+  active_track = hyscan_planner_selection_get_active_track (selection);
+  if (active_track == NULL)
+    return;
+
+  track = (HyScanPlannerTrack *) hyscan_object_model_get_by_id (HYSCAN_OBJECT_MODEL (priv->model), active_track);
+  if (!HYSCAN_IS_PLANNER_TRACK (track))
+    goto exit;
+
+  if (track->records != NULL && g_strv_contains ((const gchar *const *) track->records, track_id))
+    goto exit;
+
+  hyscan_planner_track_record_append (track, track_id);
+  hyscan_object_model_modify (HYSCAN_OBJECT_MODEL (priv->model), active_track, (const HyScanObject *) track);
+
+exit:
+  g_free (active_track);
+  g_clear_pointer (&track, hyscan_planner_track_free);
+}

@@ -109,6 +109,10 @@ HYSCAN_API
 gboolean                    hyscan_planner_selection_contains         (HyScanPlannerSelection  *selection,
                                                                        const gchar             *track_id);
 
+HYSCAN_API
+void                        hyscan_planner_selection_record           (HyScanPlannerSelection  *selection,
+                                                                       const gchar             *track_id);
+
 G_END_DECLS
 
 #endif /* __HYSCAN_PLANNER_SELECTION_H__ */
