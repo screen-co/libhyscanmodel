@@ -36,7 +36,7 @@
 #define __HYSCAN_SENSOR_STATE_H__
 
 #include <glib-object.h>
-#include <hyscan-api.h>
+#include <hyscan-types.h>
 
 G_BEGIN_DECLS
 
@@ -52,16 +52,25 @@ struct _HyScanSensorStateInterface
 {
   GTypeInterface       g_iface;
 
-  gboolean            (*get_enabled)                  (HyScanSensorState *state,
-                                                       const gchar       *name);
+  gboolean            (*get_enabled)                       (HyScanSensorState   *state,
+                                                            const gchar         *name);
+
+  gboolean            (*antenna_get_offset)                (HyScanSensorState   *state,
+                                                            const gchar         *name,
+                                                            HyScanAntennaOffset *offset);
 };
 
 HYSCAN_API
-GType               hyscan_sensor_state_get_type      (void);
+GType               hyscan_sensor_state_get_type           (void);
 
 HYSCAN_API
-gboolean            hyscan_sensor_state_get_enabled   (HyScanSensorState *state,
-                                                       const gchar       *name);
+gboolean            hyscan_sensor_state_antenna_get_offset (HyScanSensorState   *state,
+                                                            const gchar         *name,
+                                                            HyScanAntennaOffset *offset);
+
+HYSCAN_API
+gboolean            hyscan_sensor_state_get_enabled        (HyScanSensorState   *state,
+                                                            const gchar         *name);
 
 G_END_DECLS
 

@@ -55,6 +55,33 @@ hyscan_sensor_state_default_init (HyScanSensorStateInterface *iface)
  * hyscan_sensor_state_get_enabled
  * @state: указатель на #HyScanSensorState
  * @name: название датчика
+ * @offset: (out): смещение датчика
+ *
+ * Функция возвращает смещение приёмных антенн датчика. Подробное
+ * описание параметров приводится в #HyScanTypes.
+ *
+ * Returns: %TRUE, если команда выполнена успешно, иначе %FALSE.
+ */
+gboolean
+hyscan_sensor_state_antenna_get_offset (HyScanSensorState   *state,
+                                        const gchar         *name,
+                                        HyScanAntennaOffset *offset)
+{
+  HyScanSensorStateInterface *iface;
+
+  g_return_val_if_fail (HYSCAN_IS_SENSOR_STATE (state), FALSE);
+
+  iface = HYSCAN_SENSOR_STATE_GET_IFACE (state);
+  if (iface->antenna_get_offset != NULL)
+    return (* iface->antenna_get_offset) (state, name, offset);
+
+  return FALSE;
+}
+
+/**
+ * hyscan_sensor_state_get_enabled
+ * @state: указатель на #HyScanSensorState
+ * @name: название датчика
  *
  * Returns: %TRUE, если датчик включен, иначе %FALSE.
  */
