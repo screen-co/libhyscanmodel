@@ -72,7 +72,10 @@ struct _HyScanPlannerSelectionPrivate
   GArray                      *tracks;          /* Массив выбранных галсов. */
   gint                         vertex_index;    /* Вершина в выбранной зоне. */
   gchar                       *zone_id;         /* Выбранная зона. */
-  gchar                       *active_track;    /* Активный галс, по которому идёт навигация. */
+  gchar                       *active_plan;     /* Активный план галса, по которому идёт навигация. */
+  HyScanDBInfo                *watch_db_info;   /* Модель галсов в БД. */
+  gulong                       watch_id;        /* Ид обработчика сигнала HyScanDBInfo::tracks-changed. */
+  gchar                       *recording_track; /* Ид галса, который сейчас записывается в БД. */
 };
 
 static void    hyscan_planner_selection_set_property             (GObject                *object,
@@ -83,6 +86,7 @@ static void    hyscan_planner_selection_object_constructed       (GObject       
 static void    hyscan_planner_selection_object_finalize          (GObject                *object);
 static void    hyscan_planner_selection_changed                  (HyScanPlannerSelection *selection);
 static void    hyscan_planner_selection_clear_func               (gpointer data);
+static void    hyscan_planner_selection_track_watcher            (HyScanPlannerSelection *selection);
 
 static guint hyscan_planner_selection_signals[SIGNAL_LAST] = { 0 };
 
@@ -188,10 +192,17 @@ hyscan_planner_selection_object_finalize (GObject *object)
   HyScanPlannerSelection *planner_selection = HYSCAN_PLANNER_SELECTION (object);
   HyScanPlannerSelectionPrivate *priv = planner_selection->priv;
 
+  if (priv->watch_db_info != NULL)
+    {
+      g_signal_handler_disconnect (priv->watch_db_info, priv->watch_id);
+      g_object_unref (priv->watch_db_info);
+    }
+
   g_clear_pointer (&priv->objects, g_hash_table_destroy);
   g_clear_object (&priv->model);
   g_array_free (priv->tracks, TRUE);
-  g_free (priv->active_track);
+  g_free (priv->active_plan);
+  g_free (priv->recording_track);
 
   G_OBJECT_CLASS (hyscan_planner_selection_parent_class)->finalize (object);
 }
@@ -247,6 +258,43 @@ hyscan_planner_selection_changed (HyScanPlannerSelection *selection)
     g_signal_emit (selection, hyscan_planner_selection_signals[SIGNAL_TRACKS_CHANGED], 0, priv->tracks->data);
 }
 
+/* Обработчик сигнала HyScanDBInfo::tracks-changed.
+ * Добавляет в список плановых галсов информацию о записанных галсах. */
+static void
+hyscan_planner_selection_track_watcher (HyScanPlannerSelection *selection)
+{
+  HyScanPlannerSelectionPrivate *priv = selection->priv;
+  GHashTable *tracks;
+  const gchar *record_id = NULL;
+
+  /* Находим текущий записываемый галс. */
+  tracks = hyscan_db_info_get_tracks (priv->watch_db_info);
+  if (tracks != NULL)
+    {
+      GHashTableIter iter;
+      HyScanTrackInfo *track_info;
+
+      g_hash_table_iter_init (&iter, tracks);
+      while (g_hash_table_iter_next (&iter, NULL, (gpointer *) &track_info) && record_id == NULL)
+        {
+          if (!track_info->record)
+            continue;
+
+          record_id = track_info->id;
+        }
+    }
+
+  if (g_strcmp0 (record_id, priv->recording_track) != 0)
+    {
+      g_free (priv->recording_track);
+      priv->recording_track = g_strdup (record_id);
+      if (priv->recording_track != NULL)
+        hyscan_planner_selection_record (selection, priv->recording_track);
+    }
+
+  g_clear_pointer (&tracks, g_hash_table_destroy);
+}
+
 /**
  * hyscan_planner_selection_new:
  * @model: указатель на #HyScanPlannerModel
@@ -287,7 +335,7 @@ hyscan_planner_selection_get_active_track (HyScanPlannerSelection  *selection)
 {
   g_return_val_if_fail (HYSCAN_IS_PLANNER_SELECTION (selection), NULL);
 
-  return g_strdup (selection->priv->active_track);
+  return g_strdup (selection->priv->active_plan);
 }
 
 /**
@@ -386,8 +434,8 @@ hyscan_planner_selection_activate (HyScanPlannerSelection *selection,
   g_return_if_fail (HYSCAN_IS_PLANNER_SELECTION (selection));
   priv = selection->priv;
 
-  g_free (priv->active_track);
-  priv->active_track = g_strdup (track_id);
+  g_free (priv->active_plan);
+  priv->active_plan = g_strdup (track_id);
 
   g_signal_emit (selection, hyscan_planner_selection_signals[SIGNAL_ACTIVATED], 0);
 }
@@ -530,6 +578,41 @@ hyscan_planner_selection_contains (HyScanPlannerSelection  *selection,
     }
 
   return FALSE;
+}
+
+/**
+ * hyscan_planner_selection_watch_records:
+ * @selection: указатель на #HyScanPlannerSelection
+ * @db_info: (nullable): модель галсов #HyScanDBInfo для отслеживания или %NULL для прекращения отслеживания.
+ *
+ * Функция включает автоматическое связывание текущего плана с записываемым в БД галса.
+ *
+ * Активный план, указанный в hyscan_planner_selection_activate(), будет связываться
+ * со всеми записываемыми галсами.
+ *
+ * Галс считается записываемым, если он имеет значение #HyScanTrackInfo.record = %TRUE.
+ */
+void
+hyscan_planner_selection_watch_records (HyScanPlannerSelection *selection,
+                                        HyScanDBInfo           *db_info)
+{
+  HyScanPlannerSelectionPrivate *priv;
+
+  g_return_if_fail (HYSCAN_IS_PLANNER_SELECTION (selection));
+  priv = selection->priv;
+
+
+  if (priv->watch_db_info != NULL)
+    {
+      g_signal_handler_disconnect (priv->watch_db_info, priv->watch_id);
+      g_object_unref (priv->watch_db_info);
+    }
+
+  priv->watch_db_info = g_object_ref (db_info);
+  priv->watch_id = g_signal_connect_swapped (priv->watch_db_info,
+                                             "tracks-changed",
+                                             G_CALLBACK (hyscan_planner_selection_track_watcher),
+                                             selection);
 }
 
 /**

@@ -36,6 +36,7 @@
 #define __HYSCAN_PLANNER_SELECTION_H__
 
 #include <hyscan-planner-model.h>
+#include <hyscan-db-info.h>
 
 G_BEGIN_DECLS
 
@@ -108,6 +109,10 @@ void                        hyscan_planner_selection_remove_all       (HyScanPla
 HYSCAN_API
 gboolean                    hyscan_planner_selection_contains         (HyScanPlannerSelection  *selection,
                                                                        const gchar             *track_id);
+
+HYSCAN_API
+void                        hyscan_planner_selection_watch_records    (HyScanPlannerSelection  *selection,
+                                                                       HyScanDBInfo            *db_info);
 
 HYSCAN_API
 void                        hyscan_planner_selection_record           (HyScanPlannerSelection  *selection,
