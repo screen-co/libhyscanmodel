@@ -72,6 +72,9 @@ HYSCAN_API
 HyScanControlModel *      hyscan_control_model_new              (HyScanControl      *control);
 
 HYSCAN_API
+HyScanControl *           hyscan_control_model_get_control      (HyScanControlModel *model);
+
+HYSCAN_API
 void                      hyscan_control_model_set_sync_timeout (HyScanControlModel *model,
                                                                  guint               msec);
 

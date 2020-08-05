@@ -1500,6 +1500,25 @@ hyscan_control_model_new (HyScanControl *control)
 }
 
 /**
+ * hyscan_control_model_get_control:
+ * @model: указатель на #HyScanControlModel
+ *
+ * Функция возвращает используемый HyScanControl.
+ *
+ * Returns: (transfer full): указатель на используемый #HyScanControl, для удаления g_object_unref().
+ */
+HyScanControl *
+hyscan_control_model_get_control (HyScanControlModel *model)
+{
+  HyScanControlModelPrivate *priv;
+
+  g_return_val_if_fail (HYSCAN_IS_CONTROL_MODEL (model), NULL);
+  priv = model->priv;
+
+  return g_object_ref (priv->control);
+}
+
+/**
  * hyscan_control_model_set_sync_timeout:
  * @model: указатель на #HyScanControlModel
  * @msec: время ожидания до синхронизации параметров, милисекунды
