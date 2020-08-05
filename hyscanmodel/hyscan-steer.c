@@ -724,7 +724,7 @@ hyscan_steer_set_autostart (HyScanSteer *steer,
       return;
     }
 
-  steer->priv->autostart = autostart;
+  priv->autostart = autostart;
   g_object_notify_by_pspec (G_OBJECT (steer), hyscan_steer_prop_autostart);
 }
 
@@ -761,13 +761,7 @@ hyscan_steer_set_autoselect (HyScanSteer *steer,
   g_return_if_fail (HYSCAN_IS_STEER (steer));
   priv = steer->priv;
 
-  if (autoselect && priv->sonar_state == NULL)
-    {
-      g_warning ("HyScanSteer: sonar must implement HyScanSonarState to enable autoselect");
-      return;
-    }
-
-  steer->priv->autoselect = autoselect;
+  priv->autoselect = autoselect;
   g_object_notify_by_pspec (G_OBJECT (steer), hyscan_steer_prop_autoselect);
 }
 
