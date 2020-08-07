@@ -113,6 +113,8 @@ struct _HyScanMarkLocModelPrivate
   GHashTable              *locations;    /* Хэш-таблица с метками HyScanMarkLocation.*/
   GRWLock                  mark_lock;    /* Блокировка доступа к locations. */
   HyScanFactoryAmplitude  *amp_factory;  /* Амплитудная фабрика. */
+
+  GWeakRef                 weak_ref;     /* Слабая ссылка на текущий объект. */
 };
 
 static void                        hyscan_mark_loc_model_set_property             (GObject                 *object,
@@ -223,6 +225,7 @@ hyscan_mark_loc_model_object_constructed (GObject *object)
 
   G_OBJECT_CLASS (hyscan_mark_loc_model_parent_class)->constructed (object);
 
+  g_weak_ref_init (&priv->weak_ref, ml_model);
   g_mutex_init (&priv->mutex);
   g_cond_init (&priv->cond);
   g_rw_lock_init (&priv->mark_lock);
@@ -259,6 +262,7 @@ hyscan_mark_loc_model_object_finalize (GObject *object)
   g_mutex_unlock (&priv->mutex);
   g_thread_join (priv->processor);
 
+  g_weak_ref_clear (&priv->weak_ref);
   g_cond_clear (&priv->cond);
   g_mutex_clear (&priv->mutex);
 
@@ -623,6 +627,9 @@ hyscan_mark_loc_model_process (gpointer data)
         gint64 end_time;
         gboolean changed;
 
+        /* Сбрасываем текущее состояние. */
+        memset (&new_state, 0, sizeof (new_state));
+
         g_mutex_lock (&priv->mutex);
         end_time = g_get_monotonic_time () + UPDATE_INTERVAL;
         g_cond_wait_until (&priv->cond, &priv->mutex, end_time);
@@ -718,12 +725,14 @@ hyscan_mark_loc_model_process (gpointer data)
 
           g_hash_table_unref (prev_locations);
 
-          g_idle_add_full (G_PRIORITY_DEFAULT_IDLE, hyscan_mark_loc_model_emit_changed,
-                           g_object_ref (ml_model), g_object_unref);
-        }
+          /* На случай, если в другом потоке может уже происходит finalize. */
+          if (g_weak_ref_get (&priv->weak_ref) != NULL)
+            {
+              g_idle_add_full (G_PRIORITY_DEFAULT_IDLE, hyscan_mark_loc_model_emit_changed,
+                               ml_model, g_object_unref);
+            }
 
-      /* Сбрасываем текущее состояние. */
-      memset (&new_state, 0, sizeof (new_state));
+        }
     }
 
   g_clear_object (&priv->amp_factory);

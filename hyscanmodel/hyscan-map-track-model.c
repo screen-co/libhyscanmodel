@@ -231,6 +231,8 @@ hyscan_map_track_model_object_finalize (GObject *object)
   g_free (priv->project);
   g_clear_object (&priv->projection);
   g_hash_table_destroy (priv->tracks);
+  g_object_unref (priv->db);
+  g_object_unref (priv->cache);
 
   G_OBJECT_CLASS (hyscan_map_track_model_parent_class)->finalize (object);
 }
@@ -251,7 +253,6 @@ hyscan_map_track_model_watcher (gpointer data)
       g_usleep (REFRESH_INTERVAL);
 
       g_mutex_lock (&priv->lock);
-      g_clear_pointer (&active_tracks, g_strfreev);
       active_tracks = g_strdupv (priv->active_tracks);
       g_mutex_unlock (&priv->lock);
 
@@ -286,6 +287,8 @@ hyscan_map_track_model_watcher (gpointer data)
 
           hyscan_map_track_model_info_unref (info);
         }
+
+      g_clear_pointer (&active_tracks, g_strfreev);
 
       // todo: сделать отправку из main loop
       if (data_changed)
