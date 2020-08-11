@@ -154,6 +154,8 @@ struct _HyScanControlModelPrivate
   GMutex                      lock;            /* Блокировка. */
 
   gint                        start_stop;      /* Команда для старта или остановки работы локатора. */
+  gboolean                    generate_name;   /* Признак того, что название галса надо сгененировать. */
+  gchar                      *generate_suffix; /* Суффикс, который будет добавлен к сгенерированному имени галса. */
   HyScanControlModelStart    *start;           /* Параметры для старта локатора. */
   HyScanControlModelStart    *started;         /* Параметры, с которыми был выполнен старт (внутреннее значение). */
   HyScanControlModelStart    *started_state;   /* Параметры, с которыми был выполнен старт (текущее значение). */
@@ -611,14 +613,15 @@ hyscan_control_model_offset_update (HyScanAntennaOffset       *dest,
   return TRUE;
 }
 
-/* Генерирует имя галса по шаблону "<следующий номер в БД><суффикс><одноразовый суффикс>". */
-static void
-hyscan_control_model_generate_name (HyScanControlModel *model)
+/* Генерирует имя галса по шаблону "<следующий номер в БД><суффикс>". */
+static gchar *
+hyscan_control_model_generate_name (HyScanControlModel *model,
+                                    const gchar        *project,
+                                    const gchar        *suffix)
 {
   HyScanControlModelPrivate *priv = model->priv;
-  gint track_num;
-  const gchar *suffix, *suffix1;
   HyScanDB *db;
+  gint track_num;
 
   gint32 project_id;
   gchar **tracks;
@@ -627,14 +630,10 @@ hyscan_control_model_generate_name (HyScanControlModel *model)
   db = hyscan_control_writer_get_db (priv->control);
   /* Работа без системы хранения. */
   if (db == NULL)
-    {
-      g_free (priv->generated_name);
-      priv->generated_name = NULL;
-      return;
-    }
+    return NULL;
 
   /* Ищем в текущем проекте галс с самым большим номером в названии. */
-  project_id = hyscan_db_project_open (db, priv->project_name);
+  project_id = hyscan_db_project_open (db, project);
   tracks = project_id > 0 ? hyscan_db_track_list (db, project_id) : NULL;
 
   track_num = 1;
@@ -649,16 +648,9 @@ hyscan_control_model_generate_name (HyScanControlModel *model)
 
   hyscan_db_close (db, project_id);
   g_strfreev (tracks);
-
-  suffix1 = priv->suffix1 != NULL ? priv->suffix1 : "";
-  suffix = priv->suffix != NULL ? priv->suffix : "";
-
-  g_free (priv->generated_name);
-  priv->generated_name = g_strdup_printf ("%03d%s%s", track_num, suffix, suffix1);
-
-  /* Удаляем одноразовый суффикс. */
-  g_clear_pointer (&priv->suffix1, g_free);
   g_object_unref (db);
+
+  return g_strdup_printf ("%03d%s", track_num, suffix != NULL ? suffix : "");;
 }
 
 static gboolean
@@ -1260,16 +1252,29 @@ hyscan_control_model_tvg_disable (HyScanSonar      *sonar,
   return hyscan_control_model_tvg_set (HYSCAN_CONTROL_MODEL (sonar), source, &tvg);
 }
 
-static gboolean
-hyscan_control_model_sonar_start (HyScanSonar           *sonar,
-                                  const gchar           *project_name,
-                                  const gchar           *track_name,
-                                  HyScanTrackType        track_type,
-                                  const HyScanTrackPlan *track_plan)
+static void
+hyscan_control_model_send_start (HyScanControlModel            *self,
+                                 const HyScanControlModelStart *start,
+                                 gboolean                       generate_name,
+                                 const gchar                   *generate_suffix)
 {
-  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (sonar);
   HyScanControlModelPrivate *priv = self->priv;
-  HyScanControlModelStart start;
+
+  /* Устанавливаем параметры для старта ГЛ. */
+  g_mutex_lock (&priv->lock);
+  hyscan_control_model_start_free (priv->start);
+  priv->generate_name = generate_name;
+  priv->generate_suffix = g_strdup (generate_suffix);
+  priv->start = hyscan_control_model_start_copy (start);
+  priv->start_stop = SONAR_START;
+  priv->wakeup = TRUE;
+  g_cond_signal (&priv->cond);
+  g_mutex_unlock (&priv->lock);
+}
+
+static gboolean 
+hyscan_control_model_emit_before_start (HyScanControlModel *self)
+{
   gboolean cancel = FALSE;
 
   /* Сигнал "before-start" для подготовки всех систем к началу записи и возможности отменить запись. */
@@ -1279,20 +1284,29 @@ hyscan_control_model_sonar_start (HyScanSonar           *sonar,
       g_info ("HyScanControlModel: sonar start cancelled in \"before-start\" signal");
       return FALSE;
     }
+  
+  return TRUE;
+}
+
+static gboolean
+hyscan_control_model_sonar_start (HyScanSonar           *sonar,
+                                  const gchar           *project_name,
+                                  const gchar           *track_name,
+                                  HyScanTrackType        track_type,
+                                  const HyScanTrackPlan *track_plan)
+{
+  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (sonar);
+  HyScanControlModelStart start;
+
+  /* Сигнал "before-start" для подготовки всех систем к началу записи и возможности отменить запись. */
+  if (!hyscan_control_model_emit_before_start (self))
+    return FALSE;
 
   start.track_type = track_type;
   start.project = (gchar *) project_name;
   start.track = (gchar *) track_name;
   start.plan = (HyScanTrackPlan *) track_plan;
-
-  /* Устанавливаем параметры для старта ГЛ. */
-  g_mutex_lock (&priv->lock);
-  hyscan_control_model_start_free (priv->start);
-  priv->start = hyscan_control_model_start_copy (&start);
-  priv->start_stop = SONAR_START;
-  priv->wakeup = TRUE;
-  g_cond_signal (&priv->cond);
-  g_mutex_unlock (&priv->lock);
+  hyscan_control_model_send_start (self, &start, FALSE, NULL);
 
   return TRUE;
 }
@@ -1406,6 +1420,8 @@ hyscan_control_model_thread (gpointer data)
       HyScanControlModelStart *start;
       gint start_stop;
       gboolean sync;
+      gboolean generate_name;
+      gchar *full_suffix;
 
       /* Если ничего не поменялось, жду. */
       {
@@ -1422,7 +1438,11 @@ hyscan_control_model_thread (gpointer data)
         priv->start_stop = SONAR_NO_CHANGE;
 
         start = priv->start;
+        full_suffix = priv->generate_suffix;
+        generate_name = priv->generate_name;
         priv->start = NULL;
+        priv->generate_suffix = NULL;
+        priv->generate_name = FALSE;
 
         priv->wakeup = FALSE;
 
@@ -1440,6 +1460,12 @@ hyscan_control_model_thread (gpointer data)
       if (start_stop == SONAR_START)
         {
           gboolean status;
+
+          if (generate_name)
+            {
+              g_free (start->track);
+              start->track = hyscan_control_model_generate_name (self, start->project, full_suffix);
+            }
 
           status = hyscan_sonar_start (sonar,
                                        start->project, start->track,
@@ -1469,6 +1495,8 @@ hyscan_control_model_thread (gpointer data)
 
           g_idle_add ((GSourceFunc) hyscan_control_model_start_stop, self);
         }
+
+      g_clear_pointer (&full_suffix, g_free);
     }
 
   return NULL;
@@ -1761,20 +1789,36 @@ gboolean
 hyscan_control_model_start (HyScanControlModel *model)
 {
   HyScanControlModelPrivate *priv;
-  const gchar *track_name;
+  HyScanControlModelStart start;
+  gchar *generate_suffix = NULL;
+  gboolean generate_name;
+  gboolean success;
 
   g_return_val_if_fail (HYSCAN_IS_CONTROL_MODEL (model), FALSE);
-
   priv = model->priv;
-  if (priv->track_name == NULL)
+  
+  if (!hyscan_control_model_emit_before_start (model))
     {
-      hyscan_control_model_generate_name (model);
-      track_name = priv->generated_name;
-    }
-  else
-    {
-      track_name = priv->track_name;
+      success = FALSE;
+      goto exit;
     }
 
-  return hyscan_sonar_start (HYSCAN_SONAR (model), priv->project_name, track_name, priv->track_type, priv->plan);
+  generate_name = (priv->track_name == NULL);
+  generate_suffix = g_strdup_printf("%s%s",
+                                    priv->suffix != NULL ? priv->suffix : "",
+                                    priv->suffix1 != NULL ? priv->suffix1 : "");
+
+  start.track_type = priv->track_type;
+  start.project = (gchar *) priv->project_name;
+  start.track = (gchar *) priv->track_name;
+  start.plan = priv->plan;
+  hyscan_control_model_send_start (model, &start, generate_name, generate_suffix);
+  success = TRUE;
+
+  g_free (generate_suffix);
+
+exit:
+  g_clear_pointer (&priv->suffix1, g_free);
+
+  return success;
 }
