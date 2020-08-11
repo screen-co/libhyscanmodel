@@ -37,7 +37,7 @@
 
 #include <hyscan-nav-state.h>
 #include <hyscan-planner-selection.h>
-#include <hyscan-sonar-recorder.h>
+#include "hyscan-control-model.h"
 
 G_BEGIN_DECLS
 
@@ -91,7 +91,7 @@ GType                      hyscan_steer_get_type          (void);
 HYSCAN_API
 HyScanSteer *              hyscan_steer_new               (HyScanNavState            *nav_state,
                                                            HyScanPlannerSelection    *selection,
-                                                           HyScanSonarRecorder       *recorder);
+                                                           HyScanControlModel        *control_model);
 
 HYSCAN_API
 const HyScanPlannerTrack * hyscan_steer_get_track         (HyScanSteer               *steer,

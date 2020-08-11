@@ -160,6 +160,14 @@ struct _HyScanControlModelPrivate
   guint                       sync_timeout;    /* Период ожидания новых изменений до синхронизации. */
   guint                       timeout_id;      /* Ид таймаут-функции, запускающей синхронизацию. */
   gboolean                    sync;            /* Флаг о необходимости синхронизации. */
+
+  HyScanTrackType             track_type;      /* Тип галса. */
+  HyScanTrackPlan            *plan;            /* План галса. */
+  gchar                      *project_name;    /* Название проекта. */
+  gchar                      *track_name;      /* Название галса. */
+  gchar                      *generated_name;  /* Сгенерированное имя галса. */
+  gchar                      *suffix1;         /* Суффикс названия галса (одноразовый). */
+  gchar                      *suffix;          /* Суффикс названия галса (постоянный). */
 };
 
 static void     hyscan_control_model_sonar_state_iface_init  (HyScanSonarStateInterface      *iface);
@@ -407,6 +415,9 @@ hyscan_control_model_object_constructed (GObject *object)
   /* Поток обмена. */
   g_mutex_init (&priv->lock);
   priv->thread = g_thread_new ("control-model", hyscan_control_model_thread, self);
+
+  /* Тип галса по умолчанию. */
+  priv->track_type = HYSCAN_TRACK_SURVEY;
 }
 
 static void
@@ -426,6 +437,13 @@ hyscan_control_model_object_finalize (GObject *object)
   g_clear_object (&priv->control);
   g_hash_table_destroy (priv->sensors);
   g_hash_table_destroy (priv->sources);
+
+  hyscan_track_plan_free (priv->plan);
+  g_free (priv->project_name);
+  g_free (priv->track_name);
+  g_free (priv->generated_name);
+  g_free (priv->suffix);
+  g_free (priv->suffix1);
 
   G_OBJECT_CLASS (hyscan_control_model_parent_class)->finalize (object);
 }
@@ -591,6 +609,56 @@ hyscan_control_model_offset_update (HyScanAntennaOffset       *dest,
   *dest = *src;
 
   return TRUE;
+}
+
+/* Генерирует имя галса по шаблону "<следующий номер в БД><суффикс><одноразовый суффикс>". */
+static void
+hyscan_control_model_generate_name (HyScanControlModel *model)
+{
+  HyScanControlModelPrivate *priv = model->priv;
+  gint track_num;
+  const gchar *suffix, *suffix1;
+  HyScanDB *db;
+
+  gint32 project_id;
+  gchar **tracks;
+  gchar **strs;
+
+  db = hyscan_control_writer_get_db (priv->control);
+  /* Работа без системы хранения. */
+  if (db == NULL)
+    {
+      g_free (priv->generated_name);
+      priv->generated_name = NULL;
+      return;
+    }
+
+  /* Ищем в текущем проекте галс с самым большим номером в названии. */
+  project_id = hyscan_db_project_open (db, priv->project_name);
+  tracks = project_id > 0 ? hyscan_db_track_list (db, project_id) : NULL;
+
+  track_num = 1;
+  for (strs = tracks; strs != NULL && *strs != NULL; strs++)
+    {
+      gint number;
+
+      number = g_ascii_strtoll (*strs, NULL, 10);
+      if (number >= track_num)
+        track_num = number + 1;
+    }
+
+  hyscan_db_close (db, project_id);
+  g_strfreev (tracks);
+
+  suffix1 = priv->suffix1 != NULL ? priv->suffix1 : "";
+  suffix = priv->suffix != NULL ? priv->suffix : "";
+
+  g_free (priv->generated_name);
+  priv->generated_name = g_strdup_printf ("%03d%s%s", track_num, suffix, suffix1);
+
+  /* Удаляем одноразовый суффикс. */
+  g_clear_pointer (&priv->suffix1, g_free);
+  g_object_unref (db);
 }
 
 static gboolean
@@ -1193,11 +1261,11 @@ hyscan_control_model_tvg_disable (HyScanSonar      *sonar,
 }
 
 static gboolean
-hyscan_control_model_start (HyScanSonar           *sonar,
-                            const gchar           *project_name,
-                            const gchar           *track_name,
-                            HyScanTrackType        track_type,
-                            const HyScanTrackPlan *track_plan)
+hyscan_control_model_sonar_start (HyScanSonar           *sonar,
+                                  const gchar           *project_name,
+                                  const gchar           *track_name,
+                                  HyScanTrackType        track_type,
+                                  const HyScanTrackPlan *track_plan)
 {
   HyScanControlModel *self = HYSCAN_CONTROL_MODEL (sonar);
   HyScanControlModelPrivate *priv = self->priv;
@@ -1457,7 +1525,7 @@ hyscan_control_model_sonar_iface_init (HyScanSonarInterface *iface)
   iface->tvg_set_linear_db = hyscan_control_model_tvg_set_linear_db;
   iface->tvg_set_logarithmic = hyscan_control_model_tvg_set_logarithmic;
   iface->tvg_disable = hyscan_control_model_tvg_disable;
-  iface->start = hyscan_control_model_start;
+  iface->start = hyscan_control_model_sonar_start;
   iface->stop = hyscan_control_model_stop;
   iface->sync = hyscan_control_model_sync;
 }
@@ -1557,4 +1625,156 @@ hyscan_control_model_get_sync_timeout (HyScanControlModel *model)
   priv = model->priv;
 
   return priv->sync_timeout;
+}
+
+/**
+ * hyscan_control_model_set_track_sfx:
+ * @model: указатель на #HyScanSonarRecorder
+ * @suffix: (optional): суффикс имени галса
+ * @one_time: %TRUE, суффикс применяется только к следующему старту; %FALSE, если ко всем последующим
+ *
+ * Функция устанавливает суффикс, который будет добавлен в конце автоматически сгенерированных имён галсов.
+ * Суффикс должен быть валидным именем галса.
+ */
+void
+hyscan_control_model_set_track_sfx (HyScanControlModel *model,
+                                    const gchar        *suffix,
+                                    gboolean            one_time)
+{
+  HyScanControlModelPrivate *priv;
+  gchar **suffix_field;
+
+  g_return_if_fail (HYSCAN_IS_CONTROL_MODEL (model));
+
+  priv = model->priv;
+
+  suffix_field = one_time ? &priv->suffix1 : &priv->suffix;
+  g_free (*suffix_field);
+  *suffix_field = g_strdup (suffix);
+}
+
+/**
+ * hyscan_control_model_set_plan:
+ * @model: указатель на #HyScanControlModel
+ * @plan: (nullable): план галса
+ *
+ * Функция устанавливает план галса, который будет использован в
+ * hyscan_control_model_start().
+ */
+void
+hyscan_control_model_set_plan (HyScanControlModel *model,
+                               HyScanTrackPlan    *plan)
+{
+  HyScanControlModelPrivate *priv;
+
+  g_return_if_fail (HYSCAN_IS_CONTROL_MODEL (model));
+
+  priv = model->priv;
+
+  hyscan_track_plan_free (priv->plan);
+  priv->plan = hyscan_track_plan_copy (plan);
+}
+
+/**
+ * hyscan_control_model_set_track_name:
+ * @model: указатель на #HyScanControlModel
+ * @project_name: название проекта
+ *
+ * Функция устанавливает название проекта, которое будет использовано в
+ * hyscan_control_model_start().
+ */
+void
+hyscan_control_model_set_project (HyScanControlModel *model,
+                                  const gchar        *project_name)
+{
+  HyScanControlModelPrivate *priv;
+
+  g_return_if_fail (HYSCAN_IS_CONTROL_MODEL (model));
+
+  priv = model->priv;
+
+  g_free (priv->project_name);
+  priv->project_name = g_strdup (project_name);
+}
+
+/**
+ * hyscan_control_model_set_track_name:
+ * @model: указатель на #HyScanControlModel
+ * @track_type: тип галса
+ *
+ * Функция устанавливает тип галса, который будет использован в
+ * hyscan_control_model_start().
+ */
+void
+hyscan_control_model_set_track_type (HyScanControlModel *model,
+                                     HyScanTrackType     track_type)
+{
+  HyScanControlModelPrivate *priv;
+
+  g_return_if_fail (HYSCAN_IS_CONTROL_MODEL (model));
+
+  priv = model->priv;
+
+  priv->track_type = track_type;
+}
+
+/**
+ * hyscan_control_model_set_track_name:
+ * @model: указатель на #HyScanControlModel
+ * @track_name: (nullable): название галса
+ *
+ * Функция устанавливает название галса, которое будет использовано в
+ * hyscan_control_model_start().
+ *
+ * Если @track_name = %NULL, то имя галса будет сгенерировано автоматически.
+ */
+void
+hyscan_control_model_set_track_name (HyScanControlModel *model,
+                                     const gchar        *track_name)
+{
+  HyScanControlModelPrivate *priv;
+
+  g_return_if_fail (HYSCAN_IS_CONTROL_MODEL (model));
+
+  priv = model->priv;
+
+  g_free (priv->track_name);
+  priv->track_name = g_strdup (track_name);
+}
+
+/**
+ * hyscan_control_model_start:
+ * @model: указатель на #HyScanControlModel
+ *
+ * Функция переводит гидролокатор в рабочий режим с параметрами,
+ * указанными при помощи функций предварительной настройки старта:
+ *
+ * - hyscan_control_model_set_track_sfx(),
+ * - hyscan_control_model_set_plan(),
+ * - hyscan_control_model_set_project(),
+ * - hyscan_control_model_set_track_name(),
+ * - hyscan_control_model_set_track_type(),
+ *
+ * Returns: %TRUE, если команда выполнена успешно; иначе %FALSE.
+ */
+gboolean
+hyscan_control_model_start (HyScanControlModel *model)
+{
+  HyScanControlModelPrivate *priv;
+  const gchar *track_name;
+
+  g_return_val_if_fail (HYSCAN_IS_CONTROL_MODEL (model), FALSE);
+
+  priv = model->priv;
+  if (priv->track_name == NULL)
+    {
+      hyscan_control_model_generate_name (model);
+      track_name = priv->generated_name;
+    }
+  else
+    {
+      track_name = priv->track_name;
+    }
+
+  return hyscan_sonar_start (HYSCAN_SONAR (model), priv->project_name, track_name, priv->track_type, priv->plan);
 }

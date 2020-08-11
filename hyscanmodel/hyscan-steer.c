@@ -62,8 +62,8 @@
 #include <math.h>
 #include <hyscan-cartesian.h>
 
-#define DEG2RAD(deg) (deg / 180. * G_PI)  /* Перевод из градусов в радианы. */
-#define RAD2DEG(rad) (rad / G_PI * 180.)  /* Перевод из радиан в градусы. */
+#define DEG2RAD(deg) ((deg) / 180. * G_PI)  /* Перевод из градусов в радианы. */
+#define RAD2DEG(rad) ((rad) / G_PI * 180.)  /* Перевод из радиан в градусы. */
 #define AUTOSELECT_INTERVAL 2000          /* Интервал отслеживания ближайших плановых галсов, мс. */
 #define AUTOSELECT_DIST     100           /* Максимальное расстояние, на котором галс может быть выбран автоматом, м. */
 
@@ -72,7 +72,7 @@ enum
   PROP_O,
   PROP_NAV_STATE,
   PROP_SELECTION,
-  PROP_RECORDER,
+  PROP_CONTROL_MODEL,
   PROP_AUTOSTART,
   PROP_AUTOSELECT,
   PROP_THRESHOLD,
@@ -91,8 +91,7 @@ struct _HyScanSteerPrivate
   HyScanNavState         *nav_model;       /* Модель навигационных данных. */
   HyScanObjectModel      *planner_model;   /* Модель объектов планировщика. */
   HyScanPlannerSelection *selection;       /* Модель выбранных объектов планировщика.  */
-  HyScanSonarRecorder    *recorder;        /* Модель управления работой гидролокатора. */
-  HyScanSonarState       *sonar_state;     /* Состояние гидролокатора. */
+  HyScanControlModel     *control_model;   /* Модель управления работой гидролокатора. */
   gchar                  *project_name;    /* Название проекта. */
 
   HyScanAntennaOffset    *offset;          /* Смещение антенны гидролокатор. */
@@ -131,7 +130,7 @@ static void      hyscan_steer_set_track                (HyScanSteer           *s
 static void      hyscan_steer_nav_changed              (HyScanSteer           *steer);
 static void      hyscan_steer_start_stop               (HyScanSteer           *steer);
 static gboolean  hyscan_steer_plan_select              (HyScanSteer           *steer);
-static void      hyscan_steer_plan_geo_clear           (HyScanSteer *steer);
+static void      hyscan_steer_plan_geo_clear           (HyScanSteer           *steer);
 
 static guint       hyscan_steer_signals[SIGNAL_LAST] = { 0 };
 static GParamSpec* hyscan_steer_prop_autostart;
@@ -161,9 +160,9 @@ hyscan_steer_class_init (HyScanSteerClass *klass)
                          HYSCAN_TYPE_PLANNER_SELECTION,
                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY));
 
-  g_object_class_install_property (object_class, PROP_RECORDER,
-    g_param_spec_object ("recorder", "HyScanSonarRecorder", "Sonar recorder model",
-                         HYSCAN_TYPE_SONAR_RECORDER,
+  g_object_class_install_property (object_class, PROP_CONTROL_MODEL,
+    g_param_spec_object ("control-model", "HyScanControlModel", "Control model",
+                         HYSCAN_TYPE_CONTROL_MODEL,
                          G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY));
 
   hyscan_steer_prop_autostart = g_param_spec_boolean ("autostart", "Auto start",
@@ -234,8 +233,8 @@ hyscan_steer_set_property (GObject      *object,
       priv->selection = g_value_dup_object (value);
       break;
 
-    case PROP_RECORDER:
-      priv->recorder = g_value_dup_object (value);
+    case PROP_CONTROL_MODEL:
+      priv->control_model = g_value_dup_object (value);
       break;
 
     case PROP_AUTOSTART:
@@ -296,18 +295,8 @@ hyscan_steer_object_constructed (GObject *object)
   priv->planner_model = HYSCAN_OBJECT_MODEL (hyscan_planner_selection_get_model (priv->selection));
 
   /* Сигнал "start-stop" позволяет отслеживать статус работы локатора и необходим для функции автостарта. */
-  if (priv->recorder != NULL)
-    {
-      HyScanSonar *sonar;
-
-      sonar = hyscan_sonar_recorder_get_sonar (priv->recorder);
-      if (HYSCAN_IS_SONAR_STATE (sonar))
-        {
-          priv->sonar_state = g_object_ref (HYSCAN_SONAR_STATE (sonar));
-          g_signal_connect_swapped (priv->sonar_state, "start-stop", G_CALLBACK (hyscan_steer_start_stop), steer);
-        }
-      g_object_unref (sonar);
-    }
+  g_signal_connect_swapped (HYSCAN_SONAR_STATE(priv->control_model),
+                            "start-stop", G_CALLBACK (hyscan_steer_start_stop), steer);
 
   g_signal_connect_swapped (priv->nav_model, "nav-changed", G_CALLBACK (hyscan_steer_nav_changed), steer);
   g_signal_connect_swapped (priv->planner_model, "changed", G_CALLBACK (hyscan_steer_set_track), steer);
@@ -327,11 +316,10 @@ hyscan_steer_object_finalize (GObject *object)
   g_signal_handlers_disconnect_by_data (priv->planner_model, steer);
   g_signal_handlers_disconnect_by_data (priv->selection, steer);
 
-  g_clear_object (&priv->recorder);
+  g_clear_object (&priv->control_model);
   g_clear_object (&priv->selection);
   g_clear_object (&priv->planner_model);
   g_clear_object (&priv->nav_model);
-  g_clear_object (&priv->sonar_state);
   g_clear_object (&priv->geo);
   g_clear_pointer (&priv->plan_geo, g_hash_table_unref);
   g_clear_pointer (&priv->track, hyscan_planner_track_free);
@@ -411,7 +399,91 @@ hyscan_steer_start_stop (HyScanSteer *steer)
 {
   HyScanSteerPrivate *priv = steer->priv;
 
-  priv->recording = hyscan_sonar_state_get_start (priv->sonar_state, NULL, NULL, NULL, NULL);
+  priv->recording = hyscan_sonar_state_get_start (HYSCAN_SONAR_STATE (priv->control_model), NULL, NULL, NULL, NULL);
+}
+
+/* Функция возвращает копию строки, в которой невалидные символы заменены транслитерацией или удалены. */
+static gchar *
+hyscan_steer_name_normalize (const gchar *name)
+{
+  /* Правила транслитерации. */
+  static struct
+  {
+    const gchar *from;
+    const gchar *to;
+  } translit[] = {{"а", "a"},   {"А", "A"},
+                  {"б", "b"},   {"Б", "B"},
+                  {"в", "v"},   {"В", "V"},
+                  {"г", "g"},   {"Г", "G"},
+                  {"д", "d"},   {"Д", "D"},
+                  {"е", "e"},   {"Е", "E"},
+                  {"ё", "yo"},  {"Ё", "Yo"},
+                  {"ж", "zh"},  {"Ж", "Zh"},
+                  {"з", "z"},   {"З", "Z"},
+                  {"и", "i"},   {"И", "I"},
+                  {"й", "y"},   {"Й", "Y"},
+                  {"к", "k"},   {"К", "K"},
+                  {"л", "l"},   {"Л", "L"},
+                  {"м", "m"},   {"М", "M"},
+                  {"н", "n"},   {"Н", "N"},
+                  {"о", "o"},   {"О", "O"},
+                  {"п", "p"},   {"П", "P"},
+                  {"р", "r"},   {"Р", "R"},
+                  {"с", "s"},   {"С", "S"},
+                  {"т", "t"},   {"Т", "T"},
+                  {"у", "u"},   {"У", "U"},
+                  {"ф", "f"},   {"Ф", "F"},
+                  {"х", "h"},   {"Х", "H"},
+                  {"ц", "c"},   {"Ц", "C"},
+                  {"ч", "ch"},  {"Ч", "Ch"},
+                  {"ш", "sh"},  {"Ш", "Sh"},
+                  {"щ", "sch"}, {"Щ", "Sch"},
+                  {"ъ", ""},    {"Ъ", ""},
+                  {"ы", "y"},   {"Ы", "Y"},
+                  {"ь", ""},    {"Ь", ""},
+                  {"э", "e"},   {"Э", "E"},
+                  {"ю", "yu"},  {"Ю", "Yu"},
+                  {"я", "ya"},  {"Я", "Ya"},
+                  {" ", "_"}};
+  guint map_n = G_N_ELEMENTS (translit);
+  guint j;
+  const gchar *utf8_char;
+  GString *string;
+
+  if (name == NULL || !g_utf8_validate (name, -1, NULL))
+    return NULL;
+
+  string = g_string_new (NULL);
+
+  /* Цикл по UTF-8 символам строки. */
+  for (utf8_char = name; *utf8_char != '\0'; utf8_char = g_utf8_next_char (utf8_char))
+    {
+      gchar c = *utf8_char;
+
+      /* Валидные символы оставляем. См. hyscan_db_file_check_name(). */
+      if ((c >= 'a' && c <= 'z') ||
+          (c >= 'A' && c <= 'Z') ||
+          (c >= '0' && c <= '9') ||
+          (c == '-' || c == '_' || c == '.'))
+        {
+          g_string_append_c (string, c);
+        }
+
+      /* Русские буквы заменяем транслитом. */
+      else
+        {
+          for (j = 0; j < map_n; j++)
+            {
+              if (!g_str_has_prefix (utf8_char, translit[j].from))
+                continue;
+
+              g_string_append (string, translit[j].to);
+              break;
+            }
+        }
+    }
+
+  return g_string_free (string, FALSE);
 }
 
 /* Обработчик сигнала "changed" модели навигационных данных. */
@@ -453,7 +525,7 @@ hyscan_steer_nav_changed (HyScanSteer *steer)
           -speed_along < point.position.x && point.position.x < priv->length &&   /* (2) */
           ABS (point.d_y) < priv->threshold)                                      /* (3) */
         {
-          gchar *suffix;
+          gchar *suffix, *suffix_normalized;
 
           if (zone != NULL && track->number > 0)
             suffix = g_strdup_printf ("-plan-%s.%d", zone->name, track->number);
@@ -464,22 +536,24 @@ hyscan_steer_nav_changed (HyScanSteer *steer)
           else
             suffix = g_strdup ("-plan");
 
-          hyscan_sonar_recorder_set_track_type (priv->recorder, HYSCAN_TRACK_SURVEY);
-          hyscan_sonar_recorder_set_plan (priv->recorder, &track->plan);
+          hyscan_control_model_set_track_type (priv->control_model, HYSCAN_TRACK_SURVEY);
+          hyscan_control_model_set_plan (priv->control_model, &track->plan);
 
           /* Суффикс действителен только для следующего старта. */
-          hyscan_sonar_recorder_set_suffix (priv->recorder, suffix, TRUE);
+          suffix_normalized = hyscan_steer_name_normalize (suffix);
+          hyscan_control_model_set_track_sfx (priv->control_model, suffix_normalized, TRUE);
 
-          priv->recording = hyscan_sonar_recorder_start (priv->recorder);
+          priv->recording = hyscan_control_model_start (priv->control_model);
 
           g_free (suffix);
+          g_free (suffix_normalized);
         }
     }
   else
     {
       if (point.position.x > priv->length)
         {
-          hyscan_sonar_recorder_stop (priv->recorder);
+          hyscan_sonar_stop (HYSCAN_SONAR (priv->control_model));
           priv->recording = FALSE;
 
           /* Выбираем следующий галс. */
@@ -536,7 +610,7 @@ hyscan_steer_set_track (HyScanSteer *steer)
  * hyscan_steer_new:
  * @nav_state: модель данных навигации
  * @selection: модель выбранных объектов планировщика
- * @recorder: объект управления записью галсов
+ * @control_model: модель управления гидролокатором
  *
  * Функция создаёт модель навигации по плану галса.
  *
@@ -545,12 +619,12 @@ hyscan_steer_set_track (HyScanSteer *steer)
 HyScanSteer *
 hyscan_steer_new (HyScanNavState         *nav_state,
                   HyScanPlannerSelection *selection,
-                  HyScanSonarRecorder    *recorder)
+                  HyScanControlModel      *control_model)
 {
   return g_object_new (HYSCAN_TYPE_STEER,
                        "nav-state", nav_state,
                        "selection", selection,
-                       "recorder", recorder,
+                       "control-model", control_model,
                        NULL);
 }
 
@@ -717,12 +791,6 @@ hyscan_steer_set_autostart (HyScanSteer *steer,
 
   g_return_if_fail (HYSCAN_IS_STEER (steer));
   priv = steer->priv;
-
-  if (autostart && priv->sonar_state == NULL)
-    {
-      g_warning ("HyScanSteer: sonar must implement HyScanSonarState to enable autostart");
-      return;
-    }
 
   priv->autostart = autostart;
   g_object_notify_by_pspec (G_OBJECT (steer), hyscan_steer_prop_autostart);

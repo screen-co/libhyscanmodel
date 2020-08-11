@@ -81,6 +81,30 @@ void                      hyscan_control_model_set_sync_timeout (HyScanControlMo
 HYSCAN_API
 guint                     hyscan_control_model_get_sync_timeout (HyScanControlModel *model);
 
+HYSCAN_API
+void                      hyscan_control_model_set_track_sfx    (HyScanControlModel *model,
+                                                                 const gchar        *suffix,
+                                                                 gboolean            one_time);
+
+HYSCAN_API
+void                      hyscan_control_model_set_plan         (HyScanControlModel *model,
+                                                                 HyScanTrackPlan    *plan);
+
+HYSCAN_API
+void                      hyscan_control_model_set_project      (HyScanControlModel *model,
+                                                                 const gchar        *project_name);
+
+HYSCAN_API
+void                      hyscan_control_model_set_track_name   (HyScanControlModel *model,
+                                                                 const gchar        *track_name);
+
+HYSCAN_API
+void                      hyscan_control_model_set_track_type   (HyScanControlModel *model,
+                                                                 HyScanTrackType     track_type);
+
+HYSCAN_API
+gboolean                  hyscan_control_model_start             (HyScanControlModel *model);
+
 G_END_DECLS
 
 #endif /* __HYSCAN_CONTROL_MODEL_H__ */

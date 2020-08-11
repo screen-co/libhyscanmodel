@@ -616,7 +616,7 @@ hyscan_planner_selection_watch_records (HyScanPlannerSelection *selection,
 }
 
 /**
- * hyscan_gtk_map_kit_add_record:
+ * hyscan_planner_selection_record:
  * @selection: указатель на #HyScanPlannerSelection
  * @track_id: идентификатор записываемого галса
  *

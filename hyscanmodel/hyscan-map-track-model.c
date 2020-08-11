@@ -64,6 +64,7 @@ enum
   PROP_DB,
   PROP_CACHE,
   PROP_ACTIVE_TRACKS,
+  PROP_PROJECTION,
 };
 
 enum
@@ -125,6 +126,9 @@ hyscan_map_track_model_class_init (HyScanMapTrackModelClass *klass)
   g_object_class_install_property (object_class, PROP_ACTIVE_TRACKS,
     g_param_spec_boxed ("active-tracks", "Active tracks", "NULL-terminated array of active tracks", G_TYPE_STRV,
                          G_PARAM_READWRITE | G_PARAM_CONSTRUCT));
+  g_object_class_install_property (object_class, PROP_PROJECTION,
+    g_param_spec_object ("projection", "HyScanGeoProjection", "Geo projection", HYSCAN_TYPE_GEO_PROJECTION,
+                         G_PARAM_WRITABLE));
 
   /**
    * HyScanMapTrackModel::changed:
@@ -178,6 +182,10 @@ hyscan_map_track_model_set_property (GObject      *object,
       hyscan_map_track_model_set_tracks (map_track_model, g_value_get_boxed (value));
       break;
 
+    case PROP_PROJECTION:
+      hyscan_map_track_model_set_projection (map_track_model, g_value_get_object (value));
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -196,6 +204,7 @@ hyscan_map_track_model_get_property (GObject      *object,
     {
     case PROP_ACTIVE_TRACKS:
       g_value_take_boxed (value, hyscan_map_track_model_get_tracks (map_track_model));
+      break;
 
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -276,8 +285,12 @@ hyscan_map_track_model_watcher (gpointer data)
           g_mutex_lock (&info->mutex);
 
           mod_count = hyscan_map_track_get_mod_count (info->track);
-          data_changed |= (mod_count != info->mod_count);
-          info->mod_count = mod_count;
+          if (mod_count != info->mod_count)
+            {
+              data_changed = TRUE;
+              info->mod_count = mod_count;
+              hyscan_map_track_get (info->track, NULL);
+            }
 
           param_mod_count = hyscan_map_track_param_get_mod_count (hyscan_map_track_get_param (info->track));
           param_changed |= (param_mod_count != info->param_mod_count);
@@ -560,4 +573,5 @@ hyscan_map_track_model_info_unref (HyScanMapTrackModelInfo *info)
 
   g_object_unref (info->track);
   g_mutex_clear (&info->mutex);
+  g_slice_free (HyScanMapTrackModelInfo, info);
 }

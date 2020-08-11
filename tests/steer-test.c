@@ -73,7 +73,6 @@ struct _HyScanNavStateDummyClass
 static GMainLoop              *loop;                           /* Главный цикл. */
 static HyScanDB               *db;                             /* База данных. */
 static HyScanControlModel     *sonar;                          /* Модель управления локатором. */
-static HyScanSonarRecorder    *recorder;                       /* Запись галса. */
 static HyScanNavStateDummy    *nav_dummy;                      /* Навигационные данные. */
 static HyScanSteer            *steer;                          /* Модель навигации по галсу. */
 static HyScanPlannerModel     *planner_model;                  /* Модель объектов планировщика. */
@@ -177,7 +176,7 @@ gboolean
 set_up_project (gpointer user_data)
 {
   /* Создаём проект. */
-  hyscan_sonar_recorder_start (recorder);
+  hyscan_control_model_start (sonar);
 
   /* Добавляем следующий коллбэк. */
   g_signal_connect (sonar, "start-stop", G_CALLBACK (set_up_tracks), NULL);
@@ -195,7 +194,7 @@ set_up_tracks (gpointer user_data)
   /* Отключаемся от этого коллбэка. */
   g_signal_handlers_disconnect_by_func (sonar, set_up_tracks, NULL);
 
-  hyscan_sonar_recorder_stop (recorder);
+  hyscan_sonar_stop (HYSCAN_SONAR (sonar));
 
   /* Инициализируем плановые галсы и добавляем их в БД. */
   hyscan_object_model_set_project (HYSCAN_OBJECT_MODEL (planner_model), db, PROJET_NAME);
@@ -348,15 +347,14 @@ int main (int    argc,
 
   sonar = hyscan_control_model_new (control);
 
-  recorder = hyscan_sonar_recorder_new (HYSCAN_SONAR (sonar), db);
-  hyscan_sonar_recorder_set_project (recorder, PROJET_NAME);
+  hyscan_control_model_set_project (sonar, PROJET_NAME);
 
   planner_model = hyscan_planner_model_new ();
 
   nav_dummy = g_object_new (HYSCAN_TYPE_NAV_STATE_DUMMY, NULL);
 
   selection = hyscan_planner_selection_new (planner_model);
-  steer = hyscan_steer_new (HYSCAN_NAV_STATE (nav_dummy), selection, recorder);
+  steer = hyscan_steer_new (HYSCAN_NAV_STATE (nav_dummy), selection, sonar);
 
   g_idle_add (set_up_project, NULL);
   g_timeout_add (FAIL_TIMEOUT, (GSourceFunc) fail_test, NULL);
@@ -370,7 +368,6 @@ int main (int    argc,
   g_object_unref (control);
   g_object_unref (sonar);
   g_object_unref (db);
-  g_object_unref (recorder);
   g_object_unref (nav_dummy);
   g_object_unref (planner_model);
   g_object_unref (selection);
