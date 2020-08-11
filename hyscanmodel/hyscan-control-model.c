@@ -38,6 +38,50 @@
  * @Title HyScanControlModel
  * @Short_description Асинхронная модель управления гидролокатором.
  *
+ * Класс #HyScanControlModel предназначен для асинхронного управления
+ * гидролокатором и датчиками, зарегистрированными в #HyScanControl.
+ *
+ * Класс реализует интерфейсы:
+ *
+ * - HyScanParam: управление внутренними параметрами устройств (синхронно).
+ * - HyScanSonar: управление локатором (асинхронно),
+ * - HyScanSensor: управление датчиками (синхронно),
+ * - HyScanSonarState: состояние локатора,
+ * - HyScanSensorState: состояние датчиков.
+ *
+ * Вызовы #HyScanParam и #HyScanSensor напрямую транслируются в используемый #HyScanControl.
+ *
+ * ## Управление локатором
+ *
+ * Интерфейс #HyScanSonar реализован асинхронно для функций hyscan_sonar_start(),
+ * hyscan_sonar_stop() и hyscan_sonar_sync().
+ *
+ * Синхронизация состояния гидролокатора hyscan_sonar_sync() происходит автоматически
+ * после изменения какого либо из параметров. Несколько последовательных изменений
+ * параметров объединяются в одну синхронизацию, если между ними прошло время
+ * не больше периода синхронизации. Период синхронизации можно задать в функции
+ * hyscan_control_model_set_sync_timeout().
+ *
+ * Установка параметров старта локатора hyscan_sonar_start() может быть произведена
+ * в различных частях программы с помощью функций конфигурации старта:
+ *
+ * - hyscan_control_model_set_project(),
+ * - hyscan_control_model_set_track_name(),
+ * - hyscan_control_model_set_track_type(),
+ * - hyscan_control_model_set_plan().
+ *
+ * Название галса может быть сгенерированно автоматически, если установить %NULL в
+ * hyscan_control_model_set_track_name(). Также для сгенерированного названия
+ * будет применён суффикс, указаный в hyscan_control_model_set_track_sfx().
+ *
+ * Параметры, указанные в этих функция будут использованы при последующем вызове
+ * hyscan_control_model_start().
+ *
+ * ## Состояние локаторов и датчиков
+ *
+ * Все установленные параметры локатора и датчиков запоминаются моделью и
+ * могут быть получены при помощи интерфейсов #HyScanSonarState и #HyScanSensorState.
+ *
  */
 
 #include "hyscan-control-model.h"
@@ -64,9 +108,10 @@ enum
 {
   SIGNAL_SONAR,
   SIGNAL_SENSOR,
-  SIGNAL_PARAM,
   SIGNAL_BEFORE_START,
   SIGNAL_START_STOP,
+  SIGNAL_START_SENT,
+  SIGNAL_STOP_SENT,
   SIGNAL_LAST
 };
 
@@ -199,7 +244,7 @@ static gboolean hyscan_control_model_tvg_update              (HyScanControlModel
 static gboolean hyscan_control_model_tvg_set                 (HyScanControlModel             *self,
                                                               HyScanSourceType                source,
                                                               HyScanControlModelTVG          *tvg);
-static gpointer hyscan_control_model_thread            (gpointer                        data);
+static gpointer hyscan_control_model_thread                  (gpointer                        data);
 static void     hyscan_control_model_sensor_data             (HyScanDevice                   *device,
                                                               const gchar                    *sensor,
                                                               gint                            source,
@@ -239,6 +284,12 @@ static HyScanControlModelStart *
                 hyscan_control_model_start_copy               (const HyScanControlModelStart *start);
 
 static void     hyscan_control_model_start_free               (HyScanControlModelStart       *start);
+static void     hyscan_control_model_send_start               (HyScanControlModel            *self,
+                                                               const HyScanControlModelStart *start,
+                                                               gboolean                       generate_name,
+                                                               const gchar                   *generate_suffix);
+static gboolean hyscan_control_model_emit_before_start        (HyScanControlModel            *self);
+
 
 static guint hyscan_control_model_signals[SIGNAL_LAST] = {0};
 
@@ -302,25 +353,6 @@ hyscan_control_model_class_init (HyScanControlModelClass *klass)
    * HyScanControlModel::before-start
    * @model: указатель на #HyScanControlModel
    *
-   * Сигнал отправляется в момент вызова hyscan_sonar_start() модели, для возможности отмены старта.
-   * Обработчики сигнала могут вернуть %TRUE, чтобы отменить старт локатора.
-   *
-   * Для остлеживания изменения статуса работы локатора используйтся сигнал HyScanSonarState::start-stop.
-   *
-   * Returns: %TRUE, если необходимо остановить включение локатора.
-   */
-  hyscan_control_model_signals[SIGNAL_PARAM] =
-    g_signal_new ("param", HYSCAN_TYPE_CONTROL_MODEL,
-                  G_SIGNAL_RUN_LAST, 0,
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__VOID,
-                  G_TYPE_NONE,
-                  0);
-
-  /**
-   * HyScanControlModel::before-start
-   * @model: указатель на #HyScanControlModel
-   *
    * DEPRECATED! Сигнал используется для поддержки legacy-кода и не предназначен для использования в новых разработках.
    *
    * Сигнал отправляется в момент вызова hyscan_sonar_start() модели, для возможности отмены старта.
@@ -336,6 +368,38 @@ hyscan_control_model_class_init (HyScanControlModelClass *klass)
                   g_signal_accumulator_true_handled, NULL,
                   hyscan_model_marshal_BOOLEAN__VOID,
                   G_TYPE_BOOLEAN,
+                  0);
+
+  /**
+   * HyScanControlModel::start-sent
+   * @model: указатель на #HyScanControlModel
+   *
+   * Сигнал отправляется в момент успешного вызова hyscan_sonar_start() или hyscan_control_model_start().
+   *
+   * Последующий сигнал HyScanSonarState::start-stop оповестит о реальном включении локатора.
+   */
+  hyscan_control_model_signals[SIGNAL_START_SENT] =
+    g_signal_new ("start-sent", HYSCAN_TYPE_CONTROL_MODEL,
+                  G_SIGNAL_RUN_LAST, 0,
+                  NULL, NULL,
+                  g_cclosure_marshal_VOID__VOID,
+                  G_TYPE_NONE,
+                  0);
+
+  /**
+   * HyScanControlModel::stop-sent
+   * @model: указатель на #HyScanControlModel
+   *
+   * Сигнал отправляется в момент успешного вызова hyscan_sonar_stop().
+   *
+   * Последующий сигнал HyScanSonarState::start-stop оповестит о реальном выключении локатора.
+   */
+  hyscan_control_model_signals[SIGNAL_STOP_SENT] =
+    g_signal_new ("stop-sent", HYSCAN_TYPE_CONTROL_MODEL,
+                  G_SIGNAL_RUN_LAST, 0,
+                  NULL, NULL,
+                  g_cclosure_marshal_VOID__VOID,
+                  G_TYPE_NONE,
                   0);
 
   hyscan_control_model_signals[SIGNAL_START_STOP] = g_signal_lookup ("start-stop", HYSCAN_TYPE_SONAR_STATE);
@@ -1260,6 +1324,8 @@ hyscan_control_model_send_start (HyScanControlModel            *self,
 {
   HyScanControlModelPrivate *priv = self->priv;
 
+  g_signal_emit (self, hyscan_control_model_signals[SIGNAL_START_SENT], 0);
+
   /* Устанавливаем параметры для старта ГЛ. */
   g_mutex_lock (&priv->lock);
   hyscan_control_model_start_free (priv->start);
@@ -1316,6 +1382,8 @@ hyscan_control_model_stop (HyScanSonar *sonar)
 {
   HyScanControlModel *self = HYSCAN_CONTROL_MODEL (sonar);
   HyScanControlModelPrivate *priv = self->priv;
+
+  g_signal_emit (self, hyscan_control_model_signals[SIGNAL_STOP_SENT], 0);
 
   /* Устанавливаем параметры для остановки ГЛ. */
   g_mutex_lock (&priv->lock);
