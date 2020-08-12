@@ -37,8 +37,9 @@
 #define __HYSCAN_CONTROL_MODEL_H__
 
 #include <hyscan-control.h>
-#include "hyscan-sonar-state.h"
-#include "hyscan-sensor-state.h"
+#include <hyscan-sonar-state.h>
+#include <hyscan-sensor-state.h>
+#include <hyscan-device-state.h>
 
 G_BEGIN_DECLS
 

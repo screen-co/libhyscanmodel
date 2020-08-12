@@ -35,7 +35,6 @@
 #ifndef __HYSCAN_SENSOR_STATE_H__
 #define __HYSCAN_SENSOR_STATE_H__
 
-#include <glib-object.h>
 #include <hyscan-types.h>
 
 G_BEGIN_DECLS
@@ -48,6 +47,12 @@ G_BEGIN_DECLS
 typedef struct _HyScanSensorState HyScanSensorState;
 typedef struct _HyScanSensorStateInterface HyScanSensorStateInterface;
 
+/**
+ * HyScanSensorStateInterface:
+ * @g_iface: Базовый интерфейс.
+ * @get_enabled: Функция возвращает, включен ли датчик.
+ * @antenna_get_offset: Функция возвращает смещение приёмных антенн датчика.
+ */
 struct _HyScanSensorStateInterface
 {
   GTypeInterface       g_iface;

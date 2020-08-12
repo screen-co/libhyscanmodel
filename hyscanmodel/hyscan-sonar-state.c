@@ -57,6 +57,12 @@ G_DEFINE_INTERFACE (HyScanSonarState, hyscan_sonar_state, G_TYPE_OBJECT);
 static void
 hyscan_sonar_state_default_init (HyScanSonarStateInterface *iface)
 {
+  /**
+   * HyScanSonarState::start-stop
+   * @sonar: указатель на #HyScanSonarState
+   *
+   * Сигнал отправляется при включении и выключении локатора.
+   */
   g_signal_new ("start-stop", HYSCAN_TYPE_SONAR_STATE,
                 G_SIGNAL_RUN_LAST, 0,
                 NULL, NULL,

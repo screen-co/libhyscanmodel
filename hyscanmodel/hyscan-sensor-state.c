@@ -83,6 +83,8 @@ hyscan_sensor_state_antenna_get_offset (HyScanSensorState   *state,
  * @state: указатель на #HyScanSensorState
  * @name: название датчика
  *
+ * Функция возвращает, включен ли датчик.
+ *
  * Returns: %TRUE, если датчик включен, иначе %FALSE.
  */
 gboolean

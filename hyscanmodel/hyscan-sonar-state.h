@@ -35,8 +35,6 @@
 #ifndef __HYSCAN_SONAR_STATE_H__
 #define __HYSCAN_SONAR_STATE_H__
 
-#include <glib-object.h>
-#include <hyscan-api.h>
 #include <hyscan-sonar-info.h>
 
 G_BEGIN_DECLS
@@ -49,6 +47,23 @@ G_BEGIN_DECLS
 typedef struct _HyScanSonarState HyScanSonarState;
 typedef struct _HyScanSonarStateInterface HyScanSonarStateInterface;
 
+/**
+ * HyScanSonarStateInterface:
+ * @g_iface: Базовый интерфейс.
+ * @receiver_get_mode: Функция возвращает режим работы приёмника.
+ * @receiver_get_time: Функция возвращает время приёма эхосигнала.
+ * @receiver_get_disabled: Функция возвращает признак того, что приём эхосигнала выключен.
+ * @generator_get_preset: Функция возвращает режим работы генератора.
+ * @generator_get_disabled: Функция возвращает признак того, что излучение эхосигнала выключено.
+ * @tvg_get_mode: Функция возвращает режим работы системы ВАРУ.
+ * @tvg_get_auto: Функция возвращает параметры автоматического режима управления системой ВАРУ.
+ * @tvg_get_constant: Функция возвращает уровень усиления, если установлен постоянный уровень.
+ * @tvg_get_linear_db: Функция возвращает параметры линейного усиления.
+ * @tvg_get_logarithmic: Функция возвращает параметры логарифмический режима работы ВАРУ.
+ * @tvg_get_disabled: Функция возвращает признак того, что управление усилением выключено.
+ * @get_start: Функция возвращает параметры рабочего режима гидролокатора.
+ *
+ */
 struct _HyScanSonarStateInterface
 {
   GTypeInterface                g_iface;

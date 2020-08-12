@@ -46,10 +46,12 @@
  * - HyScanParam: управление внутренними параметрами устройств (синхронно).
  * - HyScanSonar: управление локатором (асинхронно),
  * - HyScanSensor: управление датчиками (синхронно),
+ * - HyScanDevice: управление устройством (синхронно),
  * - HyScanSonarState: состояние локатора,
- * - HyScanSensorState: состояние датчиков.
+ * - HyScanSensorState: состояние датчиков,
+ * - HyScanDeviceState: состояние устройства.
  *
- * Вызовы #HyScanParam и #HyScanSensor напрямую транслируются в используемый #HyScanControl.
+ * Вызовы #HyScanParam, #HyScanSensor и #HyScanDevice напрямую транслируются в используемый #HyScanControl.
  *
  * ## Управление локатором
  *
@@ -57,7 +59,7 @@
  * hyscan_sonar_stop() и hyscan_sonar_sync().
  *
  * Синхронизация состояния гидролокатора hyscan_sonar_sync() происходит автоматически
- * после изменения какого либо из параметров. Несколько последовательных изменений
+ * после изменения какого-либо из параметров. Несколько последовательных изменений
  * параметров объединяются в одну синхронизацию, если между ними прошло время
  * не больше периода синхронизации. Период синхронизации можно задать в функции
  * hyscan_control_model_set_sync_timeout().
@@ -70,9 +72,9 @@
  * - hyscan_control_model_set_track_type(),
  * - hyscan_control_model_set_plan().
  *
- * Название галса может быть сгенерированно автоматически, если установить %NULL в
+ * Название галса может быть сгенерировано автоматически, если установить %NULL в
  * hyscan_control_model_set_track_name(). Также для сгенерированного названия
- * будет применён суффикс, указаный в hyscan_control_model_set_track_sfx().
+ * будет применён суффикс, указанный в hyscan_control_model_set_track_sfx().
  *
  * Параметры, указанные в этих функция будут использованы при последующем вызове
  * hyscan_control_model_start().
@@ -86,13 +88,16 @@
 
 #include "hyscan-control-model.h"
 #include <hyscan-data-box.h>
-#include <string.h>
 #include <hyscan-model-marshallers.h>
 
 #define HYSCAN_CONTROL_MODEL_TIMEOUT (1000 /* Одна секунда*/)
 
 typedef struct _HyScanControlModelStart HyScanControlModelStart;
-typedef struct _HyScanControlModelTVG HyScanControlModelTVG;
+typedef union _HyScanControlModelTVG HyScanControlModelTVG;
+typedef struct _HyScanControlModelTVGAuto HyScanControlModelTVGAuto;
+typedef struct _HyScanControlModelTVGConst HyScanControlModelTVGConst;
+typedef struct _HyScanControlModelTVGLinear HyScanControlModelTVGLinear;
+typedef struct _HyScanControlModelTVGLog HyScanControlModelTVGLog;
 typedef struct _HyScanControlModelRec HyScanControlModelRec;
 typedef struct _HyScanControlModelGen HyScanControlModelGen;
 typedef struct _HyScanControlModelSource HyScanControlModelSource;
@@ -122,85 +127,104 @@ enum
   SONAR_STOP,
 };
 
+/* Параметры включения работы локатора, см. hyscan_sonar_start() и hyscan_control_model_start(). */
 struct _HyScanControlModelStart
 {
-  HyScanTrackType             track_type;
-  gchar                      *project;
-  gchar                      *track;
-  HyScanTrackPlan            *plan;
+  HyScanTrackType             track_type;          /* Тип галса. */
+  gchar                      *project;             /* Название проекта. */
+  gchar                      *track;               /* Название галса. */
+  HyScanTrackPlan            *plan;                /* План галса. */
+  gboolean                    generate_name;       /* Необходимо сгенерировать название галса. */
+  gchar                      *generate_suffix;     /* Суффикс для генерации названия галса. */
 };
 
-struct _HyScanControlModelTVG
+/* Параметры автоматического режима системы ВАРУ, см. hyscan_sonar_tvg_set_auto(). */
+struct _HyScanControlModelTVGAuto
 {
-  gboolean                    disabled;
-  HyScanSonarTVGModeType      mode;
-
-  struct
-  {
-    gdouble                   level;
-    gdouble                   sensitivity;
-  } atvg;
-  struct
-  {
-    gdouble                   gain;
-  } constant;
-  struct
-  {
-    gdouble                   gain0;
-    gdouble                   gain_step;
-  } linear;
-  struct
-  {
-    gdouble                   gain0;
-    gdouble                   beta;
-    gdouble                   alpha;
-  } log;
+  HyScanSonarTVGModeType      mode;                 /* Режим работы системы ВАРУ. */
+  gdouble                     level;                /* Целевой уровень сигнала. */
+  gdouble                     sensitivity;          /* Чувствительность автомата регулировки. */
 };
 
+/* Параметры постоянного уровня усиления системы ВАРУ, см. hyscan_sonar_tvg_set_constant(). */
+struct _HyScanControlModelTVGConst
+{
+  HyScanSonarTVGModeType      mode;                 /* Режим работы системы ВАРУ. */
+  gdouble                     gain;                 /* Уровень усиления, дБ. */
+};
+
+/* Параметры линейного увеличения уровня усиления системы ВАРУ, см. hyscan_sonar_tvg_set_linear_db(). */
+struct _HyScanControlModelTVGLinear
+{
+  HyScanSonarTVGModeType      mode;                 /* Режим работы системы ВАРУ. */
+  gdouble                     gain0;                /* Начальный уровень усиления, дБ. */
+  gdouble                     gain_step;            /* Величина изменения усиления каждые 100 метров, дБ. */
+};
+
+/* Параметры логарифмического увеличения уровня усиления системы ВАРУ, см. hyscan_sonar_tvg_set_logarithmic(). */
+struct _HyScanControlModelTVGLog
+{
+  HyScanSonarTVGModeType      mode;                 /* Режим работы системы ВАРУ. */
+  gdouble                     gain0;                /* Начальный уровень усиления, дБ. */
+  gdouble                     beta;                 /* Коэффициент поглощения цели, дБ. */
+  gdouble                     alpha;                /* Коэффициент затухания, дБ/м. */
+};
+
+/* Параметры режимов работы системы ВАРУ. */
+union _HyScanControlModelTVG
+{
+  HyScanSonarTVGModeType      mode;                 /* Режим работы системы ВАРУ. */
+  HyScanControlModelTVGAuto   atvg;                 /* Параметры автоматического режима. */
+  HyScanControlModelTVGConst  constant;             /* Параметры постоянного уровня усиления. */
+  HyScanControlModelTVGLinear linear;               /* Параметры линейного увеличения уровня усиления. */
+  HyScanControlModelTVGLog    log;                  /* Параметры логарифмического увеличения уровня усиления. */
+};
+
+/* Параметры работы приёмника. */
 struct _HyScanControlModelRec
 {
-  gboolean                    disabled;
-  HyScanSonarReceiverModeType mode;
-  gdouble                     receive;
-  gdouble                     wait;
+  HyScanSonarReceiverModeType mode;                 /* Режим работы приёмника. */
+  gdouble                     receive;              /* Время приёма эхосигнала, секунды. */
+  gdouble                     wait;                 /* Время задержки излучения после приёма, секунды. */
 };
 
+/* Параметры работы генератора. */
 struct _HyScanControlModelGen
 {
-  gboolean                    disabled;
-  gint64                      preset;
+  gboolean                    disabled;             /* Генератор выключен. */
+  gint64                      preset;               /* Режим работы генератора. */
 };
 
+/* Параметры работы генератора. */
 struct _HyScanControlModelSource
 {
-  HyScanControlModelTVG       tvg;
-  HyScanControlModelRec       rec;
-  HyScanControlModelGen       gen;
-  HyScanAntennaOffset         offset;
+  HyScanControlModelTVG       tvg;                  /* Параметры работы системы вару. */
+  HyScanControlModelRec       rec;                  /* Параметры работы приёмника. */
+  HyScanControlModelGen       gen;                  /* Параметры работы генератора. */
+  HyScanAntennaOffset         offset;               /* Смещение локатора. */
 };
 
+/* Параметры датчика. */
 struct _HyScanControlModelSensor
 {
-  gboolean                    enable;
-  HyScanAntennaOffset         offset;
+  gboolean                    enable;               /* Датчик включён. */
+  HyScanAntennaOffset         offset;               /* Смещение датчика. */
 };
 
 struct _HyScanControlModelPrivate
 {
   HyScanControl              *control;         /* Бэкэнд. */
 
-  GHashTable                 *sources;         /* Параметры датчиков. {HyScanSourceType : HyScanControlModelSource* } */
+  GHashTable                 *sources;         /* Параметры источников гидролокационных данных. {HyScanSourceType : HyScanControlModelSource* } */
   GHashTable                 *sensors;         /* Параметры датчиков. {gchar* : HyScanControlModelSensor* } */
 
   GThread                    *thread;          /* Поток. */
-  gint                        stop;            /* Остановка потока. */
+  gint                        shutdown;        /* Остановка потока, atomic. */
   gboolean                    wakeup;          /* Флаг для пробуждения потока. */
   GCond                       cond;            /* Сигнализатор изменения wakeup. */
   GMutex                      lock;            /* Блокировка. */
 
   gint                        start_stop;      /* Команда для старта или остановки работы локатора. */
-  gboolean                    generate_name;   /* Признак того, что название галса надо сгененировать. */
-  gchar                      *generate_suffix; /* Суффикс, который будет добавлен к сгенерированному имени галса. */
   HyScanControlModelStart    *start;           /* Параметры для старта локатора. */
   HyScanControlModelStart    *started;         /* Параметры, с которыми был выполнен старт (внутреннее значение). */
   HyScanControlModelStart    *started_state;   /* Параметры, с которыми был выполнен старт (текущее значение). */
@@ -212,15 +236,18 @@ struct _HyScanControlModelPrivate
   HyScanTrackPlan            *plan;            /* План галса. */
   gchar                      *project_name;    /* Название проекта. */
   gchar                      *track_name;      /* Название галса. */
-  gchar                      *generated_name;  /* Сгенерированное имя галса. */
   gchar                      *suffix1;         /* Суффикс названия галса (одноразовый). */
   gchar                      *suffix;          /* Суффикс названия галса (постоянный). */
+  gboolean                    disconnected;    /* Устройство отключено. */
+  GList                      *sound_velocity;  /* Профиль скорости звука. */
 };
 
 static void     hyscan_control_model_sonar_state_iface_init  (HyScanSonarStateInterface      *iface);
 static void     hyscan_control_model_sonar_iface_init        (HyScanSonarInterface           *iface);
 static void     hyscan_control_model_sensor_state_iface_init (HyScanSensorStateInterface     *iface);
 static void     hyscan_control_model_sensor_iface_init       (HyScanSensorInterface          *iface);
+static void     hyscan_control_model_device_iface_init       (HyScanDeviceInterface          *iface);
+static void     hyscan_control_model_device_state_iface_init (HyScanDeviceStateInterface     *iface);
 static void     hyscan_control_model_param_iface_init        (HyScanParamInterface           *iface);
 static void     hyscan_control_model_set_property            (GObject                        *object,
                                                               guint                           prop_id,
@@ -229,8 +256,6 @@ static void     hyscan_control_model_set_property            (GObject           
 static void     hyscan_control_model_object_constructed      (GObject                        *object);
 static void     hyscan_control_model_object_finalize         (GObject                        *object);
 
-static gboolean hyscan_control_model_rec_update              (HyScanControlModelRec          *dest,
-                                                              HyScanControlModelRec          *src);
 static gboolean hyscan_control_model_receiver_set            (HyScanControlModel             *self,
                                                               HyScanSourceType                source,
                                                               HyScanControlModelRec          *rec);
@@ -285,9 +310,7 @@ static HyScanControlModelStart *
 
 static void     hyscan_control_model_start_free               (HyScanControlModelStart       *start);
 static void     hyscan_control_model_send_start               (HyScanControlModel            *self,
-                                                               const HyScanControlModelStart *start,
-                                                               gboolean                       generate_name,
-                                                               const gchar                   *generate_suffix);
+                                                               const HyScanControlModelStart *start);
 static gboolean hyscan_control_model_emit_before_start        (HyScanControlModel            *self);
 
 
@@ -299,6 +322,8 @@ G_DEFINE_TYPE_WITH_CODE (HyScanControlModel, hyscan_control_model, G_TYPE_OBJECT
                          G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_SONAR, hyscan_control_model_sonar_iface_init)
                          G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_SENSOR_STATE, hyscan_control_model_sensor_state_iface_init)
                          G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_SENSOR, hyscan_control_model_sensor_iface_init)
+                         G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_DEVICE, hyscan_control_model_device_iface_init)
+                         G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_DEVICE_STATE, hyscan_control_model_device_state_iface_init)
                          G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_PARAM, hyscan_control_model_param_iface_init))
 
 static void
@@ -320,7 +345,7 @@ hyscan_control_model_class_init (HyScanControlModelClass *klass)
    * @model: указатель на #HyScanControlModel
    * @source: идентификатор источника данных #HyScanSourceType
    *
-   * Сигнал оповещает об измении параметров локатора. В детализации сигнала можно указать тип источника даннных,
+   * Сигнал оповещает об изменении параметров источника. В детализации сигнала можно указать тип источника данных,
    * для получения сигналов об изменении параметров только указанного источника.
    *
    */
@@ -337,7 +362,7 @@ hyscan_control_model_class_init (HyScanControlModelClass *klass)
    * @model: указатель на #HyScanControlModel
    * @sensor: имя датчика
    *
-   * Сигнал оповещает об измении параметров датчика. В детализации сигнала можно указать имя датчика,
+   * Сигнал оповещает об изменении параметров датчика. В детализации сигнала можно указать имя датчика,
    * для получения сигналов об изменении параметров только указанного датчика.
    *
    */
@@ -358,7 +383,7 @@ hyscan_control_model_class_init (HyScanControlModelClass *klass)
    * Сигнал отправляется в момент вызова hyscan_sonar_start() модели, для возможности отмены старта.
    * Обработчики сигнала могут вернуть %TRUE, чтобы отменить старт локатора.
    *
-   * Для остлеживания изменения статуса работы локатора используйтся сигнал HyScanSonarState::start-stop.
+   * Для отслеживания изменения статуса работы локатора используется сигнал HyScanSonarState::start-stop.
    *
    * Returns: %TRUE, если необходимо остановить включение локатора.
    */
@@ -445,10 +470,10 @@ hyscan_control_model_object_constructed (GObject *object)
   /* Ретрансляция сигналов. */
   g_signal_connect (HYSCAN_SENSOR (priv->control), "sensor-data",
                     G_CALLBACK (hyscan_control_model_sensor_data), self);
-  // g_signal_connect (HYSCAN_DEVICE (priv->control), "device-state",
-  //                   G_CALLBACK (hyscan_control_model_device_state), self);
-  // g_signal_connect (HYSCAN_DEVICE (priv->control), "device-log",
-  //                   G_CALLBACK (hyscan_control_model_device_log), self);
+  g_signal_connect (HYSCAN_DEVICE (priv->control), "device-state",
+                    G_CALLBACK (hyscan_control_model_device_state), self);
+  g_signal_connect (HYSCAN_DEVICE (priv->control), "device-log",
+                    G_CALLBACK (hyscan_control_model_device_log), self);
   g_signal_connect (HYSCAN_SONAR (priv->control), "sonar-signal",
                     G_CALLBACK (hyscan_control_model_sonar_signal), self);
   g_signal_connect (HYSCAN_SONAR (priv->control), "sonar-tvg",
@@ -493,7 +518,7 @@ hyscan_control_model_object_finalize (GObject *object)
   HyScanControlModelPrivate *priv = self->priv;
 
   /* Завершаем поток обработки. */
-  g_atomic_int_set (&priv->stop, TRUE);
+  g_atomic_int_set (&priv->shutdown, TRUE);
   g_mutex_lock (&priv->lock);
   priv->wakeup = TRUE;
   g_cond_signal (&priv->cond);
@@ -507,7 +532,6 @@ hyscan_control_model_object_finalize (GObject *object)
   hyscan_track_plan_free (priv->plan);
   g_free (priv->project_name);
   g_free (priv->track_name);
-  g_free (priv->generated_name);
   g_free (priv->suffix);
   g_free (priv->suffix1);
 
@@ -584,8 +608,8 @@ hyscan_control_model_sonar_acoustic_data (HyScanDevice           *device,
 
 /* Обработчик сигнала device-state. */
 static void
-hyscan_control_model_device_state (HyScanDevice     *device,
-                                   const gchar      *dev_id,
+hyscan_control_model_device_state (HyScanDevice       *device,
+                                   const gchar        *dev_id,
                                    HyScanControlModel *self)
 {
   g_signal_emit_by_name (self, "device-state", dev_id);
@@ -613,6 +637,8 @@ hyscan_control_model_start_copy (const HyScanControlModelStart *start)
 
   copy = g_slice_new (HyScanControlModelStart);
   copy->track_type = start->track_type;
+  copy->generate_name = start->generate_name;
+  copy->generate_suffix = g_strdup (start->generate_suffix);
   copy->project = g_strdup (start->project);
   copy->track = g_strdup (start->track);
   copy->plan = hyscan_track_plan_copy (start->plan);
@@ -626,55 +652,12 @@ hyscan_control_model_start_free (HyScanControlModelStart *start)
   if (start == NULL)
     return;
 
+  g_free (start->generate_suffix);
   g_free (start->project);
   g_free (start->track);
   hyscan_track_plan_free (start->plan);
 
   g_slice_free (HyScanControlModelStart, start);
-}
-
-static gboolean
-hyscan_control_model_rec_update (HyScanControlModelRec *dest,
-                                 HyScanControlModelRec *src)
-{
-  gboolean changed = FALSE;
-
-  changed |= dest->disabled != src->disabled;
-  dest->disabled = src->disabled;
-
-  changed |= dest->mode != src->mode;
-  dest->mode = src->mode;
-
-  switch (src->mode)
-    {
-    case HYSCAN_SONAR_RECEIVER_MODE_MANUAL:
-      changed |= dest->receive != src->receive || dest->wait != src->wait;
-
-      dest->receive = src->receive;
-      dest->wait = src->wait;
-      break;
-
-    case HYSCAN_SONAR_RECEIVER_MODE_AUTO:
-    case HYSCAN_SONAR_RECEIVER_MODE_NONE:
-      break;
-
-    default:
-      g_assert_not_reached ();
-    }
-
-  return changed;
-}
-
-static gboolean
-hyscan_control_model_offset_update (HyScanAntennaOffset       *dest,
-                                    const HyScanAntennaOffset *src)
-{
-  if (memcmp (dest, src, sizeof (*dest)) == 0)
-    return FALSE;
-
-  *dest = *src;
-
-  return TRUE;
 }
 
 /* Генерирует имя галса по шаблону "<следующий номер в БД><суффикс>". */
@@ -763,16 +746,14 @@ hyscan_control_model_receiver_set (HyScanControlModel    *self,
 {
   HyScanControlModelPrivate *priv = self->priv;
   HyScanControlModelSource *info;
-  HyScanControlModelRec *old_rec;
   gboolean status = FALSE;
+  gboolean changed;
 
   info = g_hash_table_lookup (priv->sources, GINT_TO_POINTER (source));
   if (info == NULL)
     return FALSE;
 
-  old_rec = &info->rec;
-
-  if (rec->disabled)
+  if (rec->mode == HYSCAN_SONAR_RECEIVER_MODE_NONE)
     status = hyscan_sonar_receiver_disable (HYSCAN_SONAR (priv->control), source);
   else if (rec->mode == HYSCAN_SONAR_RECEIVER_MODE_MANUAL)
     status = hyscan_sonar_receiver_set_time (HYSCAN_SONAR (priv->control), source, rec->receive, rec->wait);
@@ -782,7 +763,13 @@ hyscan_control_model_receiver_set (HyScanControlModel    *self,
   if (!status)
     return FALSE;
 
-  if (hyscan_control_model_rec_update (old_rec, rec))
+  changed = info->rec.mode != rec->mode;
+  if (!changed && rec->mode == HYSCAN_SONAR_RECEIVER_MODE_MANUAL)
+    changed = info->rec.receive != rec->receive || info->rec.wait != rec->wait;
+
+  info->rec = *rec;
+
+  if (changed)
     hyscan_control_model_sonar_changed (self, source);
 
   return TRUE;
@@ -804,6 +791,8 @@ hyscan_control_model_gen_update (HyScanControlModelGen *dest,
       changed = TRUE;
       dest->preset = src->preset;
     }
+
+  *dest = *src;
 
   return changed;
 }
@@ -840,50 +829,34 @@ hyscan_control_model_generator_set (HyScanControlModel    *self,
   return TRUE;
 }
 
+/* Копирует режим работы вару из src в dst. Возвращает %TRUE, если значения отличались. */
 static gboolean
 hyscan_control_model_tvg_update (HyScanControlModelTVG *dest,
                                  HyScanControlModelTVG *src)
 {
-  gboolean changed = FALSE;
+  gboolean changed;
 
-  changed |= dest->disabled != src->disabled;
-  dest->disabled = src->disabled;
-
-  changed |= dest->mode != src->mode;
-  dest->mode = src->mode;
-
+  changed = dest->mode != src->mode;
   switch (src->mode)
     {
     case HYSCAN_SONAR_TVG_MODE_AUTO:
-      changed |= dest->atvg.level       != src->atvg.level ||
-                 dest->atvg.sensitivity != src->atvg.sensitivity;
-
-      dest->atvg.level       = src->atvg.level;
-      dest->atvg.sensitivity = src->atvg.sensitivity;
+      if (dest->atvg.level != src->atvg.level || dest->atvg.sensitivity != src->atvg.sensitivity)
+        changed = TRUE;
       break;
 
     case HYSCAN_SONAR_TVG_MODE_CONSTANT:
-      changed |= dest->constant.gain || src->constant.gain;
-
-      dest->constant.gain    = src->constant.gain;
+      if (dest->constant.gain != src->constant.gain)
+        changed = TRUE;
       break;
 
     case HYSCAN_SONAR_TVG_MODE_LINEAR_DB:
-      changed |= dest->linear.gain0     != src->linear.gain0 ||
-                 dest->linear.gain_step != src->linear.gain_step;
-
-      dest->linear.gain0     = src->linear.gain0;
-      dest->linear.gain_step = src->linear.gain_step;
+      if (dest->linear.gain0 != src->linear.gain0 || dest->linear.gain_step != src->linear.gain_step)
+        changed = TRUE;
       break;
 
     case HYSCAN_SONAR_TVG_MODE_LOGARITHMIC:
-      changed |= dest->log.gain0 != src->log.gain0 ||
-                 dest->log.beta  != src->log.beta  ||
-                 dest->log.alpha != src->log.alpha;
-
-      dest->log.gain0        = src->log.gain0;
-      dest->log.beta         = src->log.beta;
-      dest->log.alpha        = src->log.alpha;
+      if (dest->log.gain0 != src->log.gain0 || dest->log.beta != src->log.beta || dest->log.alpha != src->log.alpha)
+        changed = TRUE;
       break;
 
     case HYSCAN_SONAR_TVG_MODE_NONE:
@@ -893,9 +866,13 @@ hyscan_control_model_tvg_update (HyScanControlModelTVG *dest,
       g_assert_not_reached ();
     }
 
+  if (changed)
+    *dest = *src;
+
   return changed;
 }
 
+/* Устанавливает режим работы системы ВАРУ. */
 static gboolean
 hyscan_control_model_tvg_set (HyScanControlModel    *self,
                               HyScanSourceType       source,
@@ -903,16 +880,14 @@ hyscan_control_model_tvg_set (HyScanControlModel    *self,
 {
   HyScanControlModelPrivate *priv = self->priv;
   HyScanControlModelSource *info;
-  HyScanControlModelTVG *old_tvg;
   gboolean status = FALSE;
 
   info = g_hash_table_lookup (priv->sources, GINT_TO_POINTER (source));
   if (info == NULL)
     return FALSE;
-  old_tvg = &info->tvg;
 
   /* Отключение ВАРУ. */
-  if (tvg->disabled || tvg->mode == HYSCAN_SONAR_TVG_MODE_NONE)
+  if (tvg->mode == HYSCAN_SONAR_TVG_MODE_NONE)
     {
       status = hyscan_sonar_tvg_disable (HYSCAN_SONAR (priv->control), source);
     }
@@ -946,7 +921,7 @@ hyscan_control_model_tvg_set (HyScanControlModel    *self,
     return FALSE;
 
   /* Если параметры отличаются от уже установленных, эмиттируем сигнал. */
-  if (hyscan_control_model_tvg_update (old_tvg, tvg))
+  if (hyscan_control_model_tvg_update (&info->tvg, tvg))
     hyscan_control_model_sonar_changed (self, source);
 
   return TRUE;
@@ -961,7 +936,7 @@ hyscan_control_model_receiver_get_mode (HyScanSonarState *sonar,
 
   info = g_hash_table_lookup (priv->sources, GINT_TO_POINTER (source));
   if (info == NULL)
-    return FALSE;
+    return HYSCAN_SONAR_RECEIVER_MODE_NONE;
 
   return info->rec.mode;
 }
@@ -977,6 +952,9 @@ hyscan_control_model_receiver_get_time (HyScanSonarState *sonar,
 
   info = g_hash_table_lookup (priv->sources, GINT_TO_POINTER (source));
   if (info == NULL)
+    return FALSE;
+
+  if (info->rec.mode != HYSCAN_SONAR_RECEIVER_MODE_MANUAL)
     return FALSE;
 
   receive_time != NULL ? *receive_time = info->rec.receive : 0;
@@ -996,7 +974,7 @@ hyscan_control_model_receiver_get_disabled (HyScanSonarState *sonar,
   if (info == NULL)
     return FALSE;
 
-  return info->rec.disabled;
+  return info->rec.mode == HYSCAN_SONAR_RECEIVER_MODE_NONE;
 }
 
 static gboolean
@@ -1011,7 +989,11 @@ hyscan_control_model_generator_get_preset (HyScanSonarState *sonar,
   if (info == NULL)
     return FALSE;
 
+  if (info->gen.disabled)
+    return FALSE;
+
   preset != NULL ? *preset = info->gen.preset : 0;
+
   return TRUE;
 }
 
@@ -1038,7 +1020,7 @@ hyscan_control_model_tvg_get_mode (HyScanSonarState *sonar,
 
   info = g_hash_table_lookup (priv->sources, GINT_TO_POINTER (source));
   if (info == NULL)
-    return FALSE;
+    return HYSCAN_SONAR_TVG_MODE_NONE;
 
   return info->tvg.mode;
 }
@@ -1056,8 +1038,12 @@ hyscan_control_model_tvg_get_auto (HyScanSonarState *sonar,
   if (info == NULL)
     return FALSE;
 
+  if (info->tvg.mode != HYSCAN_SONAR_TVG_MODE_AUTO)
+    return FALSE;
+
   level != NULL ? *level = info->tvg.atvg.level : 0;
   sensitivity != NULL ? *sensitivity = info->tvg.atvg.sensitivity : 0;
+
   return TRUE;
 }
 
@@ -1073,7 +1059,11 @@ hyscan_control_model_tvg_get_constant (HyScanSonarState *sonar,
   if (info == NULL)
     return FALSE;
 
+  if (info->tvg.mode != HYSCAN_SONAR_TVG_MODE_CONSTANT)
+    return FALSE;
+
   gain != NULL ? *gain = info->tvg.constant.gain : 0;
+
   return TRUE;
 }
 
@@ -1090,8 +1080,12 @@ hyscan_control_model_tvg_get_linear_db (HyScanSonarState *sonar,
   if (info == NULL)
     return FALSE;
 
+  if (info->tvg.mode != HYSCAN_SONAR_TVG_MODE_LINEAR_DB)
+    return FALSE;
+
   gain0 != NULL ? *gain0 = info->tvg.linear.gain0 : 0;
   gain_step != NULL ? *gain_step = info->tvg.linear.gain_step : 0;
+
   return TRUE;
 }
 
@@ -1109,9 +1103,13 @@ hyscan_control_model_tvg_get_logarithmic (HyScanSonarState *sonar,
   if (info == NULL)
     return FALSE;
 
+  if (info->tvg.mode != HYSCAN_SONAR_TVG_MODE_LOGARITHMIC)
+    return FALSE;
+
   gain0 != NULL ? *gain0 = info->tvg.log.gain0 : 0;
   beta != NULL ? *beta = info->tvg.log.beta : 0;
   alpha != NULL ? *alpha = info->tvg.log.alpha : 0;
+
   return TRUE;
 }
 
@@ -1126,7 +1124,7 @@ hyscan_control_model_tvg_get_disabled (HyScanSonarState *sonar,
   if (info == NULL)
     return FALSE;
 
-  return info->tvg.disabled;
+  return info->tvg.mode == HYSCAN_SONAR_TVG_MODE_NONE;
 }
 
 static gboolean
@@ -1158,20 +1156,27 @@ hyscan_control_model_antenna_set_offset (HyScanSonar               *sonar,
   HyScanControlModel *self = HYSCAN_CONTROL_MODEL (sonar);
   HyScanControlModelPrivate *priv = self->priv;
   HyScanControlModelSource *info;
-  HyScanAntennaOffset *old_offset;
   gboolean status;
+  gboolean changed;
 
   info = g_hash_table_lookup (priv->sources, GINT_TO_POINTER (source));
   if (info == NULL)
     return FALSE;
 
-  old_offset = &info->offset;
-
   status = hyscan_sonar_antenna_set_offset (HYSCAN_SONAR (priv->control), source, offset);
   if (!status)
     return FALSE;
 
-  if (hyscan_control_model_offset_update (old_offset, offset))
+  changed = info->offset.forward != offset->forward ||
+            info->offset.starboard != offset->starboard ||
+            info->offset.vertical != offset->vertical ||
+            info->offset.yaw != offset->yaw ||
+            info->offset.pitch != offset->pitch ||
+            info->offset.roll != offset->roll;
+
+  info->offset = *offset;
+
+  if (changed)
     hyscan_control_model_sonar_changed (self, source);
 
   return TRUE;
@@ -1183,10 +1188,8 @@ hyscan_control_model_receiver_set_time (HyScanSonar      *sonar,
                                         gdouble           receive,
                                         gdouble           wait)
 {
-  HyScanControlModelRec rec = {0};
+  HyScanControlModelRec rec = { .mode = HYSCAN_SONAR_RECEIVER_MODE_MANUAL };
 
-  rec.disabled = FALSE;
-  rec.mode = HYSCAN_SONAR_RECEIVER_MODE_MANUAL;
   rec.receive = receive;
   rec.wait = wait;
 
@@ -1197,10 +1200,7 @@ static gboolean
 hyscan_control_model_receiver_set_auto (HyScanSonar      *sonar,
                                         HyScanSourceType  source)
 {
-  HyScanControlModelRec rec = {0};
-
-  rec.disabled = FALSE;
-  rec.mode = HYSCAN_SONAR_RECEIVER_MODE_AUTO;
+  HyScanControlModelRec rec = { .mode = HYSCAN_SONAR_RECEIVER_MODE_AUTO };
 
   return hyscan_control_model_receiver_set (HYSCAN_CONTROL_MODEL (sonar), source, &rec);
 }
@@ -1209,18 +1209,15 @@ static gboolean
 hyscan_control_model_receiver_disable (HyScanSonar      *sonar,
                                        HyScanSourceType  source)
 {
-  HyScanControlModelRec rec = {0};
-
-  rec.disabled = TRUE;
-  rec.mode = HYSCAN_SONAR_RECEIVER_MODE_NONE;
+  HyScanControlModelRec rec = { .mode = HYSCAN_SONAR_RECEIVER_MODE_NONE };
 
   return hyscan_control_model_receiver_set (HYSCAN_CONTROL_MODEL (sonar), source, &rec);
 }
 
 static gboolean
 hyscan_control_model_generator_set_preset (HyScanSonar      *sonar,
-                                          HyScanSourceType  source,
-                                          gint64            preset)
+                                           HyScanSourceType  source,
+                                           gint64            preset)
 {
   HyScanControlModelGen gen = {0};
 
@@ -1247,10 +1244,8 @@ hyscan_control_model_tvg_set_auto (HyScanSonar      *sonar,
                                    gdouble           level,
                                    gdouble           sensitivity)
 {
-  HyScanControlModelTVG tvg = {0};
+  HyScanControlModelTVG tvg = { .mode = HYSCAN_SONAR_TVG_MODE_AUTO };
 
-  tvg.disabled = FALSE;
-  tvg.mode = HYSCAN_SONAR_TVG_MODE_AUTO;
   tvg.atvg.level = level;
   tvg.atvg.sensitivity = sensitivity;
 
@@ -1262,10 +1257,8 @@ hyscan_control_model_tvg_set_constant (HyScanSonar      *sonar,
                                        HyScanSourceType  source,
                                        gdouble           gain)
 {
-  HyScanControlModelTVG tvg = {0};
+  HyScanControlModelTVG tvg = { .mode = HYSCAN_SONAR_TVG_MODE_CONSTANT };
 
-  tvg.disabled = FALSE;
-  tvg.mode = HYSCAN_SONAR_TVG_MODE_CONSTANT;
   tvg.constant.gain = gain;
 
   return hyscan_control_model_tvg_set (HYSCAN_CONTROL_MODEL (sonar), source, &tvg);
@@ -1277,10 +1270,8 @@ hyscan_control_model_tvg_set_linear_db (HyScanSonar      *sonar,
                                         gdouble           gain0,
                                         gdouble           gain_step)
 {
-  HyScanControlModelTVG tvg = {0};
+  HyScanControlModelTVG tvg = { .mode = HYSCAN_SONAR_TVG_MODE_LINEAR_DB };
 
-  tvg.disabled = FALSE;
-  tvg.mode = HYSCAN_SONAR_TVG_MODE_LINEAR_DB;
   tvg.linear.gain0 = gain0;
   tvg.linear.gain_step = gain_step;
 
@@ -1294,10 +1285,8 @@ hyscan_control_model_tvg_set_logarithmic (HyScanSonar      *sonar,
                                           gdouble           beta,
                                           gdouble           alpha)
 {
-  HyScanControlModelTVG tvg = {0};
+  HyScanControlModelTVG tvg = { .mode = HYSCAN_SONAR_TVG_MODE_LOGARITHMIC };
 
-  tvg.disabled = FALSE;
-  tvg.mode = HYSCAN_SONAR_TVG_MODE_LOGARITHMIC;
   tvg.log.gain0 = gain0;
   tvg.log.beta = beta;
   tvg.log.alpha = alpha;
@@ -1309,18 +1298,14 @@ static gboolean
 hyscan_control_model_tvg_disable (HyScanSonar      *sonar,
                                   HyScanSourceType  source)
 {
-  HyScanControlModelTVG tvg = {0};
-
-  tvg.disabled = TRUE;
+  HyScanControlModelTVG tvg = { .mode = HYSCAN_SONAR_TVG_MODE_NONE };
 
   return hyscan_control_model_tvg_set (HYSCAN_CONTROL_MODEL (sonar), source, &tvg);
 }
 
 static void
 hyscan_control_model_send_start (HyScanControlModel            *self,
-                                 const HyScanControlModelStart *start,
-                                 gboolean                       generate_name,
-                                 const gchar                   *generate_suffix)
+                                 const HyScanControlModelStart *start)
 {
   HyScanControlModelPrivate *priv = self->priv;
 
@@ -1329,8 +1314,6 @@ hyscan_control_model_send_start (HyScanControlModel            *self,
   /* Устанавливаем параметры для старта ГЛ. */
   g_mutex_lock (&priv->lock);
   hyscan_control_model_start_free (priv->start);
-  priv->generate_name = generate_name;
-  priv->generate_suffix = g_strdup (generate_suffix);
   priv->start = hyscan_control_model_start_copy (start);
   priv->start_stop = SONAR_START;
   priv->wakeup = TRUE;
@@ -1362,7 +1345,7 @@ hyscan_control_model_sonar_start (HyScanSonar           *sonar,
                                   const HyScanTrackPlan *track_plan)
 {
   HyScanControlModel *self = HYSCAN_CONTROL_MODEL (sonar);
-  HyScanControlModelStart start;
+  HyScanControlModelStart start = {0};
 
   /* Сигнал "before-start" для подготовки всех систем к началу записи и возможности отменить запись. */
   if (!hyscan_control_model_emit_before_start (self))
@@ -1372,7 +1355,7 @@ hyscan_control_model_sonar_start (HyScanSonar           *sonar,
   start.project = (gchar *) project_name;
   start.track = (gchar *) track_name;
   start.plan = (HyScanTrackPlan *) track_plan;
-  hyscan_control_model_send_start (self, &start, FALSE, NULL);
+  hyscan_control_model_send_start (self, &start);
 
   return TRUE;
 }
@@ -1458,15 +1441,10 @@ hyscan_control_model_sensor_antenna_set_offset (HyScanSensor              *senso
     return FALSE;
 
   /* Такая же логика, как у локаторов (ТВГ, генератор, приемник). */
-  if (memcmp (&info->offset, offset, sizeof (info->offset)) != 0)
-    {
-      info->offset = *offset;
-      g_signal_emit (self, hyscan_control_model_signals[SIGNAL_SENSOR],
-                     g_quark_from_string (name), name);
-      return TRUE;
-    }
-
-  return FALSE;
+   info->offset = *offset;
+   g_signal_emit (self, hyscan_control_model_signals[SIGNAL_SENSOR],
+                  g_quark_from_string (name), name);
+   return TRUE;
 }
 
 static HyScanDataSchema *
@@ -1483,13 +1461,11 @@ hyscan_control_model_thread (gpointer data)
   HyScanControlModelPrivate *priv = self->priv;
   HyScanSonar *sonar = HYSCAN_SONAR (priv->control);
 
-  while (!g_atomic_int_get (&priv->stop))
+  while (!g_atomic_int_get (&priv->shutdown))
     {
       HyScanControlModelStart *start;
       gint start_stop;
       gboolean sync;
-      gboolean generate_name;
-      gchar *full_suffix;
 
       /* Если ничего не поменялось, жду. */
       {
@@ -1506,11 +1482,7 @@ hyscan_control_model_thread (gpointer data)
         priv->start_stop = SONAR_NO_CHANGE;
 
         start = priv->start;
-        full_suffix = priv->generate_suffix;
-        generate_name = priv->generate_name;
         priv->start = NULL;
-        priv->generate_suffix = NULL;
-        priv->generate_name = FALSE;
 
         priv->wakeup = FALSE;
 
@@ -1529,10 +1501,10 @@ hyscan_control_model_thread (gpointer data)
         {
           gboolean status;
 
-          if (generate_name)
+          if (start->generate_name)
             {
               g_free (start->track);
-              start->track = hyscan_control_model_generate_name (self, start->project, full_suffix);
+              start->track = hyscan_control_model_generate_name (self, start->project, start->generate_suffix);
             }
 
           status = hyscan_sonar_start (sonar,
@@ -1563,8 +1535,6 @@ hyscan_control_model_thread (gpointer data)
 
           g_idle_add ((GSourceFunc) hyscan_control_model_start_stop, self);
         }
-
-      g_clear_pointer (&full_suffix, g_free);
     }
 
   return NULL;
@@ -1582,12 +1552,57 @@ hyscan_control_model_param_set (HyScanParam     *param,
 
 static gboolean
 hyscan_control_model_param_get (HyScanParam     *param,
-                              HyScanParamList *list)
+                                HyScanParamList *list)
 {
   HyScanControlModel *self = HYSCAN_CONTROL_MODEL (param);
   HyScanControlModelPrivate *priv = self->priv;
 
   return hyscan_param_get (HYSCAN_PARAM (priv->control), list);
+}
+
+static gboolean
+hyscan_control_model_device_disconnect (HyScanDevice *device)
+{
+  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (device);
+  HyScanControlModelPrivate *priv = self->priv;
+
+  if (!hyscan_device_disconnect (HYSCAN_DEVICE (priv->control)))
+    return FALSE;
+
+  priv->disconnected = TRUE;
+
+  return TRUE;
+}
+
+static gboolean
+hyscan_control_model_device_set_sound_velocity (HyScanDevice *device,
+                                                GList        *svp)
+{
+  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (device);
+  HyScanControlModelPrivate *priv = self->priv;
+
+  if (!hyscan_device_set_sound_velocity (HYSCAN_DEVICE (priv->control), svp))
+    return FALSE;
+
+  g_list_free_full (priv->sound_velocity, (GDestroyNotify) hyscan_sound_velocity_free);
+  priv->sound_velocity = g_list_copy_deep (svp, (GCopyFunc) hyscan_sound_velocity_copy, NULL);
+
+  return TRUE;
+}
+
+static gboolean
+hyscan_control_model_device_state_get_disconnected (HyScanDeviceState *device_state)
+{
+  return HYSCAN_CONTROL_MODEL (device_state)->priv->disconnected;
+}
+
+static GList *
+hyscan_control_model_device_state_get_sound_velocity (HyScanDeviceState *device_state)
+{
+  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (device_state);
+  HyScanControlModelPrivate *priv = self->priv;
+
+  return g_list_copy_deep (priv->sound_velocity, (GCopyFunc) hyscan_sound_velocity_copy, NULL);
 }
 
 static void
@@ -1637,6 +1652,20 @@ hyscan_control_model_sensor_iface_init (HyScanSensorInterface *iface)
 {
   iface->antenna_set_offset = hyscan_control_model_sensor_antenna_set_offset;
   iface->set_enable = hyscan_control_model_sensor_set_enable;
+}
+
+static void
+hyscan_control_model_device_iface_init (HyScanDeviceInterface *iface)
+{
+  iface->disconnect = hyscan_control_model_device_disconnect;
+  iface->set_sound_velocity = hyscan_control_model_device_set_sound_velocity;
+}
+
+static void
+hyscan_control_model_device_state_iface_init (HyScanDeviceStateInterface *iface)
+{
+  iface->get_disconnected = hyscan_control_model_device_state_get_disconnected;
+  iface->get_sound_velocity = hyscan_control_model_device_state_get_sound_velocity;
 }
 
 static void
@@ -1859,7 +1888,6 @@ hyscan_control_model_start (HyScanControlModel *model)
   HyScanControlModelPrivate *priv;
   HyScanControlModelStart start;
   gchar *generate_suffix = NULL;
-  gboolean generate_name;
   gboolean success;
 
   g_return_val_if_fail (HYSCAN_IS_CONTROL_MODEL (model), FALSE);
@@ -1871,16 +1899,17 @@ hyscan_control_model_start (HyScanControlModel *model)
       goto exit;
     }
 
-  generate_name = (priv->track_name == NULL);
-  generate_suffix = g_strdup_printf("%s%s",
-                                    priv->suffix != NULL ? priv->suffix : "",
-                                    priv->suffix1 != NULL ? priv->suffix1 : "");
+  generate_suffix = g_strdup_printf ("%s%s",
+                                     priv->suffix != NULL ? priv->suffix : "",
+                                     priv->suffix1 != NULL ? priv->suffix1 : "");
 
   start.track_type = priv->track_type;
   start.project = (gchar *) priv->project_name;
   start.track = (gchar *) priv->track_name;
   start.plan = priv->plan;
-  hyscan_control_model_send_start (model, &start, generate_name, generate_suffix);
+  start.generate_name = (start.track == NULL);
+  start.generate_suffix = generate_suffix;
+  hyscan_control_model_send_start (model, &start);
   success = TRUE;
 
   g_free (generate_suffix);
