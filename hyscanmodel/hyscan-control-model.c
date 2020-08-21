@@ -529,6 +529,10 @@ hyscan_control_model_object_finalize (GObject *object)
   g_hash_table_destroy (priv->sensors);
   g_hash_table_destroy (priv->sources);
 
+  hyscan_control_model_start_free (priv->start);
+  hyscan_control_model_start_free (priv->started);
+  hyscan_control_model_start_free (priv->started_state);
+
   hyscan_track_plan_free (priv->plan);
   g_free (priv->project_name);
   g_free (priv->track_name);

@@ -342,6 +342,8 @@ test_started (void)
     g_error ("Sonar started with wrong parameters");
 
   hyscan_track_plan_free (plan);
+  g_free (project_name);
+  g_free (track_name);
 
   /* Проверка остановки локатора. */
   g_message ("Test hyscan_sonar stop. Waiting for \"start-stop\" signal...");
@@ -405,6 +407,9 @@ test_control_model_started (void)
             g_str_has_suffix (track_name, TRACK_SUFFIX) &&
             track_type == TRACK_TYPE &&
             plan == NULL;
+
+  g_free (project_name);
+  g_free (track_name);
 
   if (!success)
     g_error ("Sonar started with wrong parameters");

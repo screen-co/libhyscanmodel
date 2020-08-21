@@ -41,7 +41,7 @@ if (NOT HYSCAN_USE_SYS_LIBS)
   include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/../../libhyscancore/tests")
   target_link_libraries (control-model-test ${TEST_LIBRARIES})
   set (HYSCAN_MODEL_TEST_INSTALL_TARGETS ${HYSCAN_MODEL_TEST_INSTALL_TARGETS} control-model-test)
-  add_test (NAME SonarModelTest COMMAND control-model-test
+  add_test (NAME ControlModelTest COMMAND control-model-test file://db
           WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 else()
   message(STATUS Skip target control-model-test because HYSCAN_USE_SYS_LIBS is enabled)
