@@ -21,7 +21,7 @@ waypoint_write (HyScanDB        *db,
   writer = hyscan_data_writer_new ();
   hyscan_data_writer_set_db (writer, db);
   track_name = g_strdup_printf ("%ld", g_get_real_time ());
-  if  (!hyscan_data_writer_start (writer, project_name, track_name, HYSCAN_TRACK_SURVEY, plan, -1))
+  if (!hyscan_data_writer_start (writer, project_name, track_name, HYSCAN_TRACK_SURVEY, plan, -1))
     g_error ("Could not start data writer");
 
   buffer = hyscan_buffer_new ();

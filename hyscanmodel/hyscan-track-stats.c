@@ -60,6 +60,7 @@
 #include <gio/gio.h>
 #include <math.h>
 #include <string.h>
+#include <hyscan-map-track-param.h>
 
 #define KNOTS_TO_METER_PER_SEC  (1852. / 3600.)
 #define FIT_ANGLE(x) ((x) < 0.0 ? (x) + 360.0 : ((x) >= 360.0 ? (x) - 360.0 : (x)))
@@ -135,11 +136,6 @@ static gdouble         hyscan_track_stats_var                  (gdouble         
                                                                 gsize                     n_values);
 static gdouble         hyscan_track_stats_avg                  (const gdouble            *values,
                                                                 gsize                     n_values);
-static HyScanNavData * hyscan_track_stats_get_nav_data         (HyScanTrackStats         *track_stats,
-                                                                HyScanDB                 *db,
-                                                                const gchar              *project,
-                                                                const gchar              *track,
-                                                                HyScanNMEAField           field);
 static void            hyscan_track_stats_ready                (HyScanTrackStats         *track_stats,
                                                                 GTask                    *task,
                                                                 gpointer                  user_data);
@@ -275,18 +271,6 @@ hyscan_track_stats_ready (HyScanTrackStats *track_stats,
   g_hash_table_destroy (tracks_old);
 
   g_signal_emit (track_stats, hyscan_track_stats_signals[SIGNAL_TRACKS_CHANGED], 0);
-}
-
-/* Внутренняя фабрика навигационных данных. */
-static HyScanNavData *
-hyscan_track_stats_get_nav_data (HyScanTrackStats *track_stats,
-                                 HyScanDB         *db,
-                                 const gchar      *project,
-                                 const gchar      *track,
-                                 HyScanNMEAField   field)
-{
-  return HYSCAN_NAV_DATA (hyscan_nmea_parser_new (db, track_stats->priv->cache, project, track,
-                                                  1, HYSCAN_NMEA_DATA_RMC, field));
 }
 
 /* Рассчитывает среднее значение. */
@@ -634,9 +618,11 @@ hyscan_track_stats_load_track (HyScanTrackStats     *track_stats,
                                const gchar          *project,
                                HyScanTrackStatsInfo *sinfo)
 {
+  HyScanTrackStatsPrivate *priv = track_stats->priv;
   HyScanTrackInfo *tinfo = sinfo->info;
   HyScanNavData *lat_data, *lon_data, *spd_data, *trk_data;
   HyScanTrackStatsInternal stats_intern;
+  HyScanMapTrackParam *track_param;
 
   hyscan_cancellable_push (hcancellable);
 
@@ -644,10 +630,11 @@ hyscan_track_stats_load_track (HyScanTrackStats     *track_stats,
   stats_intern.end = 0;
   stats_intern.sinfo = sinfo;
 
-  lat_data = hyscan_track_stats_get_nav_data (track_stats, db, project, tinfo->name, HYSCAN_NMEA_FIELD_LAT);
-  lon_data = hyscan_track_stats_get_nav_data (track_stats, db, project, tinfo->name, HYSCAN_NMEA_FIELD_LON);
-  spd_data = hyscan_track_stats_get_nav_data (track_stats, db, project, tinfo->name, HYSCAN_NMEA_FIELD_SPEED);
-  trk_data = hyscan_track_stats_get_nav_data (track_stats, db, project, tinfo->name, HYSCAN_NMEA_FIELD_TRACK);
+  track_param = hyscan_map_track_param_new (NULL, db, project, tinfo->name);
+  lat_data = hyscan_map_track_param_get_nav_data (track_param, HYSCAN_NMEA_FIELD_LAT, priv->cache);
+  lon_data = hyscan_map_track_param_get_nav_data (track_param, HYSCAN_NMEA_FIELD_LON, priv->cache);
+  spd_data = hyscan_map_track_param_get_nav_data (track_param, HYSCAN_NMEA_FIELD_SPEED, priv->cache);
+  trk_data = hyscan_map_track_param_get_nav_data (track_param, HYSCAN_NMEA_FIELD_TRACK, priv->cache);
   if (lat_data == NULL)
     goto exit;
 
@@ -667,6 +654,7 @@ hyscan_track_stats_load_track (HyScanTrackStats     *track_stats,
 
 exit:
   hyscan_cancellable_pop (hcancellable);
+  g_clear_object (&track_param);
   g_clear_object (&lat_data);
   g_clear_object (&lon_data);
   g_clear_object (&spd_data);

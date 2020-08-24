@@ -4,7 +4,7 @@
 #include <hyscan-data-writer.h>
 
 #define PROJECT_NAME  "planner-stats-project"
-#define SENSOR_NAME   "gps"
+#define SENSOR_NAME   "gnss-nmea"
 #define TEST_TIMEOUT  30000
 
 static gchar *project_name;

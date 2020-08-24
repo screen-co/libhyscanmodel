@@ -5,7 +5,7 @@
 #include <hyscan-cached.h>
 #include <string.h>
 
-#define SENSOR_NAME          "nmea"
+#define SENSOR_NAME          "gnss-nmea"
 
 #define FLOAT_EQUAL(a,b,f,e) G_STMT_START {                                                           \
                                if (ABS((a->f) - (b->f)) > (e))                                        \
