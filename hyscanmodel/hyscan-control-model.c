@@ -1493,9 +1493,6 @@ hyscan_control_model_thread (gpointer data)
         g_mutex_unlock (&priv->lock);
       }
 
-      /* Типа задержка при обмене данными. */
-      // g_usleep (G_TIME_SPAN_SECOND);
-
       /* Синхронизирую локатор. */
       if (sync)
         hyscan_sonar_sync (sonar);
