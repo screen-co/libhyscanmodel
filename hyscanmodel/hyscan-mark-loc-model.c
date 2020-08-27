@@ -522,14 +522,23 @@ hyscan_mark_loc_model_load (HyScanMarkLocModel  *ml_model,
   HyScanAmplitude *amp;
   HyScanSourceType source;
 
-  location = hyscan_mark_location_new ();
-  location->mark = mark;
-
   /* Получаем название галса. */
   track = mark->track != NULL ? g_hash_table_lookup (priv->track_params, mark->track) : NULL;
+  /* Временный фикс пустых акустических меток в базе данных.
+   * Акустические метки всегда привязаны к галсу.
+   * Если нет галса, то акустическая метка не создаётся.
+   * */
   if (track == NULL)
-    return location;
+    return NULL;
 
+  if (track->track_name == NULL)
+    return NULL;
+  /* Временный фикс пустых акустических меток в базе данных.
+   * Акустические метки всегда привязаны к галсу.
+   * Если нет галса, то акустическая метка не не создаётся.
+   * */
+  location = hyscan_mark_location_new ();
+  location->mark = mark;
   location->track_name = g_strdup (track->track_name);
 
   source = hyscan_source_get_type_by_id (mark->source);
@@ -712,6 +721,10 @@ hyscan_mark_loc_model_process (gpointer data)
                   g_hash_table_iter_steal (&iter);
 
                   location = hyscan_mark_loc_model_load (ml_model, mark);
+
+                  if (location == NULL)
+                    continue;
+
                   g_hash_table_insert (new_locations, key, location);
                 }
 
