@@ -45,10 +45,10 @@ typedef enum
   LAST             /* Количество действий. */
 } Actions;
 
-void                 changed_cb        (HyScanObjectModel   *model,
+void                 changed_cb        (HyScanObjectStore   *model,
                                         gpointer             data);
 
-void                 test_function     (HyScanObjectModel   *model);
+void                 test_function     (HyScanObjectStore   *model);
 
 gboolean             final_check       (GSList              *expect,
                                         GHashTable          *real);
@@ -163,7 +163,7 @@ exit:
 }
 
 void
-changed_cb (HyScanObjectModel *model,
+changed_cb (HyScanObjectStore *model,
             gpointer           data)
 {
   GMainLoop *loop = data;
@@ -171,7 +171,7 @@ changed_cb (HyScanObjectModel *model,
   GHashTableIter iter;
   gpointer key, value;
 
-  ht = hyscan_object_model_get (model);
+  ht = hyscan_object_store_get_all (model, HYSCAN_TYPE_MARK_WATERFALL);
 
   if (count)
     {
@@ -207,7 +207,7 @@ changed_cb (HyScanObjectModel *model,
 }
 
 void
-test_function (HyScanObjectModel *model)
+test_function (HyScanObjectStore *model)
 {
   gint action;
   GHashTable *ht;
@@ -219,7 +219,7 @@ test_function (HyScanObjectModel *model)
   if (!count)
     return;
 
-  ht = hyscan_object_model_get (model);
+  ht = hyscan_object_store_get_all (model, HYSCAN_TYPE_MARK_WATERFALL);
   len = g_hash_table_size (ht);
 
   action = (len < 5) ? ADD : g_random_int_range (ADD, LAST);
@@ -229,7 +229,7 @@ test_function (HyScanObjectModel *model)
   if (action == ADD)
     {
       if_verbose ("Add <%s>\n", mark->name);
-      hyscan_object_model_add (model, (HyScanObject*)mark);
+      hyscan_object_store_add (model, (HyScanObject*) mark, NULL);
     }
   else
     {
@@ -245,12 +245,12 @@ test_function (HyScanObjectModel *model)
           if (action == REMOVE)
             {
               if_verbose ("Remove <%s>\n", ((HyScanMarkWaterfall*)value)->name);
-              hyscan_object_model_remove (model, key);
+              hyscan_object_store_remove (model, HYSCAN_TYPE_MARK_WATERFALL, key);
             }
           else if (action == MODIFY)
             {
               if_verbose ("Modify <%s> to <%s>\n", ((HyScanMarkWaterfall*)value)->name, mark->name);
-              hyscan_object_model_modify (model, key, (HyScanObject*)mark);
+              hyscan_object_store_modify (model, key, (HyScanObject*)mark);
             }
           break;
         }
