@@ -973,7 +973,9 @@ hyscan_object_model_set_types (HyScanObjectModel *model,
 
       /* Запоминаем типы объектов, которые обрабатываются данным хранилищем. */
       object_types = hyscan_object_store_list_types (HYSCAN_OBJECT_STORE (data), &n_object_types);
-      for (j = 0; j < n_types; j++)
+      if (n_object_types == 0)
+        g_warning ("HyScanObjectModel: data class %s do not manage any object types", g_type_name (type));
+      for (j = 0; j < n_object_types; j++)
         g_hash_table_insert (priv->type_store, GSIZE_TO_POINTER (object_types[j]), source);
 
     }

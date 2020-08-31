@@ -39,6 +39,7 @@
 #include <hyscan-object-data.h>
 #include <hyscan-object-data-geomark.h>
 #include <hyscan-object-data-wfmark.h>
+#include <hyscan-object-data-planner.h>
 #include <hyscan-mark.h>
 
 G_BEGIN_DECLS

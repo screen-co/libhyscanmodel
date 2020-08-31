@@ -206,7 +206,7 @@ set_up_tracks (gpointer user_data)
 
       hyscan_geo_topoXY2geo0 (nav_dummy->geo, &track.plan.start, tracks[i].start);
       hyscan_geo_topoXY2geo0 (nav_dummy->geo, &track.plan.end, tracks[i].end);
-      hyscan_object_model_add (HYSCAN_OBJECT_MODEL (planner_model), (HyScanObject *) &track);
+      hyscan_object_store_add (HYSCAN_OBJECT_STORE (planner_model), (HyScanObject *) &track, NULL);
     }
 
   /* Добавляем следующий коллбэк. */
@@ -219,7 +219,7 @@ test_autoselect (void)
 {
   GHashTable *objects = NULL;
 
-  objects = hyscan_object_model_get (HYSCAN_OBJECT_MODEL (planner_model));
+  objects = hyscan_object_store_get_all (HYSCAN_OBJECT_STORE (planner_model), HYSCAN_TYPE_PLANNER_TRACK);
   g_message (TAG_INFO "Objects size: %u", objects != NULL ? g_hash_table_size (objects) : 0);
   if (objects == NULL || g_hash_table_size (objects) != G_N_ELEMENTS (tracks))
     goto exit;
@@ -251,7 +251,9 @@ test_activated (void)
   /* Отключаемся от сигнала. */
   g_signal_handlers_disconnect_by_func (selection, test_activated, NULL);
 
-  track = (HyScanPlannerTrack *) hyscan_object_model_get_by_id (HYSCAN_OBJECT_MODEL (planner_model), active_id);
+  track = (HyScanPlannerTrack *) hyscan_object_store_get (HYSCAN_OBJECT_STORE (planner_model),
+                                                          HYSCAN_TYPE_PLANNER_TRACK,
+                                                          active_id);
   if (!HYSCAN_IS_PLANNER_TRACK (track))
     g_error ("Active track is not found");
 

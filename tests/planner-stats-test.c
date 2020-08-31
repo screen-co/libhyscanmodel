@@ -80,7 +80,7 @@ add_track_record (const gchar *plan_id,
   gint start_idx, end_idx;
   gint32 project_id;
 
-  plan_track = (HyScanPlannerTrack *) hyscan_object_model_get_by_id (model, plan_id);
+  plan_track = (HyScanPlannerTrack *) hyscan_object_store_get (HYSCAN_OBJECT_STORE (model), HYSCAN_TYPE_PLANNER_TRACK, plan_id);
   plan_params = &plan_track->plan;
 
   /* Создаем путевые точки и пишем их в БД. */
@@ -100,7 +100,7 @@ add_track_record (const gchar *plan_id,
 
   /* Добавляем к плановому галсу запись. */
   hyscan_planner_track_record_append (plan_track, track_info->id);
-  hyscan_object_model_modify (model, plan_id, (const HyScanObject *) plan_track);
+  hyscan_object_store_modify (HYSCAN_OBJECT_STORE (model), plan_id, (const HyScanObject *) plan_track);
 
   hyscan_db_info_track_info_free (track_info);
   hyscan_planner_track_free (plan_track);
@@ -300,7 +300,7 @@ add_track_2 (void)
 
   track.zone_id = test_zone_id;
   track.plan = plan[1];
-  hyscan_object_model_add (model, (const HyScanObject *) &track);
+  hyscan_object_store_add (HYSCAN_OBJECT_STORE (model), (const HyScanObject *) &track, NULL);
 
   g_signal_connect (stats, "changed", G_CALLBACK (check_progress_2), NULL);
 
@@ -409,7 +409,7 @@ add_track_1 (void)
   gchar *key;
   HyScanPlannerTrack track = { .type = HYSCAN_TYPE_PLANNER_TRACK };
 
-  objects = hyscan_object_model_get (model);
+  objects = hyscan_object_store_get_all (HYSCAN_OBJECT_STORE (model), HYSCAN_TYPE_PLANNER_TRACK);
   g_hash_table_iter_init (&iter, objects);
 
   if (!g_hash_table_iter_next (&iter, (gpointer *) &key, NULL))
@@ -421,7 +421,7 @@ add_track_1 (void)
 
   track.zone_id = test_zone_id;
   track.plan = plan[0];
-  hyscan_object_model_add (model, (const HyScanObject *) &track);
+  hyscan_object_store_add (HYSCAN_OBJECT_STORE (model), (const HyScanObject *) &track, NULL);
 
   g_signal_handlers_disconnect_by_func (model, G_CALLBACK (add_track_1), NULL);
   g_signal_connect (stats, "changed", G_CALLBACK (check_progress_0), NULL);
@@ -436,7 +436,7 @@ add_zone (gpointer user_data)
 
   /* Добавляем зону, галсы, записи галсов. */
   g_message ("Add zone");
-  hyscan_object_model_add (model, (const HyScanObject *) &zone);
+  hyscan_object_store_add (HYSCAN_OBJECT_STORE (model), (const HyScanObject *) &zone, NULL);
   g_signal_connect (model, "changed", G_CALLBACK (add_track_1), NULL);
 
   return G_SOURCE_REMOVE;

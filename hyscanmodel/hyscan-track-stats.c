@@ -692,7 +692,9 @@ hyscan_track_stats_run (GTask            *task,
 
   /* Таблица соответствия запланированных и записаных галсов. */
   tracks_map = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, NULL);
-  objects = priv->model != NULL ? hyscan_object_model_get (HYSCAN_OBJECT_MODEL (priv->model)) : NULL;
+  objects = priv->model != NULL ?
+          hyscan_object_store_get_all (HYSCAN_OBJECT_STORE(priv->model), HYSCAN_TYPE_PLANNER_TRACK) :
+          NULL;
   if (objects != NULL)
     {
       HyScanPlannerTrack *planner_track;
@@ -702,7 +704,7 @@ hyscan_track_stats_run (GTask            *task,
         {
           gint j;
 
-          if (!HYSCAN_IS_PLANNER_TRACK (planner_track) || planner_track->records == NULL)
+          if (planner_track->records == NULL)
             {
               g_hash_table_iter_remove (&iter);
               continue;

@@ -234,7 +234,8 @@ hyscan_mark_loc_model_object_constructed (GObject *object)
   priv->locations = hyscan_mark_loc_model_create_table ();
 
   /* Модели данных. */
-  priv->mark_model = hyscan_object_model_new (HYSCAN_TYPE_OBJECT_DATA_WFMARK);
+  priv->mark_model = hyscan_object_model_new ();
+  hyscan_object_model_set_types (priv->mark_model, 1, HYSCAN_TYPE_OBJECT_DATA_WFMARK);
   priv->db_info = hyscan_db_info_new (priv->db);
   priv->geo = hyscan_geo_new (origin, HYSCAN_GEO_ELLIPSOID_WGS84);
 
@@ -706,7 +707,7 @@ hyscan_mark_loc_model_process (gpointer data)
           new_locations = hyscan_mark_loc_model_create_table ();
 
           /* Получаем список меток. */
-          wfmarks = hyscan_object_model_get (priv->mark_model);
+          wfmarks = hyscan_object_store_get_all (HYSCAN_OBJECT_STORE (priv->mark_model), HYSCAN_TYPE_MARK_WATERFALL);
           if (wfmarks != NULL)
             {
               GHashTableIter iter;

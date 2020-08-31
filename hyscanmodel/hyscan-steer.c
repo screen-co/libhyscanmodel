@@ -356,13 +356,10 @@ hyscan_steer_plan_select (HyScanSteer *steer)
       HyScanPlannerTrack *track;
 
       priv->plan_geo = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_object_unref);
-      tracks = hyscan_object_model_get (priv->planner_model);
+      tracks = hyscan_object_store_get_all (HYSCAN_OBJECT_STORE (priv->planner_model), HYSCAN_TYPE_PLANNER_TRACK);
       g_hash_table_iter_init (&iter, tracks);
       while (g_hash_table_iter_next (&iter, (gpointer *) &key, (gpointer *) &track))
-        {
-          if (HYSCAN_IS_PLANNER_TRACK (track))
-            g_hash_table_insert (priv->plan_geo, g_strdup (key), hyscan_planner_track_geo (&track->plan, NULL));
-        }
+        g_hash_table_insert (priv->plan_geo, g_strdup (key), hyscan_planner_track_geo (&track->plan, NULL));
 
       g_hash_table_unref (tracks);
     }
@@ -580,7 +577,9 @@ hyscan_steer_set_track (HyScanSteer *steer)
 
   active_id = hyscan_planner_selection_get_active_track (priv->selection);
   if (active_id != NULL)
-    track = (HyScanPlannerTrack *) hyscan_object_model_get_by_id (priv->planner_model, active_id);
+    track = (HyScanPlannerTrack *) hyscan_object_store_get (HYSCAN_OBJECT_STORE (priv->planner_model),
+                                                            HYSCAN_TYPE_PLANNER_TRACK,
+                                                            active_id);
 
   g_free (priv->track_id);
   hyscan_planner_track_free (priv->track);
@@ -589,7 +588,11 @@ hyscan_steer_set_track (HyScanSteer *steer)
 
   g_clear_pointer (&priv->zone, hyscan_planner_zone_free);
   if (track != NULL && track->zone_id != NULL)
-    priv->zone = (HyScanPlannerZone *) hyscan_object_model_get_by_id (priv->planner_model, track->zone_id);
+    {
+      priv->zone = (HyScanPlannerZone *) hyscan_object_store_get (HYSCAN_OBJECT_STORE (priv->planner_model),
+                                                                  HYSCAN_TYPE_PLANNER_ZONE,
+                                                                  track->zone_id);
+    }
 
   g_clear_object (&priv->geo);
   if (track != NULL)

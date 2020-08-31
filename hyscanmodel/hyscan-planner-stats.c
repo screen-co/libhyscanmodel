@@ -75,7 +75,8 @@ struct _HyScanPlannerStatsPrivate
 {
   HyScanPlannerModel          *planner_model;  /* Модель объектов планировщика. */
   HyScanTrackStats            *track_stats;    /* Объект статистики галсов. */
-  GHashTable                  *objects;        /* Хэш-таблица объектов планировщика. */
+  GHashTable                  *track_objects;  /* Хэш-таблица объектов планировщика. */
+  GHashTable                  *zone_objects;  /* Хэш-таблица объектов планировщика. */
   GHashTable                  *tracks;         /* Хэш таблица статистики галсов. */
   GHashTable                  *zones;          /* Хэш-таблица с итоговой сводной информацией по зонам. */
 };
@@ -189,7 +190,8 @@ hyscan_planner_stats_object_finalize (GObject *object)
   HyScanPlannerStatsPrivate *priv = planner_stats->priv;
 
   g_clear_pointer (&priv->tracks, g_hash_table_destroy);
-  g_clear_pointer (&priv->objects, g_hash_table_destroy);
+  g_clear_pointer (&priv->track_objects, g_hash_table_destroy);
+  g_clear_pointer (&priv->zone_objects, g_hash_table_destroy);
   g_clear_pointer (&priv->zones, g_hash_table_destroy);
   g_clear_object (&priv->planner_model);
   g_clear_object (&priv->track_stats);
@@ -364,17 +366,14 @@ hyscan_gtk_planner_list_update_tracks (HyScanPlannerStats *planner_stats)
   gint i;
 
   /* Добавляем в список все галсы, которые есть в модели данных планировщика. */
-  g_hash_table_iter_init (&objects_iter, priv->objects);
+  g_hash_table_iter_init (&objects_iter, priv->track_objects);
   while (g_hash_table_iter_next (&objects_iter, (gpointer *) &track_id, (gpointer *) &track))
     {
       HyScanPlannerStatsTrack *track_info;
       const gchar *parent_key;
 
-      if (!HYSCAN_IS_PLANNER_TRACK (track))
-        continue;
-
       /* ИД родительского элемента галса. */
-      if (track->zone_id != NULL && g_hash_table_contains (priv->objects, track->zone_id))
+      if (track->zone_id != NULL && g_hash_table_contains (priv->zone_objects, track->zone_id))
         parent_key = track->zone_id;
       else
         parent_key = OTHER_ZONE;
@@ -454,12 +453,9 @@ hyscan_gtk_planner_list_update_zones (HyScanPlannerStats *planner_stats)
   HyScanPlannerZone *zone;
 
   /* Добавляем в список зоны, которые есть в модели данных планировщика. */
-  g_hash_table_iter_init (&objects_iter, priv->objects);
+  g_hash_table_iter_init (&objects_iter, priv->zone_objects);
   while (g_hash_table_iter_next (&objects_iter, (gpointer *) &zone_id, (gpointer *) &zone))
     {
-      if (!HYSCAN_IS_PLANNER_ZONE (zone))
-        continue;
-
       if ((zone_info = g_hash_table_lookup (priv->zones, zone_id)) == NULL)
         {
           HyScanPlannerStatsZone add_zone = {0};
@@ -537,7 +533,7 @@ hyscan_planner_stats_update (HyScanPlannerStats *planner_stats)
 {
   HyScanPlannerStatsPrivate *priv = planner_stats->priv;
 
-  if (priv->objects == NULL || priv->tracks == NULL)
+  if (priv->track_objects == NULL || priv->tracks == NULL)
     return;
 
   /* Хэш таблица с информацией о зонах. */
@@ -569,8 +565,10 @@ hyscan_planner_stats_planner_changed (HyScanPlannerStats *planner_stats)
   HyScanPlannerStatsPrivate *priv = planner_stats->priv;
 
   /* Устанавливаем новый список объектов в модель данных. */
-  g_clear_pointer (&priv->objects, g_hash_table_unref);
-  priv->objects = hyscan_object_model_get (HYSCAN_OBJECT_MODEL (priv->planner_model));
+  g_clear_pointer (&priv->track_objects, g_hash_table_unref);
+  g_clear_pointer (&priv->zone_objects, g_hash_table_unref);
+  priv->track_objects = hyscan_object_store_get_all (HYSCAN_OBJECT_STORE (priv->planner_model), HYSCAN_TYPE_PLANNER_TRACK);
+  priv->zone_objects = hyscan_object_store_get_all (HYSCAN_OBJECT_STORE (priv->planner_model), HYSCAN_TYPE_PLANNER_ZONE);
 
   hyscan_planner_stats_update (planner_stats);
 }

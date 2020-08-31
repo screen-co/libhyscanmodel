@@ -107,7 +107,9 @@ hyscan_planner_model_changed (HyScanObjectModel *model)
 
   g_clear_object (&priv->geo);
 
-  object = (HyScanPlannerOrigin *) hyscan_object_model_get_by_id (model, HYSCAN_PLANNER_ORIGIN_ID);
+  object = (HyScanPlannerOrigin *) hyscan_object_store_get (HYSCAN_OBJECT_STORE (model),
+                                                            HYSCAN_TYPE_PLANNER_ORIGIN,
+                                                            HYSCAN_PLANNER_ORIGIN_ID);
   if (object == NULL)
     return;
 
@@ -129,8 +131,11 @@ hyscan_planner_model_changed (HyScanObjectModel *model)
 HyScanPlannerModel *
 hyscan_planner_model_new (void)
 {
-  return g_object_new (HYSCAN_TYPE_PLANNER_MODEL,
-                       "data-type", HYSCAN_TYPE_OBJECT_DATA_PLANNER, NULL);
+  HyScanPlannerModel *model;
+  model = g_object_new (HYSCAN_TYPE_PLANNER_MODEL, NULL);
+  hyscan_object_model_set_types (HYSCAN_OBJECT_MODEL (model), 1, HYSCAN_TYPE_OBJECT_DATA_PLANNER);
+
+  return model;
 }
 
 /**
@@ -173,7 +178,10 @@ hyscan_planner_model_set_origin (HyScanPlannerModel        *pmodel,
   g_return_if_fail (HYSCAN_IS_PLANNER_MODEL (pmodel));
   model = HYSCAN_OBJECT_MODEL (pmodel);
 
-  hyscan_object_model_set (model, HYSCAN_PLANNER_ORIGIN_ID, (const HyScanObject *) origin);
+  hyscan_object_store_set (HYSCAN_OBJECT_STORE (model),
+                           HYSCAN_TYPE_PLANNER_ORIGIN,
+                           HYSCAN_PLANNER_ORIGIN_ID,
+                           (const HyScanObject *) origin);
 }
 
 /**
@@ -192,13 +200,15 @@ hyscan_planner_model_get_origin (HyScanPlannerModel *pmodel)
 
   g_return_val_if_fail (HYSCAN_IS_PLANNER_MODEL (pmodel), NULL);
 
-  object = (HyScanPlannerOrigin *) hyscan_object_model_get_by_id (HYSCAN_OBJECT_MODEL (pmodel), HYSCAN_PLANNER_ORIGIN_ID);
+  object = (HyScanPlannerOrigin *) hyscan_object_store_get (HYSCAN_OBJECT_STORE (pmodel),
+                                                            HYSCAN_TYPE_PLANNER_ORIGIN,
+                                                            HYSCAN_PLANNER_ORIGIN_ID);
   if (object == NULL)
     return NULL;
 
   if (!HYSCAN_IS_PLANNER_ORIGIN (object))
     {
-      hyscan_object_model_remove (HYSCAN_OBJECT_MODEL (pmodel), HYSCAN_PLANNER_ORIGIN_ID);
+      hyscan_object_store_remove (HYSCAN_OBJECT_STORE (pmodel), object->type, HYSCAN_PLANNER_ORIGIN_ID);
       object = NULL;
     }
 
@@ -256,12 +266,12 @@ hyscan_planner_model_assign_number (HyScanPlannerModel *pmodel,
   gboolean *invert;
   gint position;
 
-  objects = hyscan_object_model_get (HYSCAN_OBJECT_MODEL (pmodel));
+  objects = hyscan_object_store_get_all (HYSCAN_OBJECT_STORE (pmodel), HYSCAN_TYPE_PLANNER_TRACK);
   if (objects == NULL)
     goto exit;
 
   track = g_hash_table_lookup (objects, track0_id);
-  if (!HYSCAN_IS_PLANNER_TRACK (track))
+  if (track == NULL)
     goto exit;
   zone_id = track->zone_id;
 
@@ -270,7 +280,7 @@ hyscan_planner_model_assign_number (HyScanPlannerModel *pmodel,
   g_hash_table_iter_init (&iter, objects);
   while (g_hash_table_iter_next (&iter, (gpointer *) &track_id, (gpointer *) &track))
     {
-      if (!HYSCAN_IS_PLANNER_TRACK (track) || g_strcmp0 (track->zone_id, zone_id) != 0)
+      if (g_strcmp0 (track->zone_id, zone_id) != 0)
         continue;
 
       g_array_append_val (track_ids, track_id);
@@ -361,7 +371,7 @@ hyscan_planner_model_assign_number (HyScanPlannerModel *pmodel,
           track->plan.start = track->plan.end;
           track->plan.end = tmp;
         }
-      hyscan_object_model_modify (HYSCAN_OBJECT_MODEL (pmodel), track_id, (HyScanObject *) track);
+      hyscan_object_store_modify (HYSCAN_OBJECT_STORE (pmodel), track_id, (HyScanObject *) track);
     }
 
   g_free (distances);

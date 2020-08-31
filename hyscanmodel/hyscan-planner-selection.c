@@ -68,7 +68,8 @@ enum
 struct _HyScanPlannerSelectionPrivate
 {
   HyScanPlannerModel          *model;           /* Модель объектов планировщика. */
-  GHashTable                  *objects;         /* Объекты планировщика. */
+  GHashTable                  *track_objects;   /* Объекты планов галсов. */
+  GHashTable                  *zone_objects;    /* Объекты зон. */
   GArray                      *tracks;          /* Массив выбранных галсов. */
   gint                         vertex_index;    /* Вершина в выбранной зоне. */
   gchar                       *zone_id;         /* Выбранная зона. */
@@ -180,7 +181,8 @@ hyscan_planner_selection_object_constructed (GObject *object)
   priv->tracks = g_array_new (TRUE, FALSE, sizeof (gchar *));
   g_array_set_clear_func (priv->tracks, hyscan_planner_selection_clear_func);
 
-  priv->objects = hyscan_object_model_get (HYSCAN_OBJECT_MODEL (priv->model));
+  priv->track_objects = hyscan_object_store_get_all (HYSCAN_OBJECT_STORE (priv->model), HYSCAN_TYPE_PLANNER_TRACK);
+  priv->zone_objects = hyscan_object_store_get_all (HYSCAN_OBJECT_STORE (priv->model), HYSCAN_TYPE_PLANNER_ZONE);
   priv->vertex_index = -1;
 
   g_signal_connect_swapped (priv->model, "changed", G_CALLBACK (hyscan_planner_selection_changed), selection);
@@ -198,7 +200,8 @@ hyscan_planner_selection_object_finalize (GObject *object)
       g_object_unref (priv->watch_db_info);
     }
 
-  g_clear_pointer (&priv->objects, g_hash_table_destroy);
+  g_clear_pointer (&priv->track_objects, g_hash_table_destroy);
+  g_clear_pointer (&priv->zone_objects, g_hash_table_destroy);
   g_clear_object (&priv->model);
   g_array_free (priv->tracks, TRUE);
   g_free (priv->active_plan);
@@ -223,8 +226,10 @@ hyscan_planner_selection_changed (HyScanPlannerSelection *selection)
   guint i;
   guint len_before;
 
-  g_clear_pointer (&priv->objects, g_hash_table_destroy);
-  priv->objects = hyscan_object_model_get (HYSCAN_OBJECT_MODEL (priv->model));
+  g_clear_pointer (&priv->track_objects, g_hash_table_destroy);
+  g_clear_pointer (&priv->zone_objects, g_hash_table_destroy);
+  priv->track_objects = hyscan_object_store_get_all (HYSCAN_OBJECT_STORE (priv->model), HYSCAN_TYPE_PLANNER_TRACK);
+  priv->zone_objects = hyscan_object_store_get_all (HYSCAN_OBJECT_STORE (priv->model), HYSCAN_TYPE_PLANNER_ZONE);
 
   if (priv->tracks->len == 0)
     return;
@@ -232,7 +237,7 @@ hyscan_planner_selection_changed (HyScanPlannerSelection *selection)
   len_before = priv->tracks->len;
 
   /* Удаляем из массива tracks все галсы, которых больше нет в модели. */
-  if (priv->objects == NULL)
+  if (priv->track_objects == NULL)
     {
       hyscan_planner_selection_remove_all (selection);
       return;
@@ -244,8 +249,8 @@ hyscan_planner_selection_changed (HyScanPlannerSelection *selection)
       gchar *id;
 
       id = g_array_index (priv->tracks, gchar *, i);
-      object = g_hash_table_lookup (priv->objects, id);
-      if (!HYSCAN_IS_PLANNER_TRACK (object))
+      object = g_hash_table_lookup (priv->track_objects, id);
+      if (object == NULL)
         {
           g_array_remove_index (priv->tracks, i);
           continue;
@@ -396,8 +401,8 @@ hyscan_planner_selection_set_zone (HyScanPlannerSelection *selection,
 
   if (zone_id != NULL)
     {
-      object = g_hash_table_lookup (priv->objects, zone_id);
-      if (!HYSCAN_IS_PLANNER_ZONE (object))
+      object = g_hash_table_lookup (priv->zone_objects, zone_id);
+      if (object == NULL)
         return;
 
       last_vertex_index = (gint) object->points_len - 1;
@@ -480,7 +485,6 @@ hyscan_planner_selection_append (HyScanPlannerSelection  *selection,
                                  const gchar             *track_id)
 {
   HyScanPlannerSelectionPrivate *priv;
-  HyScanObject *object;
   gchar *new_track_id;
 
   g_return_if_fail (HYSCAN_IS_PLANNER_SELECTION (selection));
@@ -489,8 +493,7 @@ hyscan_planner_selection_append (HyScanPlannerSelection  *selection,
   if (hyscan_planner_selection_contains (selection, track_id))
     return;
 
-  object = g_hash_table_lookup (priv->objects, track_id);
-  g_return_if_fail (HYSCAN_IS_PLANNER_TRACK (object));
+  g_return_if_fail (g_hash_table_contains (priv->track_objects, track_id));
 
   new_track_id = g_strdup (track_id);
   g_array_append_val (priv->tracks, new_track_id);
@@ -634,7 +637,9 @@ hyscan_planner_selection_record (HyScanPlannerSelection *selection,
   if (active_track == NULL)
     return;
 
-  track = (HyScanPlannerTrack *) hyscan_object_model_get_by_id (HYSCAN_OBJECT_MODEL (priv->model), active_track);
+  track = (HyScanPlannerTrack *) hyscan_object_store_get (HYSCAN_OBJECT_STORE (priv->model),
+                                                          HYSCAN_TYPE_PLANNER_TRACK,
+                                                          active_track);
   if (!HYSCAN_IS_PLANNER_TRACK (track))
     goto exit;
 
@@ -642,7 +647,7 @@ hyscan_planner_selection_record (HyScanPlannerSelection *selection,
     goto exit;
 
   hyscan_planner_track_record_append (track, track_id);
-  hyscan_object_model_modify (HYSCAN_OBJECT_MODEL (priv->model), active_track, (const HyScanObject *) track);
+  hyscan_object_store_modify (HYSCAN_OBJECT_STORE (priv->model), active_track, (const HyScanObject *) track);
 
 exit:
   g_free (active_track);
