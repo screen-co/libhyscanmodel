@@ -39,7 +39,6 @@
 #include <hyscan-object-data.h>
 #include <hyscan-object-data-geomark.h>
 #include <hyscan-object-data-wfmark.h>
-#include <hyscan-object-data-planner.h>
 #include <hyscan-mark.h>
 
 G_BEGIN_DECLS
@@ -71,7 +70,12 @@ HYSCAN_API
 GType                   hyscan_object_model_get_type          (void);
 
 HYSCAN_API
-HyScanObjectModel *     hyscan_object_model_new               (GType                      data_type);
+HyScanObjectModel *     hyscan_object_model_new               (void);
+
+HYSCAN_API
+gboolean                hyscan_object_model_set_types         (HyScanObjectModel          *model,
+                                                               guint                       n_types,
+                                                               ...);
 
 HYSCAN_API
 void                    hyscan_object_model_set_project       (HyScanObjectModel         *model,
@@ -80,30 +84,6 @@ void                    hyscan_object_model_set_project       (HyScanObjectModel
 
 HYSCAN_API
 void                    hyscan_object_model_refresh           (HyScanObjectModel         *model);
-
-HYSCAN_API
-void                    hyscan_object_model_add               (HyScanObjectModel         *model,
-                                                               const HyScanObject        *object);
-
-HYSCAN_API
-void                    hyscan_object_model_modify            (HyScanObjectModel         *model,
-                                                               const gchar               *id,
-                                                               const HyScanObject        *object);
-
-HYSCAN_API
-void                    hyscan_object_model_remove            (HyScanObjectModel         *model,
-                                                               const gchar               *id);
-HYSCAN_API
-void                    hyscan_object_model_set               (HyScanObjectModel         *model,
-                                                               const gchar               *id,
-                                                               const HyScanObject        *object);
-
-HYSCAN_API
-GHashTable *            hyscan_object_model_get               (HyScanObjectModel         *model);
-
-HYSCAN_API
-HyScanObject *          hyscan_object_model_get_by_id         (HyScanObjectModel         *model,
-                                                               const gchar               *id);
 
 HYSCAN_API
 GHashTable *            hyscan_object_model_copy              (GHashTable                *objects);
