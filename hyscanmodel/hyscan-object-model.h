@@ -70,7 +70,12 @@ HYSCAN_API
 GType                   hyscan_object_model_get_type          (void);
 
 HYSCAN_API
-HyScanObjectModel *     hyscan_object_model_new               (GType                      data_type);
+HyScanObjectModel *     hyscan_object_model_new               (void);
+
+HYSCAN_API
+gboolean                hyscan_object_model_set_types         (HyScanObjectModel          *model,
+                                                               guint                       n_types,
+                                                               ...);
 
 HYSCAN_API
 void                    hyscan_object_model_set_project       (HyScanObjectModel         *model,
