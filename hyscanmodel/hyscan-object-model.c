@@ -165,8 +165,14 @@ static void                     hyscan_object_model_take_objects           (HySc
 static void                     hyscan_object_model_retrieve_store         (HyScanObjectModelPrivate   *priv,
                                                                             GHashTable                 *object_list,
                                                                             HyScanObjectStore          *data);
+static gboolean                 hyscan_object_model_connect_stores         (HyScanObjectModelPrivate   *priv);
+static void                     hyscan_object_model_retrieve_all           (HyScanObjectModel          *model);
 static gpointer                 hyscan_object_model_processing             (HyScanObjectModel          *model);
+static void                     hyscan_object_model_signal                 (HyScanObjectModel          *model);
 static gboolean                 hyscan_object_model_signaller              (gpointer                    data);
+static gboolean                 hyscan_object_model_signaller_once         (gpointer                    data);
+static void                     hyscan_object_model_unlock_and_signal      (HyScanObjectModel          *model,
+                                                                            GMutex                     *objects_lock);
 static HyScanObject *           hyscan_object_model_lookup                 (GHashTable                 *hash_table,
                                                                             GType                       type,
                                                                             const gchar                *id);
@@ -930,8 +936,8 @@ hyscan_object_model_signaller_once (gpointer data)
 
 /* Функция сразу же отправляет сигнал об изменении данных. */
 static void
-hyscan_object_model_object_unlock_and_signal (HyScanObjectModel *model,
-                                              GMutex            *objects_lock)
+hyscan_object_model_unlock_and_signal (HyScanObjectModel *model,
+                                       GMutex            *objects_lock)
 {
   HyScanObjectModelPrivate *priv = model->priv;
 
@@ -961,7 +967,7 @@ hyscan_object_model_add (HyScanObjectStore   *store,
   /* Сразу пишем изменения во внутренний буфер. */
   g_mutex_lock (&priv->objects_lock);
   hyscan_object_model_task_do_ht (task, priv->objects);
-  hyscan_object_model_object_unlock_and_signal (model, &priv->objects_lock);
+  hyscan_object_model_unlock_and_signal (model, &priv->objects_lock);
 
   (given_id != NULL) ? *given_id = g_strdup (task->id) : NULL;
 
@@ -986,7 +992,7 @@ hyscan_object_model_modify (HyScanObjectStore  *store,
   /* Сразу пишем изменения во внутренний буфер. */
   g_mutex_lock (&priv->objects_lock);
   hyscan_object_model_task_do_ht (task, priv->objects);
-  hyscan_object_model_object_unlock_and_signal (model, &priv->objects_lock);
+  hyscan_object_model_unlock_and_signal (model, &priv->objects_lock);
 
   hyscan_object_model_task_push (priv, task);
 
@@ -1009,7 +1015,7 @@ hyscan_object_model_remove (HyScanObjectStore *store,
   /* Сразу пишем изменения во внутренний буфер. */
   g_mutex_lock (&priv->objects_lock);
   hyscan_object_model_task_do_ht (task, priv->objects);
-  hyscan_object_model_object_unlock_and_signal (model, &priv->objects_lock);
+  hyscan_object_model_unlock_and_signal (model, &priv->objects_lock);
 
   hyscan_object_model_task_push (model->priv, task);
 
@@ -1033,7 +1039,7 @@ hyscan_object_model_set (HyScanObjectStore  *store,
   /* Сразу пишем изменения во внутренний буфер. */
   g_mutex_lock (&priv->objects_lock);
   hyscan_object_model_task_do_ht (task, priv->objects);
-  hyscan_object_model_object_unlock_and_signal (model, &priv->objects_lock);
+  hyscan_object_model_unlock_and_signal (model, &priv->objects_lock);
 
   hyscan_object_model_task_push (priv, task);
 
