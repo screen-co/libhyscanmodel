@@ -145,12 +145,13 @@ main (int argc, char **argv)
   status = final_check (performed, final_marks);
 
 exit:
+  g_clear_object (&model);
+
   if (db != NULL && status)
     hyscan_db_project_remove (db, name);
 
   g_free (db_uri);
   g_clear_object (&db);
-  g_clear_object (&model);
 
   if (loop != NULL)
     g_main_loop_unref (loop);
