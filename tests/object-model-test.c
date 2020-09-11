@@ -134,11 +134,12 @@ main (int argc, char **argv)
   loop = g_main_loop_new (NULL, TRUE);
 
   model = hyscan_object_model_new ();
+  g_signal_connect (model, "changed", G_CALLBACK (changed_cb), loop);
   hyscan_object_model_set_types (model, 2,
                                  HYSCAN_TYPE_OBJECT_DATA_WFMARK,
                                  HYSCAN_TYPE_OBJECT_DATA_GEOMARK);
-  g_signal_connect (model, "changed", G_CALLBACK (changed_cb), loop);
   hyscan_object_model_set_project (model, db, name);
+  test_function (HYSCAN_OBJECT_STORE (model));
 
   g_main_loop_run (loop);
 
