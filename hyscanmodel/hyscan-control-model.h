@@ -40,6 +40,7 @@
 #include <hyscan-sonar-state.h>
 #include <hyscan-sensor-state.h>
 #include <hyscan-device-state.h>
+#include <hyscan-actuator-state.h>
 
 G_BEGIN_DECLS
 

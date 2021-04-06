@@ -27,6 +27,7 @@ set (HYSCAN_MODEL_LIBRARY_SOURCE_FILES
      hyscan-sonar-state.c
      hyscan-sensor-state.c
      hyscan-device-state.c
+     hyscan-actuator-state.c
      hyscan-control-model.c
      hyscan-mark-location.c
      hyscan-mark-loc-model.c

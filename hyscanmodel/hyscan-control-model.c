@@ -93,7 +93,7 @@
 #define HYSCAN_CONTROL_MODEL_TIMEOUT (1000 /* Одна секунда*/)
 
 typedef struct _HyScanControlModelStart HyScanControlModelStart;
-typedef union _HyScanControlModelTVG HyScanControlModelTVG;
+typedef union  _HyScanControlModelTVG HyScanControlModelTVG;
 typedef struct _HyScanControlModelTVGAuto HyScanControlModelTVGAuto;
 typedef struct _HyScanControlModelTVGConst HyScanControlModelTVGConst;
 typedef struct _HyScanControlModelTVGLinear HyScanControlModelTVGLinear;
@@ -102,6 +102,9 @@ typedef struct _HyScanControlModelRec HyScanControlModelRec;
 typedef struct _HyScanControlModelGen HyScanControlModelGen;
 typedef struct _HyScanControlModelSource HyScanControlModelSource;
 typedef struct _HyScanControlModelSensor HyScanControlModelSensor;
+typedef union  _HyScanControlModelActuator HyScanControlModelActuator;
+typedef struct _HyScanControlModelActuatorManual HyScanControlModelActuatorManual;
+typedef struct _HyScanControlModelActuatorScan HyScanControlModelActuatorScan;
 
 enum
 {
@@ -113,6 +116,7 @@ enum
 {
   SIGNAL_SONAR,
   SIGNAL_SENSOR,
+  SIGNAL_ACTUATOR,
   SIGNAL_BEFORE_START,
   SIGNAL_START_STOP,
   SIGNAL_START_SENT,
@@ -211,12 +215,38 @@ struct _HyScanControlModelSensor
   HyScanAntennaOffset         offset;               /* Смещение датчика. */
 };
 
+/* Актуатор сканирует. */
+struct _HyScanControlModelActuatorScan
+{
+  HyScanActuatorModeType      mode;                 /* Режим актуатора. */
+
+  gdouble                     from;                 /* Начальный угол. */
+  gdouble                     to;                   /* Конечный угол. */
+  gdouble                     speed;                /* Скорость сканирования. */
+};
+
+/* Актуатор в ручном режиме. */
+struct _HyScanControlModelActuatorManual
+{
+  HyScanActuatorModeType      mode;                 /* Режим актуатора. */
+  gdouble                     angle;                /* Заданный угол. */
+};
+
+/* Параметры режимов работы актуатора. */
+union _HyScanControlModelActuator
+{
+  HyScanActuatorModeType            mode;                /* Режим актуатора. */
+  HyScanControlModelActuatorScan    scan;                /* Актуатор сканирует. */
+  HyScanControlModelActuatorManual  manual;              /* Актуатор в ручном режиме. */
+};
+
 struct _HyScanControlModelPrivate
 {
   HyScanControl              *control;         /* Бэкэнд. */
 
   GHashTable                 *sources;         /* Параметры источников гидролокационных данных. {HyScanSourceType : HyScanControlModelSource* } */
   GHashTable                 *sensors;         /* Параметры датчиков. {gchar* : HyScanControlModelSensor* } */
+  GHashTable                 *actuators;       /* Параметры актуаторов. {gchar* : HyScanControlModelActuator* } */
 
   GThread                    *thread;          /* Поток. */
   gint                        shutdown;        /* Остановка потока, atomic. */
@@ -242,12 +272,14 @@ struct _HyScanControlModelPrivate
   GList                      *sound_velocity;  /* Профиль скорости звука. */
 };
 
-static void     hyscan_control_model_sonar_state_iface_init  (HyScanSonarStateInterface      *iface);
-static void     hyscan_control_model_sonar_iface_init        (HyScanSonarInterface           *iface);
-static void     hyscan_control_model_sensor_state_iface_init (HyScanSensorStateInterface     *iface);
-static void     hyscan_control_model_sensor_iface_init       (HyScanSensorInterface          *iface);
-static void     hyscan_control_model_device_iface_init       (HyScanDeviceInterface          *iface);
-static void     hyscan_control_model_device_state_iface_init (HyScanDeviceStateInterface     *iface);
+static void     hyscan_control_model_sonar_state_iface_init    (HyScanSonarStateInterface      *iface);
+static void     hyscan_control_model_sonar_iface_init          (HyScanSonarInterface           *iface);
+static void     hyscan_control_model_sensor_state_iface_init   (HyScanSensorStateInterface     *iface);
+static void     hyscan_control_model_sensor_iface_init         (HyScanSensorInterface          *iface);
+static void     hyscan_control_model_device_state_iface_init   (HyScanDeviceStateInterface     *iface);
+static void     hyscan_control_model_device_iface_init         (HyScanDeviceInterface          *iface);
+static void     hyscan_control_model_actuator_state_iface_init (HyScanActuatorStateInterface   *iface);
+static void     hyscan_control_model_actuator_iface_init       (HyScanActuatorInterface        *iface);
 static void     hyscan_control_model_param_iface_init        (HyScanParamInterface           *iface);
 static void     hyscan_control_model_set_property            (GObject                        *object,
                                                               guint                           prop_id,
@@ -269,6 +301,9 @@ static gboolean hyscan_control_model_tvg_update              (HyScanControlModel
 static gboolean hyscan_control_model_tvg_set                 (HyScanControlModel             *self,
                                                               HyScanSourceType                source,
                                                               HyScanControlModelTVG          *tvg);
+static gboolean hyscan_control_model_actuator_set            (HyScanControlModel             *self,
+                                                              const gchar                    *name,
+                                                              HyScanControlModelActuator     *info);
 static gpointer hyscan_control_model_thread                  (gpointer                        data);
 static void     hyscan_control_model_sensor_data             (HyScanDevice                   *device,
                                                               const gchar                    *sensor,
@@ -324,6 +359,8 @@ G_DEFINE_TYPE_WITH_CODE (HyScanControlModel, hyscan_control_model, G_TYPE_OBJECT
                          G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_SENSOR, hyscan_control_model_sensor_iface_init)
                          G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_DEVICE, hyscan_control_model_device_iface_init)
                          G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_DEVICE_STATE, hyscan_control_model_device_state_iface_init)
+                         G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_ACTUATOR, hyscan_control_model_actuator_iface_init)
+                         G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_ACTUATOR_STATE, hyscan_control_model_actuator_state_iface_init)
                          G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_PARAM, hyscan_control_model_param_iface_init))
 
 static void
@@ -345,8 +382,9 @@ hyscan_control_model_class_init (HyScanControlModelClass *klass)
    * @model: указатель на #HyScanControlModel
    * @source: идентификатор источника данных #HyScanSourceType
    *
-   * Сигнал оповещает об изменении параметров источника. В детализации сигнала можно указать тип источника данных,
-   * для получения сигналов об изменении параметров только указанного источника.
+   * Сигнал оповещает об изменении параметров источника. В детализации сигнала
+   * можно указать тип источника данных, для получения сигналов об изменении
+   * параметров только указанного источника.
    *
    */
   hyscan_control_model_signals[SIGNAL_SONAR] =
@@ -358,16 +396,35 @@ hyscan_control_model_class_init (HyScanControlModelClass *klass)
                   1, G_TYPE_INT);
 
   /**
-   * HyScanControlModel::sonar
+   * HyScanControlModel::sensor
    * @model: указатель на #HyScanControlModel
    * @sensor: имя датчика
    *
-   * Сигнал оповещает об изменении параметров датчика. В детализации сигнала можно указать имя датчика,
-   * для получения сигналов об изменении параметров только указанного датчика.
+   * Сигнал оповещает об изменении параметров датчика. В детализации сигнала
+   * можно указать имя датчика, для получения сигналов об изменении параметров
+   * только указанного датчика.
    *
    */
   hyscan_control_model_signals[SIGNAL_SENSOR] =
     g_signal_new ("sensor", HYSCAN_TYPE_CONTROL_MODEL,
+                  G_SIGNAL_RUN_LAST | G_SIGNAL_DETAILED, 0,
+                  NULL, NULL,
+                  g_cclosure_marshal_VOID__STRING,
+                  G_TYPE_NONE,
+                  1, G_TYPE_STRING);
+
+  /**
+   * HyScanControlModel::actuator
+   * @model: указатель на #HyScanControlModel
+   * @actuator: имя актуатора
+   *
+   * Сигнал оповещает об изменении параметров актуатора. В детализации сигнала
+   * можно указать имя актуатора, для получения сигналов об изменении параметров
+   * только указанного актуатора.
+   *
+   */
+  hyscan_control_model_signals[SIGNAL_ACTUATOR] =
+    g_signal_new ("actuator", HYSCAN_TYPE_CONTROL_MODEL,
                   G_SIGNAL_RUN_LAST | G_SIGNAL_DETAILED, 0,
                   NULL, NULL,
                   g_cclosure_marshal_VOID__STRING,
@@ -466,6 +523,7 @@ hyscan_control_model_object_constructed (GObject *object)
   guint32 n_sources, i;
   const HyScanSourceType *source;
   const gchar *const *sensor;
+  const gchar *const *actuator;
 
   /* Ретрансляция сигналов. */
   g_signal_connect (HYSCAN_SENSOR (priv->control), "sensor-data",
@@ -501,6 +559,15 @@ hyscan_control_model_object_constructed (GObject *object)
         g_hash_table_insert (priv->sensors, g_strdup (sensor[i]), g_new0 (HyScanControlModelSensor, 1));
     }
 
+  /* Получаем список актуаторов. */
+  priv->actuators = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+  actuator = hyscan_control_actuators_list (priv->control);
+  if (actuator != NULL)
+    {
+      for (i = 0; actuator[i] != NULL; i++)
+        g_hash_table_insert (priv->actuators, g_strdup (actuator[i]), g_new0 (HyScanControlModelActuator, 1));
+    }
+
   g_cond_init (&priv->cond);
 
   /* Поток обмена. */
@@ -528,6 +595,7 @@ hyscan_control_model_object_finalize (GObject *object)
   g_clear_object (&priv->control);
   g_hash_table_destroy (priv->sensors);
   g_hash_table_destroy (priv->sources);
+  g_hash_table_destroy (priv->actuators);
 
   hyscan_control_model_start_free (priv->start);
   hyscan_control_model_start_free (priv->started);
@@ -704,6 +772,7 @@ hyscan_control_model_generate_name (HyScanControlModel *model,
   return g_strdup_printf ("%03d%s", track_num, suffix != NULL ? suffix : "");;
 }
 
+/* Функция пробуждает поток с целью синхронизации. */
 static gboolean
 hyscan_control_model_timeout_sync (gpointer user_data)
 {
@@ -722,15 +791,11 @@ hyscan_control_model_timeout_sync (gpointer user_data)
   return G_SOURCE_REMOVE;
 }
 
-/* Функция инициирует обновление. */
+/* Функция инициирует или откладывает на попозже синхронизацию оборудования. */
 static void
-hyscan_control_model_sonar_changed (HyScanControlModel *self,
-                                    HyScanSourceType  source)
+hyscan_control_model_init_sync (HyScanControlModel *self)
 {
   HyScanControlModelPrivate *priv = self->priv;
-
-  g_signal_emit (self, hyscan_control_model_signals[SIGNAL_SONAR],
-                 g_quark_from_static_string (hyscan_source_get_id_by_type (source)), source);
 
   /* Помечаем, что пора обновляться, но пока не будим фоновый поток. */
   g_mutex_lock (&priv->lock);
@@ -743,6 +808,97 @@ hyscan_control_model_sonar_changed (HyScanControlModel *self,
   priv->timeout_id = g_timeout_add (priv->sync_timeout, hyscan_control_model_timeout_sync, self);
 }
 
+/* Функция должна быть вызывана, когда изменились пар-ры локатора. */
+static void
+hyscan_control_model_sonar_changed (HyScanControlModel *self,
+                                    HyScanSourceType    source)
+{
+  g_signal_emit (self, hyscan_control_model_signals[SIGNAL_SONAR],
+                 g_quark_from_static_string (hyscan_source_get_id_by_type (source)), source);
+
+  hyscan_control_model_init_sync (self);
+}
+
+/* Функция должна быть вызывана, когда изменились пар-ры сенсора. */
+static void
+hyscan_control_model_sensor_changed (HyScanControlModel *self,
+                                     const gchar        *name)
+{
+  g_signal_emit (self, hyscan_control_model_signals[SIGNAL_SENSOR],
+                 g_quark_from_string (name), name);
+
+  hyscan_control_model_init_sync (self);
+}
+
+/* Функция должна быть вызывана, когда изменились пар-ры актуатора. */
+static void
+hyscan_control_model_actuator_changed (HyScanControlModel *self,
+                                       const gchar        *name)
+{
+  g_signal_emit (self, hyscan_control_model_signals[SIGNAL_ACTUATOR],
+                 g_quark_from_string (name), name);
+
+  hyscan_control_model_init_sync (self);
+}
+
+
+static gboolean
+hyscan_control_model_rec_set_internal (HyScanSonar           *sonar,
+                                       HyScanSourceType       source,
+                                       HyScanControlModelRec *rec)
+{
+  gboolean status = FALSE;
+
+  switch (rec->mode)
+    {
+    case HYSCAN_SONAR_RECEIVER_MODE_NONE:
+      status = hyscan_sonar_receiver_disable (sonar, source);
+      break;
+
+    case HYSCAN_SONAR_RECEIVER_MODE_MANUAL:
+      status = hyscan_sonar_receiver_set_time (sonar, source,
+                                               rec->receive,
+                                               rec->wait);
+      break;
+
+    case HYSCAN_SONAR_RECEIVER_MODE_AUTO:
+      status = hyscan_sonar_receiver_set_auto (sonar, source);
+      break;
+
+    default:
+      g_assert_not_reached ();
+    }
+
+  if (!status)
+    {
+      g_warning ("HyScanControlModel: couldn't setup Receiver for %s",
+                 hyscan_source_get_name_by_type (source));
+    }
+
+  return status;
+}
+
+static gboolean
+hyscan_control_model_rec_update (HyScanControlModelRec *dest,
+                                 HyScanControlModelRec *src)
+{
+  gboolean changed = FALSE;
+
+  changed = dest->mode != src->mode;
+  dest->mode = src->mode;
+
+  if (src->mode == HYSCAN_SONAR_RECEIVER_MODE_MANUAL)
+    {
+      changed |= dest->receive != src->receive ||
+                 dest->wait != src->wait;
+
+      dest->receive = src->receive;
+      dest->wait = src->wait;
+    }
+
+  return changed;
+}
+
 static gboolean
 hyscan_control_model_receiver_set (HyScanControlModel    *self,
                                    HyScanSourceType       source,
@@ -750,33 +906,43 @@ hyscan_control_model_receiver_set (HyScanControlModel    *self,
 {
   HyScanControlModelPrivate *priv = self->priv;
   HyScanControlModelSource *info;
-  gboolean status = FALSE;
-  gboolean changed;
+  gboolean status;
 
   info = g_hash_table_lookup (priv->sources, GINT_TO_POINTER (source));
   if (info == NULL)
     return FALSE;
 
-  if (rec->mode == HYSCAN_SONAR_RECEIVER_MODE_NONE)
-    status = hyscan_sonar_receiver_disable (HYSCAN_SONAR (priv->control), source);
-  else if (rec->mode == HYSCAN_SONAR_RECEIVER_MODE_MANUAL)
-    status = hyscan_sonar_receiver_set_time (HYSCAN_SONAR (priv->control), source, rec->receive, rec->wait);
-  else if (rec->mode == HYSCAN_SONAR_RECEIVER_MODE_AUTO)
-    status = hyscan_sonar_receiver_set_auto (HYSCAN_SONAR (priv->control), source);
-
+  status = hyscan_control_model_rec_set_internal (HYSCAN_SONAR (priv->control),
+                                                  source, rec);
   if (!status)
     return FALSE;
 
-  changed = info->rec.mode != rec->mode;
-  if (!changed && rec->mode == HYSCAN_SONAR_RECEIVER_MODE_MANUAL)
-    changed = info->rec.receive != rec->receive || info->rec.wait != rec->wait;
-
-  info->rec = *rec;
-
-  if (changed)
+  if (hyscan_control_model_rec_update (&info->rec, rec))
     hyscan_control_model_sonar_changed (self, source);
 
   return TRUE;
+}
+
+
+static gboolean
+hyscan_control_model_gen_set_internal (HyScanSonar           *sonar,
+                                       HyScanSourceType       source,
+                                       HyScanControlModelGen *gen)
+{
+  gboolean status;
+
+  if (gen->disabled)
+    status = hyscan_sonar_generator_disable (sonar, source);
+  else
+    status = hyscan_sonar_generator_set_preset (sonar, source, gen->preset);
+
+  if (!status)
+    {
+      g_warning ("HyScanControlModel: couldn't setup Generator for %s",
+                 hyscan_source_get_name_by_type (source));
+    }
+
+  return status;
 }
 
 static gboolean
@@ -786,15 +952,9 @@ hyscan_control_model_gen_update (HyScanControlModelGen *dest,
   gboolean changed = FALSE;
 
   if (dest->disabled != src->disabled)
-    {
-      changed = TRUE;
-      dest->disabled = src->disabled;
-    }
+    changed = TRUE;
   if (dest->preset != src->preset)
-    {
-      changed = TRUE;
-      dest->preset = src->preset;
-    }
+    changed = TRUE;
 
   *dest = *src;
 
@@ -808,29 +968,73 @@ hyscan_control_model_generator_set (HyScanControlModel    *self,
 {
   HyScanControlModelPrivate *priv = self->priv;
   HyScanControlModelSource *info;
-  HyScanControlModelGen *old_gen;
   gboolean status;
 
   info = g_hash_table_lookup (priv->sources, GINT_TO_POINTER (source));
   if (info == NULL)
     return FALSE;
 
-  old_gen = &info->gen;
-
-  /* Отключение ВАРУ. */
-  if (gen->disabled)
-    status = hyscan_sonar_generator_disable (HYSCAN_SONAR (priv->control), source);
-  else
-    status = hyscan_sonar_generator_set_preset (HYSCAN_SONAR (priv->control), source, gen->preset);
+  status = hyscan_control_model_gen_set_internal (HYSCAN_SONAR (priv->control),
+                                                  source, gen);
 
   if (!status)
     return FALSE;
 
   /* Если параметры отличаются от уже установленных, эмиттируем сигнал . */
-  if (hyscan_control_model_gen_update (old_gen, gen))
+  if (hyscan_control_model_gen_update (&info->gen, gen))
     hyscan_control_model_sonar_changed (self, source);
 
   return TRUE;
+}
+
+static gboolean
+hyscan_control_model_tvg_set_internal (HyScanSonar           *sonar,
+                                       HyScanSourceType       source,
+                                       HyScanControlModelTVG *tvg)
+{
+  gboolean status = FALSE;
+
+  switch (tvg->mode)
+    {
+    case HYSCAN_SONAR_TVG_MODE_NONE:
+      status = hyscan_sonar_tvg_disable (sonar, source);
+      break;
+
+    case HYSCAN_SONAR_TVG_MODE_AUTO:
+      status = hyscan_sonar_tvg_set_auto (sonar, source,
+                                          tvg->atvg.level,
+                                          tvg->atvg.sensitivity);
+      break;
+
+    case HYSCAN_SONAR_TVG_MODE_CONSTANT:
+      status = hyscan_sonar_tvg_set_constant (sonar, source,
+                                              tvg->constant.gain);
+      break;
+
+    case HYSCAN_SONAR_TVG_MODE_LINEAR_DB:
+      status = hyscan_sonar_tvg_set_linear_db (sonar, source,
+                                               tvg->linear.gain0,
+                                               tvg->linear.gain_step);
+      break;
+
+    case HYSCAN_SONAR_TVG_MODE_LOGARITHMIC:
+      status = hyscan_sonar_tvg_set_logarithmic (sonar, source,
+                                                 tvg->log.gain0,
+                                                 tvg->log.beta,
+                                                 tvg->log.alpha);
+      break;
+
+    default:
+      g_assert_not_reached ();
+    }
+
+  if (!status)
+    {
+      g_warning ("HyScanControlModel: couldn't setup TVG for %s",
+                 hyscan_source_get_name_by_type (source));
+    }
+
+  return status;
 }
 
 /* Копирует режим работы вару из src в dst. Возвращает %TRUE, если значения отличались. */
@@ -841,26 +1045,27 @@ hyscan_control_model_tvg_update (HyScanControlModelTVG *dest,
   gboolean changed;
 
   changed = dest->mode != src->mode;
+
   switch (src->mode)
     {
     case HYSCAN_SONAR_TVG_MODE_AUTO:
-      if (dest->atvg.level != src->atvg.level || dest->atvg.sensitivity != src->atvg.sensitivity)
-        changed = TRUE;
+      changed |= dest->atvg.level != src->atvg.level ||
+                 dest->atvg.sensitivity != src->atvg.sensitivity;
       break;
 
     case HYSCAN_SONAR_TVG_MODE_CONSTANT:
-      if (dest->constant.gain != src->constant.gain)
-        changed = TRUE;
+      changed |= dest->constant.gain != src->constant.gain;
       break;
 
     case HYSCAN_SONAR_TVG_MODE_LINEAR_DB:
-      if (dest->linear.gain0 != src->linear.gain0 || dest->linear.gain_step != src->linear.gain_step)
-        changed = TRUE;
+      changed |= dest->linear.gain0 != src->linear.gain0 ||
+                 dest->linear.gain_step != src->linear.gain_step;
       break;
 
     case HYSCAN_SONAR_TVG_MODE_LOGARITHMIC:
-      if (dest->log.gain0 != src->log.gain0 || dest->log.beta != src->log.beta || dest->log.alpha != src->log.alpha)
-        changed = TRUE;
+      changed |= dest->log.gain0 != src->log.gain0 ||
+                 dest->log.beta != src->log.beta ||
+                 dest->log.alpha != src->log.alpha;
       break;
 
     case HYSCAN_SONAR_TVG_MODE_NONE:
@@ -870,6 +1075,8 @@ hyscan_control_model_tvg_update (HyScanControlModelTVG *dest,
       g_assert_not_reached ();
     }
 
+  /* HyScanControlModelTVG это юнион, поэтому я могу позволить себе просто
+   * переписать. */
   if (changed)
     *dest = *src;
 
@@ -890,36 +1097,9 @@ hyscan_control_model_tvg_set (HyScanControlModel    *self,
   if (info == NULL)
     return FALSE;
 
-  /* Отключение ВАРУ. */
-  if (tvg->mode == HYSCAN_SONAR_TVG_MODE_NONE)
-    {
-      status = hyscan_sonar_tvg_disable (HYSCAN_SONAR (priv->control), source);
-    }
-  /* Переключение и настройка режимов. */
-  else if (tvg->mode == HYSCAN_SONAR_TVG_MODE_AUTO)
-    {
-      status = hyscan_sonar_tvg_set_auto (HYSCAN_SONAR (priv->control), source,
-                                          tvg->atvg.level,
-                                          tvg->atvg.sensitivity);
-    }
-  else if (tvg->mode == HYSCAN_SONAR_TVG_MODE_CONSTANT)
-    {
-      status = hyscan_sonar_tvg_set_constant (HYSCAN_SONAR (priv->control), source,
-                                              tvg->constant.gain);
-    }
-  else if (tvg->mode == HYSCAN_SONAR_TVG_MODE_LINEAR_DB)
-    {
-      status = hyscan_sonar_tvg_set_linear_db (HYSCAN_SONAR (priv->control), source,
-                                               tvg->linear.gain0,
-                                               tvg->linear.gain_step);
-    }
-  else if (tvg->mode == HYSCAN_SONAR_TVG_MODE_LOGARITHMIC)
-    {
-      status = hyscan_sonar_tvg_set_logarithmic (HYSCAN_SONAR (priv->control), source,
-                                                 tvg->log.gain0,
-                                                 tvg->log.beta,
-                                                 tvg->log.alpha);
-    }
+  /* Настраиваю ВАРУ. */
+  status = hyscan_control_model_tvg_set_internal (HYSCAN_SONAR (priv->control),
+                                                  source, tvg);
 
   if (!status)
     return FALSE;
@@ -931,6 +1111,268 @@ hyscan_control_model_tvg_set (HyScanControlModel    *self,
   return TRUE;
 }
 
+static gboolean
+hyscan_control_model_actuator_set (HyScanControlModel         *self,
+                                   const gchar                *name,
+                                   HyScanControlModelActuator *actuator)
+{
+  HyScanControlModelPrivate *priv = self->priv;
+  HyScanControlModelActuator *info;
+  gboolean status = FALSE;
+  gboolean changed;
+
+  info = g_hash_table_lookup (priv->actuators, name);
+  if (info == NULL)
+    return FALSE;
+
+  if (info->mode == HYSCAN_ACTUATOR_MODE_NONE)
+    {
+      status = hyscan_actuator_disable (HYSCAN_ACTUATOR (priv->control), name);
+    }
+  else if (info->mode == HYSCAN_ACTUATOR_MODE_SCAN)
+    {
+      status = hyscan_actuator_scan (HYSCAN_ACTUATOR (priv->control), name,
+                                     info->scan.from,
+                                     info->scan.to,
+                                     info->scan.speed);
+    }
+  else if (info->mode == HYSCAN_ACTUATOR_MODE_MANUAL)
+    {
+      status = hyscan_actuator_manual (HYSCAN_ACTUATOR (priv->control), name,
+                                       info->manual.angle);
+    }
+
+  if (!status)
+    return FALSE;
+
+  changed = info->mode != actuator->mode;
+  info->mode = actuator->mode;
+
+  if (actuator->mode == HYSCAN_ACTUATOR_MODE_MANUAL)
+    {
+      changed |= info->manual.angle != actuator->manual.angle;
+      info->manual = actuator->manual;
+    }
+  if (actuator->mode == HYSCAN_ACTUATOR_MODE_SCAN)
+    {
+      changed |= info->scan.from != actuator->scan.from ||
+                 info->scan.to != actuator->scan.to ||
+                 info->scan.speed != actuator->scan.speed;
+      info->scan = actuator->scan;
+    }
+
+  if (changed)
+    hyscan_control_model_actuator_changed (self, name);
+
+  return TRUE;
+}
+
+
+static void
+hyscan_control_model_send_start (HyScanControlModel            *self,
+                                 const HyScanControlModelStart *start)
+{
+  HyScanControlModelPrivate *priv = self->priv;
+
+  g_signal_emit (self, hyscan_control_model_signals[SIGNAL_START_SENT], 0);
+
+  /* Устанавливаем параметры для старта ГЛ. */
+  g_mutex_lock (&priv->lock);
+  hyscan_control_model_start_free (priv->start);
+  priv->start = hyscan_control_model_start_copy (start);
+  priv->start_stop = SONAR_START;
+  priv->wakeup = TRUE;
+  g_cond_signal (&priv->cond);
+  g_mutex_unlock (&priv->lock);
+}
+
+static gboolean
+hyscan_control_model_emit_before_start (HyScanControlModel *self)
+{
+  gboolean cancel = FALSE;
+
+  /* Сигнал "before-start" для подготовки всех систем к началу записи и возможности отменить запись. */
+  g_signal_emit (self, hyscan_control_model_signals[SIGNAL_BEFORE_START], 0, &cancel);
+  if (cancel)
+    {
+      g_info ("HyScanControlModel: sonar start cancelled in \"before-start\" signal");
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
+/* Эта простынка отправляет все текущие параметры (окромя офсетов)
+ * в HyScanControl и должна вызываться в потоке. */
+static gboolean
+hyscan_control_model_setup_before_start (HyScanControlModel *self)
+{
+  HyScanControlModelPrivate *priv = self->priv;
+  HyScanControl *backend = priv->control;
+  GHashTableIter iter;
+  gpointer k, v;
+  gboolean status;
+
+  /* Настраиваю локаторы. */
+  g_hash_table_iter_init (&iter, priv->sources);
+  while (g_hash_table_iter_next (&iter, &k, &v))
+    {
+      HyScanSourceType source = GPOINTER_TO_INT (k);
+      HyScanControlModelSource *info = v;
+
+      if (!hyscan_control_model_tvg_set_internal (HYSCAN_SONAR (backend), source, &info->tvg))
+        return FALSE;
+
+      if (!hyscan_control_model_rec_set_internal (HYSCAN_SONAR (backend), source, &info->rec))
+        return FALSE;
+
+      if (!hyscan_control_model_gen_set_internal (HYSCAN_SONAR (backend), source, &info->gen))
+        return FALSE;
+    }
+
+  /* Настраиваю датчики. */
+  g_hash_table_iter_init (&iter, priv->sensors);
+  while (g_hash_table_iter_next (&iter, &k, &v))
+    {
+      const gchar *name = k;
+      HyScanControlModelSensor *info = v;
+
+      if (hyscan_sensor_set_enable (HYSCAN_SENSOR (backend), name, info->enable))
+        continue;
+
+      g_warning ("HyScanControlModel: couldn't enable sensor %s", name);
+      return FALSE;
+    }
+
+  /* Настраиваю актуаторы. */
+  g_hash_table_iter_init (&iter, priv->actuators);
+  while (g_hash_table_iter_next (&iter, &k, &v))
+    {
+      const gchar *name = k;
+      HyScanControlModelActuator *info = v;
+
+      switch (info->mode)
+        {
+        case HYSCAN_ACTUATOR_MODE_NONE:
+          status = hyscan_actuator_disable (HYSCAN_ACTUATOR (backend), name);
+          break;
+
+        case HYSCAN_ACTUATOR_MODE_SCAN:
+          status = hyscan_actuator_scan (HYSCAN_ACTUATOR (backend), name,
+                                         info->scan.from,
+                                         info->scan.to,
+                                         info->scan.speed);
+          break;
+
+        case HYSCAN_ACTUATOR_MODE_MANUAL:
+          status = hyscan_actuator_manual (HYSCAN_ACTUATOR (backend), name,
+                                           info->manual.angle);
+          break;
+
+        default:
+          g_assert_not_reached ();
+        }
+
+      if (status)
+        continue;
+
+      g_warning ("HyScanControlModel: couldn't setup actuator %s", name);
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
+static gpointer
+hyscan_control_model_thread (gpointer data)
+{
+  HyScanControlModel *self = data;
+  HyScanControlModelPrivate *priv = self->priv;
+  HyScanSonar *sonar = HYSCAN_SONAR (priv->control);
+
+  while (!g_atomic_int_get (&priv->shutdown))
+    {
+      HyScanControlModelStart *start;
+      gint start_stop;
+      gboolean sync;
+
+      /* Если ничего не поменялось, жду. */
+      {
+        g_mutex_lock (&priv->lock);
+
+        while (!priv->wakeup)
+          g_cond_wait (&priv->cond, &priv->lock);
+
+        /* Переписываем все изменения. */
+        sync = priv->sync;
+        priv->sync = FALSE;
+
+        start_stop = priv->start_stop;
+        priv->start_stop = SONAR_NO_CHANGE;
+
+        start = priv->start;
+        priv->start = NULL;
+
+        priv->wakeup = FALSE;
+
+        g_mutex_unlock (&priv->lock);
+      }
+
+      /* Синхронизирую локатор. */
+      if (sync)
+        hyscan_device_sync (HYSCAN_DEVICE (sonar));
+
+      /* Включаем локатор. */
+      if (start_stop == SONAR_START)
+        {
+          gboolean status;
+
+          if (start->generate_name)
+            {
+              g_free (start->track);
+              start->track = hyscan_control_model_generate_name (self, start->project, start->generate_suffix);
+            }
+
+          status = hyscan_control_model_setup_before_start (self);
+
+          status &= hyscan_sonar_start (sonar,
+                                        start->project, start->track,
+                                        start->track_type, start->plan);
+
+          if (!status)
+            {
+              g_warning ("HyScanControlModel: internal sonar failed to start");
+              g_clear_pointer (&start, &hyscan_control_model_start_free);
+            }
+        }
+
+      /* Выключаем локатор. */
+      else if (start_stop == SONAR_STOP)
+        {
+          g_clear_pointer (&start, &hyscan_control_model_start_free);
+          hyscan_sonar_stop (sonar);
+        }
+
+      /* Отправляем сигнал об изменении статуса работы локатора. */
+      if (start_stop != SONAR_NO_CHANGE)
+        {
+          g_mutex_lock (&priv->lock);
+          hyscan_control_model_start_free (priv->started);
+          priv->started = start;
+          g_mutex_unlock (&priv->lock);
+
+          g_idle_add ((GSourceFunc) hyscan_control_model_start_stop, self);
+        }
+    }
+
+  return NULL;
+}
+
+/*
+ *
+ * Имплементации интерфейсов.
+ *
+ */
 static HyScanSonarReceiverModeType
 hyscan_control_model_receiver_get_mode (HyScanSonarState *sonar,
                                         HyScanSourceType  source)
@@ -1153,9 +1595,9 @@ hyscan_control_model_get_start (HyScanSonarState  *sonar,
 }
 
 static gboolean
-hyscan_control_model_antenna_set_offset (HyScanSonar               *sonar,
-                                         HyScanSourceType           source,
-                                         const HyScanAntennaOffset *offset)
+hyscan_control_model_sonar_antenna_set_offset (HyScanSonar               *sonar,
+                                               HyScanSourceType           source,
+                                               const HyScanAntennaOffset *offset)
 {
   HyScanControlModel *self = HYSCAN_CONTROL_MODEL (sonar);
   HyScanControlModelPrivate *priv = self->priv;
@@ -1307,40 +1749,6 @@ hyscan_control_model_tvg_disable (HyScanSonar      *sonar,
   return hyscan_control_model_tvg_set (HYSCAN_CONTROL_MODEL (sonar), source, &tvg);
 }
 
-static void
-hyscan_control_model_send_start (HyScanControlModel            *self,
-                                 const HyScanControlModelStart *start)
-{
-  HyScanControlModelPrivate *priv = self->priv;
-
-  g_signal_emit (self, hyscan_control_model_signals[SIGNAL_START_SENT], 0);
-
-  /* Устанавливаем параметры для старта ГЛ. */
-  g_mutex_lock (&priv->lock);
-  hyscan_control_model_start_free (priv->start);
-  priv->start = hyscan_control_model_start_copy (start);
-  priv->start_stop = SONAR_START;
-  priv->wakeup = TRUE;
-  g_cond_signal (&priv->cond);
-  g_mutex_unlock (&priv->lock);
-}
-
-static gboolean 
-hyscan_control_model_emit_before_start (HyScanControlModel *self)
-{
-  gboolean cancel = FALSE;
-
-  /* Сигнал "before-start" для подготовки всех систем к началу записи и возможности отменить запись. */
-  g_signal_emit (self, hyscan_control_model_signals[SIGNAL_BEFORE_START], 0, &cancel);
-  if (cancel)
-    {
-      g_info ("HyScanControlModel: sonar start cancelled in \"before-start\" signal");
-      return FALSE;
-    }
-  
-  return TRUE;
-}
-
 static gboolean
 hyscan_control_model_sonar_start (HyScanSonar           *sonar,
                                   const gchar           *project_name,
@@ -1365,7 +1773,7 @@ hyscan_control_model_sonar_start (HyScanSonar           *sonar,
 }
 
 static gboolean
-hyscan_control_model_stop (HyScanSonar *sonar)
+hyscan_control_model_sonar_stop (HyScanSonar *sonar)
 {
   HyScanControlModel *self = HYSCAN_CONTROL_MODEL (sonar);
   HyScanControlModelPrivate *priv = self->priv;
@@ -1383,12 +1791,6 @@ hyscan_control_model_stop (HyScanSonar *sonar)
   return TRUE;
 }
 
-static gboolean
-hyscan_control_model_sync (HyScanSonar *sonar)
-{
-  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (sonar);
-  return hyscan_sonar_sync (HYSCAN_SONAR (self->priv->control));
-}
 
 static gboolean
 hyscan_control_model_sensor_get_enabled (HyScanSensorState *sensor,
@@ -1401,6 +1803,37 @@ hyscan_control_model_sensor_get_enabled (HyScanSensorState *sensor,
     return FALSE;
 
   return info->enable;
+}
+
+static gboolean
+hyscan_control_model_sensor_antenna_set_offset (HyScanSensor              *sensor,
+                                                const gchar               *name,
+                                                const HyScanAntennaOffset *offset)
+{
+  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (sensor);
+  HyScanControlModelPrivate *priv = self->priv;
+  HyScanControlModelSensor *info = g_hash_table_lookup (priv->sensors, name);
+  gboolean changed;
+
+  if (info == NULL)
+    return FALSE;
+
+  if (!hyscan_sensor_antenna_set_offset (HYSCAN_SENSOR (priv->control), name, offset))
+    return FALSE;
+
+  /* Такая же логика, как у локаторов (ТВГ, генератор, приемник). */
+  changed = info->offset.forward != offset->forward ||
+            info->offset.starboard != offset->starboard ||
+            info->offset.vertical != offset->vertical ||
+            info->offset.yaw != offset->yaw ||
+            info->offset.pitch != offset->pitch ||
+            info->offset.roll != offset->roll;
+
+  info->offset = *offset;
+  if (changed)
+    hyscan_control_model_sensor_changed (self, name);
+
+  return TRUE;
 }
 
 static gboolean
@@ -1422,144 +1855,27 @@ hyscan_control_model_sensor_set_enable (HyScanSensor *sensor,
   if (enable != info->enable)
     {
       info->enable = enable;
-      g_signal_emit (self, hyscan_control_model_signals[SIGNAL_SENSOR],
-                     g_quark_from_string (name), name);
+      hyscan_control_model_sensor_changed (self, name);
     }
 
   return TRUE;
 }
 
 static gboolean
-hyscan_control_model_sensor_antenna_set_offset (HyScanSensor              *sensor,
-                                                const gchar               *name,
-                                                const HyScanAntennaOffset *offset)
+hyscan_control_model_device_state_get_disconnected (HyScanDeviceState *device_state)
 {
-  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (sensor);
-  HyScanControlModelPrivate *priv = self->priv;
-  HyScanControlModelSensor *info = g_hash_table_lookup (priv->sensors, name);
-
-  if (info == NULL)
-    return FALSE;
-
-  if (!hyscan_sensor_antenna_set_offset (HYSCAN_SENSOR (priv->control), name, offset))
-    return FALSE;
-
-  /* Такая же логика, как у локаторов (ТВГ, генератор, приемник). */
-   info->offset = *offset;
-   g_signal_emit (self, hyscan_control_model_signals[SIGNAL_SENSOR],
-                  g_quark_from_string (name), name);
-   return TRUE;
+  return HYSCAN_CONTROL_MODEL (device_state)->priv->disconnected;
 }
 
-static HyScanDataSchema *
-hyscan_control_model_param_schema (HyScanParam *param)
+static GList *
+hyscan_control_model_device_state_get_sound_velocity (HyScanDeviceState *device_state)
 {
-  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (param);
-  return hyscan_param_schema (HYSCAN_PARAM (self->priv->control));
-}
-
-static gpointer
-hyscan_control_model_thread (gpointer data)
-{
-  HyScanControlModel *self = data;
-  HyScanControlModelPrivate *priv = self->priv;
-  HyScanSonar *sonar = HYSCAN_SONAR (priv->control);
-
-  while (!g_atomic_int_get (&priv->shutdown))
-    {
-      HyScanControlModelStart *start;
-      gint start_stop;
-      gboolean sync;
-
-      /* Если ничего не поменялось, жду. */
-      {
-        g_mutex_lock (&priv->lock);
-
-        while (!priv->wakeup)
-          g_cond_wait (&priv->cond, &priv->lock);
-
-        /* Переписываем все изменения. */
-        sync = priv->sync;
-        priv->sync = FALSE;
-
-        start_stop = priv->start_stop;
-        priv->start_stop = SONAR_NO_CHANGE;
-
-        start = priv->start;
-        priv->start = NULL;
-
-        priv->wakeup = FALSE;
-
-        g_mutex_unlock (&priv->lock);
-      }
-
-      /* Синхронизирую локатор. */
-      if (sync)
-        hyscan_sonar_sync (sonar);
-
-      /* Включаем локатор. */
-      if (start_stop == SONAR_START)
-        {
-          gboolean status;
-
-          if (start->generate_name)
-            {
-              g_free (start->track);
-              start->track = hyscan_control_model_generate_name (self, start->project, start->generate_suffix);
-            }
-
-          status = hyscan_sonar_start (sonar,
-                                       start->project, start->track,
-                                       start->track_type, start->plan);
-
-          if (!status)
-            {
-              g_warning ("HyScanControlModel: internal sonar failed to start");
-              g_clear_pointer (&start, &hyscan_control_model_start_free);
-            }
-        }
-
-      /* Выключаем локатор. */
-      else if (start_stop == SONAR_STOP)
-        {
-          g_clear_pointer (&start, &hyscan_control_model_start_free);
-          hyscan_sonar_stop (sonar);
-        }
-
-      /* Отправляем сигнал об изменении статуса работы локатора. */
-      if (start_stop != SONAR_NO_CHANGE)
-        {
-          g_mutex_lock (&priv->lock);
-          hyscan_control_model_start_free (priv->started);
-          priv->started = start;
-          g_mutex_unlock (&priv->lock);
-
-          g_idle_add ((GSourceFunc) hyscan_control_model_start_stop, self);
-        }
-    }
-
-  return NULL;
-}
-
-static gboolean
-hyscan_control_model_param_set (HyScanParam     *param,
-                                HyScanParamList *list)
-{
-  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (param);
+  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (device_state);
   HyScanControlModelPrivate *priv = self->priv;
 
-  return hyscan_param_set (HYSCAN_PARAM (priv->control), list);
+  return g_list_copy_deep (priv->sound_velocity, (GCopyFunc) hyscan_sound_velocity_copy, NULL);
 }
 
-static gboolean
-hyscan_control_model_param_get (HyScanParam     *param,
-                                HyScanParamList *list)
-{
-  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (param);
-  HyScanControlModelPrivate *priv = self->priv;
-
-  return hyscan_param_get (HYSCAN_PARAM (priv->control), list);
-}
 
 static gboolean
 hyscan_control_model_device_disconnect (HyScanDevice *device)
@@ -1592,90 +1908,153 @@ hyscan_control_model_device_set_sound_velocity (HyScanDevice *device,
 }
 
 static gboolean
-hyscan_control_model_device_state_get_disconnected (HyScanDeviceState *device_state)
+hyscan_control_model_sync (HyScanDevice *device)
 {
-  return HYSCAN_CONTROL_MODEL (device_state)->priv->disconnected;
+  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (device);
+  return hyscan_device_sync (HYSCAN_DEVICE (self->priv->control));
 }
 
-static GList *
-hyscan_control_model_device_state_get_sound_velocity (HyScanDeviceState *device_state)
+static HyScanActuatorModeType
+hyscan_control_model_actuator_state_get_mode (HyScanActuatorState *actuator,
+                                              const gchar         *name)
 {
-  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (device_state);
+  HyScanControlModelActuator *info;
+  HyScanControlModelPrivate *priv = HYSCAN_CONTROL_MODEL (actuator)->priv;
+
+  info = g_hash_table_lookup (priv->actuators, name);
+  if (info == NULL)
+    return HYSCAN_ACTUATOR_MODE_NONE;
+
+  return info->mode;
+}
+
+static gboolean
+hyscan_control_model_actuator_state_get_disable (HyScanActuatorState *actuator,
+                                                 const gchar         *name)
+{
+  HyScanControlModelActuator *info;
+  HyScanControlModelPrivate *priv = HYSCAN_CONTROL_MODEL (actuator)->priv;
+
+  info = g_hash_table_lookup (priv->actuators, name);
+  if (info == NULL)
+    return FALSE;
+
+  return info->mode == HYSCAN_ACTUATOR_MODE_NONE;
+}
+
+static gboolean
+hyscan_control_model_actuator_state_get_scan (HyScanActuatorState *actuator,
+                                              const gchar         *name,
+                                              gdouble             *from,
+                                              gdouble             *to,
+                                              gdouble             *speed)
+{
+  HyScanControlModelActuator *info;
+  HyScanControlModelPrivate *priv = HYSCAN_CONTROL_MODEL (actuator)->priv;
+
+  info = g_hash_table_lookup (priv->actuators, name);
+  if (info == NULL)
+    return FALSE;
+
+  if (info->mode != HYSCAN_ACTUATOR_MODE_SCAN)
+    return FALSE;
+
+  from != NULL ? *from = info->scan.from : 0;
+  to != NULL ? *to = info->scan.to : 0;
+  speed != NULL ? *speed = info->scan.speed : 0;
+
+  return TRUE;
+}
+
+static gboolean
+hyscan_control_model_actuator_state_get_manual (HyScanActuatorState *actuator,
+                                                const gchar         *name,
+                                                gdouble             *angle)
+{
+  HyScanControlModelActuator *info;
+  HyScanControlModelPrivate *priv = HYSCAN_CONTROL_MODEL (actuator)->priv;
+
+  info = g_hash_table_lookup (priv->actuators, name);
+  if (info == NULL)
+    return FALSE;
+
+  if (info->mode != HYSCAN_ACTUATOR_MODE_MANUAL)
+    return FALSE;
+
+  angle != NULL ? *angle = info->manual.angle : 0;
+
+  return TRUE;
+}
+
+static gboolean
+hyscan_control_model_actuator_disable (HyScanActuator *actuator,
+                                       const gchar    *name)
+{
+  HyScanControlModelActuator info = { .mode = HYSCAN_ACTUATOR_MODE_NONE};
+
+  return hyscan_control_model_actuator_set (HYSCAN_CONTROL_MODEL (actuator), name, &info);
+}
+
+static gboolean
+hyscan_control_model_actuator_scan (HyScanActuator *actuator,
+                                    const gchar    *name,
+                                    gdouble         from,
+                                    gdouble         to,
+                                    gdouble         speed)
+{
+  HyScanControlModelActuator info = { .mode = HYSCAN_ACTUATOR_MODE_SCAN};
+
+  info.scan.from = from;
+  info.scan.to = to;
+  info.scan.speed = speed;
+
+  return hyscan_control_model_actuator_set (HYSCAN_CONTROL_MODEL (actuator), name, &info);
+}
+
+static gboolean
+hyscan_control_model_actuator_manual (HyScanActuator *actuator,
+                                      const gchar    *name,
+                                      gdouble         angle)
+{
+  HyScanControlModelActuator info = { .mode = HYSCAN_ACTUATOR_MODE_MANUAL};
+
+  info.manual.angle = angle;
+
+  return hyscan_control_model_actuator_set (HYSCAN_CONTROL_MODEL (actuator), name, &info);
+}
+
+static HyScanDataSchema *
+hyscan_control_model_param_schema (HyScanParam *param)
+{
+  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (param);
+  return hyscan_param_schema (HYSCAN_PARAM (self->priv->control));
+}
+
+static gboolean
+hyscan_control_model_param_set (HyScanParam     *param,
+                                HyScanParamList *list)
+{
+  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (param);
   HyScanControlModelPrivate *priv = self->priv;
 
-  return g_list_copy_deep (priv->sound_velocity, (GCopyFunc) hyscan_sound_velocity_copy, NULL);
+  return hyscan_param_set (HYSCAN_PARAM (priv->control), list);
 }
 
-static void
-hyscan_control_model_sonar_state_iface_init (HyScanSonarStateInterface *iface)
+static gboolean
+hyscan_control_model_param_get (HyScanParam     *param,
+                                HyScanParamList *list)
 {
-  iface->receiver_get_mode = hyscan_control_model_receiver_get_mode;
-  iface->receiver_get_time = hyscan_control_model_receiver_get_time;
-  iface->receiver_get_disabled = hyscan_control_model_receiver_get_disabled;
-  iface->generator_get_preset = hyscan_control_model_generator_get_preset;
-  iface->generator_get_disabled = hyscan_control_model_generator_get_disabled;
-  iface->tvg_get_mode = hyscan_control_model_tvg_get_mode;
-  iface->tvg_get_auto = hyscan_control_model_tvg_get_auto;
-  iface->tvg_get_constant = hyscan_control_model_tvg_get_constant;
-  iface->tvg_get_linear_db = hyscan_control_model_tvg_get_linear_db;
-  iface->tvg_get_logarithmic = hyscan_control_model_tvg_get_logarithmic;
-  iface->tvg_get_disabled = hyscan_control_model_tvg_get_disabled;
-  iface->get_start = hyscan_control_model_get_start;
+  HyScanControlModel *self = HYSCAN_CONTROL_MODEL (param);
+  HyScanControlModelPrivate *priv = self->priv;
+
+  return hyscan_param_get (HYSCAN_PARAM (priv->control), list);
 }
 
-static void
-hyscan_control_model_sonar_iface_init (HyScanSonarInterface *iface)
-{
-  iface->antenna_set_offset = hyscan_control_model_antenna_set_offset;
-  iface->receiver_set_time = hyscan_control_model_receiver_set_time;
-  iface->receiver_set_auto = hyscan_control_model_receiver_set_auto;
-  iface->receiver_disable = hyscan_control_model_receiver_disable;
-  iface->generator_set_preset = hyscan_control_model_generator_set_preset;
-  iface->generator_disable = hyscan_control_model_generator_disable;
-  iface->tvg_set_auto = hyscan_control_model_tvg_set_auto;
-  iface->tvg_set_constant = hyscan_control_model_tvg_set_constant;
-  iface->tvg_set_linear_db = hyscan_control_model_tvg_set_linear_db;
-  iface->tvg_set_logarithmic = hyscan_control_model_tvg_set_logarithmic;
-  iface->tvg_disable = hyscan_control_model_tvg_disable;
-  iface->start = hyscan_control_model_sonar_start;
-  iface->stop = hyscan_control_model_stop;
-  iface->sync = hyscan_control_model_sync;
-}
-
-static void
-hyscan_control_model_sensor_state_iface_init (HyScanSensorStateInterface *iface)
-{
-  iface->get_enabled = hyscan_control_model_sensor_get_enabled;
-}
-
-static void
-hyscan_control_model_sensor_iface_init (HyScanSensorInterface *iface)
-{
-  iface->antenna_set_offset = hyscan_control_model_sensor_antenna_set_offset;
-  iface->set_enable = hyscan_control_model_sensor_set_enable;
-}
-
-static void
-hyscan_control_model_device_iface_init (HyScanDeviceInterface *iface)
-{
-  iface->disconnect = hyscan_control_model_device_disconnect;
-  iface->set_sound_velocity = hyscan_control_model_device_set_sound_velocity;
-}
-
-static void
-hyscan_control_model_device_state_iface_init (HyScanDeviceStateInterface *iface)
-{
-  iface->get_disconnected = hyscan_control_model_device_state_get_disconnected;
-  iface->get_sound_velocity = hyscan_control_model_device_state_get_sound_velocity;
-}
-
-static void
-hyscan_control_model_param_iface_init (HyScanParamInterface *iface)
-{
-  iface->schema = hyscan_control_model_param_schema;
-  iface->set = hyscan_control_model_param_set;
-  iface->get = hyscan_control_model_param_get;
-}
+/*
+ *
+ * Публичные методы.
+ *
+ */
 
 /**
  * hyscan_control_model_new:
@@ -1724,13 +2103,9 @@ void
 hyscan_control_model_set_sync_timeout (HyScanControlModel *model,
                                        guint               msec)
 {
-  HyScanControlModelPrivate *priv;
-
   g_return_if_fail (HYSCAN_IS_CONTROL_MODEL (model));
 
-  priv = model->priv;
-
-  priv->sync_timeout = msec;
+  model->priv->sync_timeout = msec;
 }
 
 /**
@@ -1744,13 +2119,9 @@ hyscan_control_model_set_sync_timeout (HyScanControlModel *model,
 guint
 hyscan_control_model_get_sync_timeout (HyScanControlModel *model)
 {
-  HyScanControlModelPrivate *priv;
-
   g_return_val_if_fail (HYSCAN_IS_CONTROL_MODEL (model), 0);
 
-  priv = model->priv;
-
-  return priv->sync_timeout;
+  return model->priv->sync_timeout;
 }
 
 /**
@@ -1893,7 +2264,7 @@ hyscan_control_model_start (HyScanControlModel *model)
 
   g_return_val_if_fail (HYSCAN_IS_CONTROL_MODEL (model), FALSE);
   priv = model->priv;
-  
+
   if (!hyscan_control_model_emit_before_start (model))
     {
       success = FALSE;
@@ -1919,4 +2290,93 @@ exit:
   g_clear_pointer (&priv->suffix1, g_free);
 
   return success;
+}
+
+static void
+hyscan_control_model_sonar_state_iface_init (HyScanSonarStateInterface *iface)
+{
+  iface->receiver_get_mode = hyscan_control_model_receiver_get_mode;
+  iface->receiver_get_time = hyscan_control_model_receiver_get_time;
+  iface->receiver_get_disabled = hyscan_control_model_receiver_get_disabled;
+  iface->generator_get_preset = hyscan_control_model_generator_get_preset;
+  iface->generator_get_disabled = hyscan_control_model_generator_get_disabled;
+  iface->tvg_get_mode = hyscan_control_model_tvg_get_mode;
+  iface->tvg_get_auto = hyscan_control_model_tvg_get_auto;
+  iface->tvg_get_constant = hyscan_control_model_tvg_get_constant;
+  iface->tvg_get_linear_db = hyscan_control_model_tvg_get_linear_db;
+  iface->tvg_get_logarithmic = hyscan_control_model_tvg_get_logarithmic;
+  iface->tvg_get_disabled = hyscan_control_model_tvg_get_disabled;
+  iface->get_start = hyscan_control_model_get_start;
+}
+
+static void
+hyscan_control_model_sonar_iface_init (HyScanSonarInterface *iface)
+{
+  iface->antenna_set_offset = hyscan_control_model_sonar_antenna_set_offset;
+  iface->receiver_set_time = hyscan_control_model_receiver_set_time;
+  iface->receiver_set_auto = hyscan_control_model_receiver_set_auto;
+  iface->receiver_disable = hyscan_control_model_receiver_disable;
+  iface->generator_set_preset = hyscan_control_model_generator_set_preset;
+  iface->generator_disable = hyscan_control_model_generator_disable;
+  iface->tvg_set_auto = hyscan_control_model_tvg_set_auto;
+  iface->tvg_set_constant = hyscan_control_model_tvg_set_constant;
+  iface->tvg_set_linear_db = hyscan_control_model_tvg_set_linear_db;
+  iface->tvg_set_logarithmic = hyscan_control_model_tvg_set_logarithmic;
+  iface->tvg_disable = hyscan_control_model_tvg_disable;
+  iface->start = hyscan_control_model_sonar_start;
+  iface->stop = hyscan_control_model_sonar_stop;
+}
+
+static void
+hyscan_control_model_sensor_state_iface_init (HyScanSensorStateInterface *iface)
+{
+  iface->get_enabled = hyscan_control_model_sensor_get_enabled;
+  iface->antenna_get_offset = NULL;
+}
+
+static void
+hyscan_control_model_sensor_iface_init (HyScanSensorInterface *iface)
+{
+  iface->antenna_set_offset = hyscan_control_model_sensor_antenna_set_offset;
+  iface->set_enable = hyscan_control_model_sensor_set_enable;
+}
+
+static void
+hyscan_control_model_device_state_iface_init (HyScanDeviceStateInterface *iface)
+{
+  iface->get_disconnected = hyscan_control_model_device_state_get_disconnected;
+  iface->get_sound_velocity = hyscan_control_model_device_state_get_sound_velocity;
+}
+
+static void
+hyscan_control_model_device_iface_init (HyScanDeviceInterface *iface)
+{
+  iface->disconnect = hyscan_control_model_device_disconnect;
+  iface->set_sound_velocity = hyscan_control_model_device_set_sound_velocity;
+  iface->sync = hyscan_control_model_sync;
+}
+
+static void
+hyscan_control_model_actuator_state_iface_init (HyScanActuatorStateInterface *iface)
+{
+  iface->get_mode = hyscan_control_model_actuator_state_get_mode;
+  iface->get_disable = hyscan_control_model_actuator_state_get_disable;
+  iface->get_scan = hyscan_control_model_actuator_state_get_scan;
+  iface->get_manual = hyscan_control_model_actuator_state_get_manual;
+}
+
+static void
+hyscan_control_model_actuator_iface_init (HyScanActuatorInterface *iface)
+{
+  iface->disable = hyscan_control_model_actuator_disable;
+  iface->scan = hyscan_control_model_actuator_scan;
+  iface->manual = hyscan_control_model_actuator_manual;
+}
+
+static void
+hyscan_control_model_param_iface_init (HyScanParamInterface *iface)
+{
+  iface->schema = hyscan_control_model_param_schema;
+  iface->set = hyscan_control_model_param_set;
+  iface->get = hyscan_control_model_param_get;
 }
