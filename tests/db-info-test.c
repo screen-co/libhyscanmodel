@@ -76,6 +76,7 @@ create_source (HyScanDataWriter *writer,
 
   data = hyscan_buffer_new ();
   hyscan_buffer_wrap (data, HYSCAN_DATA_BLOB, SOURCE_DATA, sizeof (SOURCE_DATA));
+  hyscan_data_writer_acoustic_create (writer, source, 1, NULL, NULL, &info);
 
   if (hyscan_source_is_sensor (source))
     {
@@ -83,7 +84,7 @@ create_source (HyScanDataWriter *writer,
     }
   else
     {
-      hyscan_data_writer_acoustic_add_data (writer, source, 1, FALSE, 0, &info, data);
+      hyscan_data_writer_acoustic_add_data (writer, source, 1, FALSE, 0, data);
     }
 
   g_object_unref (data);

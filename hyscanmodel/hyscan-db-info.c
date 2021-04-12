@@ -809,6 +809,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
 
   /* Не обрабатываем пустые галсы, а добавляем их в список проверяемых. */
   channels = hyscan_db_channel_list (db, track_id);
+
   if (channels == NULL)
     {
       hyscan_db_info_add_active_id (actives, db, track_id, track_mod_counter, FALSE);
@@ -817,7 +818,7 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
 
   list = hyscan_param_list_new ();
 
-  info = g_slice_new0 (HyScanTrackInfo);
+  info = hyscan_db_info_track_info_new ();
   info->name = g_strdup (track_name);
 
   /* Информация о галсе из галса. */
@@ -915,14 +916,62 @@ hyscan_db_info_get_track_info_int (HyScanDB    *db,
       if (!hyscan_channel_get_types_by_id (channels[i], &source, &type, &channel))
         continue;
 
-      /* Учитываем только первые каналы с данными. */
-      if ((type != HYSCAN_CHANNEL_DATA) || (channel != 1))
+      if (type != HYSCAN_CHANNEL_DATA)
+        continue;
+
+      /* По акустике учитываем только первые каналы. По датчикам все. */
+      if (hyscan_source_is_sonar (source) && (channel != 1))
+        continue;
+      if (!hyscan_source_is_sensor (source) && !hyscan_source_is_sonar (source))
         continue;
 
       /* Пытаемся узнать есть ли в нём записанные данные. */
       channel_id = hyscan_db_channel_open (db, track_id, channels[i]);
       if (channel_id <= 0)
         continue;
+
+      param_id = hyscan_db_channel_param_open (db, channel_id);
+      if (param_id > 0)
+        {
+          list = hyscan_param_list_new ();
+          hyscan_param_list_add (list, "/schema/id");
+          hyscan_param_list_add (list, "/schema/version");
+
+          if (hyscan_source_is_sonar (source))
+            {
+              HyScanDBInfoSourceInfo *source_info = hyscan_db_info_source_info_new ();
+
+              hyscan_param_list_add (list, "/actuator");
+
+              if ((hyscan_db_param_get (db, param_id, NULL, list)) &&
+                  (hyscan_param_list_get_integer (list, "/schema/id") == ACOUSTIC_CHANNEL_SCHEMA_ID) &&
+                  (hyscan_param_list_get_integer (list, "/schema/version") == ACOUSTIC_CHANNEL_SCHEMA_VERSION))
+                {
+                  source_info->actuator = hyscan_param_list_dup_string (list, "/actuator");
+                }
+
+              g_hash_table_insert (info->source_infos, GINT_TO_POINTER (source), source_info);
+            }
+          else if (hyscan_source_is_sensor (source))
+            {
+              HyScanDBInfoSensorInfo *sensor_info = hyscan_db_info_sensor_info_new ();
+              gchar *sensor_name = NULL;
+
+              hyscan_param_list_add (list, "/sensor-name");
+              if ((hyscan_db_param_get (db, param_id, NULL, list)) &&
+                  (hyscan_param_list_get_integer (list, "/schema/id") == SENSOR_CHANNEL_SCHEMA_ID) &&
+                  (hyscan_param_list_get_integer (list, "/schema/version") == SENSOR_CHANNEL_SCHEMA_VERSION))
+                {
+                  sensor_name = hyscan_param_list_dup_string (list, "/sensor-name");
+                }
+
+              sensor_info->channel = channel;
+              g_hash_table_insert (info->sensor_infos, sensor_name, sensor_info);
+            }
+
+          g_object_unref (list);
+          hyscan_db_close (db, param_id);
+        }
 
       active = hyscan_db_channel_is_writable (db, channel_id);
 
@@ -1130,6 +1179,20 @@ hyscan_db_info_project_info_free (HyScanProjectInfo *info)
   g_slice_free (HyScanProjectInfo, info);
 }
 
+HyScanTrackInfo *
+hyscan_db_info_track_info_new (void)
+{
+  HyScanTrackInfo *new_info;
+  new_info = g_slice_new0 (HyScanTrackInfo);
+
+  new_info->source_infos = g_hash_table_new_full (g_direct_hash, g_direct_equal,
+                                                  NULL, (GDestroyNotify)hyscan_db_info_source_info_free);
+  new_info->sensor_infos = g_hash_table_new_full (g_str_hash, g_str_equal,
+                                                  NULL, (GDestroyNotify)hyscan_db_info_sensor_info_free);
+
+  return new_info;
+}
+
 /**
  * hyscan_db_info_track_info_copy:
  * @info: структура #HyScanTrackInfo для копирования
@@ -1143,8 +1206,10 @@ HyScanTrackInfo *
 hyscan_db_info_track_info_copy (HyScanTrackInfo *info)
 {
   HyScanTrackInfo *new_info;
+  GHashTableIter iter;
+  gpointer k, v;
 
-  new_info = g_slice_new0 (HyScanTrackInfo);
+  new_info = hyscan_db_info_track_info_new ();
 
   new_info->id = g_strdup (info->id);
   new_info->type = info->type;
@@ -1161,6 +1226,22 @@ hyscan_db_info_track_info_copy (HyScanTrackInfo *info)
   new_info->plan = hyscan_track_plan_copy (info->plan);
   memcpy (new_info->sources, info->sources, sizeof (info->sources));
   new_info->record = info->record;
+
+  g_hash_table_iter_init (&iter, info->source_infos);
+  while (g_hash_table_iter_next (&iter, &k, &v))
+    {
+      HyScanDBInfoSourceInfo * info = v;
+      info = hyscan_db_info_source_info_copy (info);
+      g_hash_table_insert (new_info->source_infos, k, info);
+    }
+
+  g_hash_table_iter_init (&iter, info->sensor_infos);
+  while (g_hash_table_iter_next (&iter, &k, &v))
+    {
+      HyScanDBInfoSensorInfo * info = v;
+      info = hyscan_db_info_sensor_info_copy (info);
+      g_hash_table_insert (new_info->sensor_infos, g_strdup(k), info);
+    }
 
   return new_info;
 }
@@ -1183,5 +1264,98 @@ hyscan_db_info_track_info_free (HyScanTrackInfo *info)
   g_clear_object (&info->sonar_info);
   hyscan_track_plan_free (info->plan);
 
+  g_clear_pointer (&info->source_infos, g_hash_table_unref);
+  g_clear_pointer (&info->sensor_infos, g_hash_table_unref);
+
   g_slice_free (HyScanTrackInfo, info);
 }
+
+/**
+ * hyscan_db_info_source_info_new:
+ *
+ * Функция создаёт структуру #HyScanDBInfoSourceInfo.
+ *
+ * Returns: (transfer full): Новая структура #HyScanDBInfoSourceInfo.
+ * Для удаления #hyscan_db_info_source_info_free.
+ */
+HyScanDBInfoSourceInfo *
+hyscan_db_info_source_info_new (void)
+{
+  return g_slice_new0 (HyScanDBInfoSourceInfo);
+}
+
+/**
+ * hyscan_db_info_source_info_copy:
+ * @info: структура #HyScanDBInfoSourceInfo для копирования
+ *
+ * Функция создаёт копию структуры #HyScanDBInfoSourceInfo.
+ *
+ * Returns: (transfer full): Новая структура #HyScanDBInfoSourceInfo.
+ * Для удаления #hyscan_db_info_source_info_free.
+ */
+HyScanDBInfoSourceInfo *
+hyscan_db_info_source_info_copy (HyScanDBInfoSourceInfo *info)
+{
+  HyScanDBInfoSourceInfo *new_info = hyscan_db_info_source_info_new ();
+  new_info->actuator = g_strdup (info->actuator);
+
+  return new_info;
+}
+
+/**
+ * hyscan_db_info_source_info_free:
+ * @info: структура #HyScanDBInfoSourceInfo для удаления
+ *
+ * Функция удаляет структуру #HyScanDBInfoSourceInfo.
+ */
+void
+hyscan_db_info_source_info_free (HyScanDBInfoSourceInfo *info)
+{
+  g_clear_pointer (&info->actuator, g_free);
+  g_slice_free (HyScanDBInfoSourceInfo, info);
+}
+
+/**
+ * hyscan_db_info_sensor_info_new:
+ *
+ * Функция создаёт новую структуру #HyScanDBInfoSensorInfo.
+ *
+ * Returns: (transfer full): Новая структура #HyScanDBInfoSensorInfo.
+ * Для удаления #hyscan_db_info_sensor_info_free.
+ */
+HyScanDBInfoSensorInfo *
+hyscan_db_info_sensor_info_new (void)
+{
+  return g_slice_new0 (HyScanDBInfoSensorInfo);
+}
+
+/**
+ * hyscan_db_info_sensor_info_copy:
+ * @info: структура #HyScanDBInfoSensorInfo для копирования
+ *
+ * Функция создаёт копию структуры #HyScanDBInfoSensorInfo.
+ *
+ * Returns: (transfer full): Новая структура #HyScanDBInfoSensorInfo.
+ * Для удаления #hyscan_db_info_sensor_info_free.
+ */
+HyScanDBInfoSensorInfo *
+hyscan_db_info_sensor_info_copy (HyScanDBInfoSensorInfo *info)
+{
+  HyScanDBInfoSensorInfo *new_info = hyscan_db_info_sensor_info_new ();
+  new_info->channel = info->channel;
+
+  return new_info;
+}
+
+/**
+ * hyscan_db_info_sensor_info_free:
+ * @info: структура #HyScanDBInfoSensorInfo для удаления
+ *
+ * Функция удаляет структуру #HyScanDBInfoSensorInfo.
+ */
+void
+hyscan_db_info_sensor_info_free (HyScanDBInfoSensorInfo *info)
+{
+  g_slice_free (HyScanDBInfoSensorInfo, info);
+}
+

@@ -42,6 +42,9 @@ G_BEGIN_DECLS
 typedef struct _HyScanProjectInfo HyScanProjectInfo;
 typedef struct _HyScanTrackInfo HyScanTrackInfo;
 
+typedef struct _HyScanDBInfoSourceInfo HyScanDBInfoSourceInfo;
+typedef struct _HyScanDBInfoSensorInfo HyScanDBInfoSensorInfo;
+
 /**
  * HyScanProjectInfo:
  * @name: название проекта
@@ -75,6 +78,8 @@ struct _HyScanProjectInfo
  * @sources: список источников данных
  * @record: признак записи данных в галс
  * @error: признак ошибки в галсе
+ * @source_infos: информация о каналах данных
+ * @sensor_infos: информация о датчиках
  *
  * Структура содержит информацию о галсе.
  */
@@ -93,6 +98,31 @@ struct _HyScanTrackInfo
   gboolean             sources[HYSCAN_SOURCE_LAST];
   gboolean             record;
   gboolean             error;
+
+  GHashTable          *source_infos; /* {HyScanSourceType: HyScanDBInfoSourceInfo*} */
+  GHashTable          *sensor_infos; /* {gchar *: HyScanDBInfoSourceInfo*} */
+};
+
+/**
+ * HyScanDBInfoSourceInfo:
+ * @actuator связанный с источником актуатор.
+ *
+ * Структура содержит информацию об источнике.
+ */
+struct _HyScanDBInfoSourceInfo
+{
+  gchar * actuator;
+};
+
+/**
+ * HyScanDBInfoSensorInfo:
+ * @channel номер канала этого датчика.
+ *
+ * Структура содержит информацию об датчике.
+ */
+struct _HyScanDBInfoSensorInfo
+{
+  guint channel;
 };
 
 #define HYSCAN_TYPE_DB_INFO             (hyscan_db_info_get_type ())
@@ -163,10 +193,31 @@ HYSCAN_API
 void                   hyscan_db_info_project_info_free        (HyScanProjectInfo     *info);
 
 HYSCAN_API
+HyScanTrackInfo *      hyscan_db_info_track_info_new           (void);
+
+HYSCAN_API
 HyScanTrackInfo *      hyscan_db_info_track_info_copy          (HyScanTrackInfo       *info);
 
 HYSCAN_API
 void                   hyscan_db_info_track_info_free          (HyScanTrackInfo       *info);
+
+HYSCAN_API
+HyScanDBInfoSourceInfo * hyscan_db_info_source_info_new        (void);
+
+HYSCAN_API
+HyScanDBInfoSourceInfo * hyscan_db_info_source_info_copy       (HyScanDBInfoSourceInfo *info);
+
+HYSCAN_API
+void                   hyscan_db_info_source_info_free         (HyScanDBInfoSourceInfo *info);
+
+HYSCAN_API
+HyScanDBInfoSensorInfo * hyscan_db_info_sensor_info_new        (void);
+
+HYSCAN_API
+HyScanDBInfoSensorInfo * hyscan_db_info_sensor_info_copy       (HyScanDBInfoSensorInfo *info);
+
+HYSCAN_API
+void                   hyscan_db_info_sensor_info_free         (HyScanDBInfoSensorInfo *info);
 
 G_END_DECLS
 

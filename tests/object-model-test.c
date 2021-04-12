@@ -361,13 +361,16 @@ make_track (HyScanDB *db,
   if (!hyscan_data_writer_start (writer, name, name, HYSCAN_TRACK_SURVEY, NULL, -1))
     g_error ("Couldn't start data writer.");
 
+  {
+    hyscan_data_writer_acoustic_create (writer, HYSCAN_SOURCE_SIDE_SCAN_PORT, 1, NULL, NULL, &info);
+  }
   /* Запишем что-то в галс. */
   for (i = 0; i < 2; i++)
     {
       gfloat vals = {0};
       hyscan_buffer_wrap_float (buffer, &vals, 1);
       hyscan_data_writer_acoustic_add_data (writer, HYSCAN_SOURCE_SIDE_SCAN_PORT,
-                                            1, FALSE, 1 + i, &info, buffer);
+                                            1, FALSE, 1 + i, buffer);
     }
 
   g_object_unref (writer);
