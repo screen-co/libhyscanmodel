@@ -525,7 +525,12 @@ hyscan_control_model_object_constructed (GObject *object)
   if (sensor != NULL)
     {
       for (i = 0; sensor[i] != NULL; i++)
-        g_hash_table_insert (priv->sensors, g_strdup (sensor[i]), g_new0 (HyScanControlModelSensor, 1));
+        {
+          HyScanControlModelSensor *info = g_new0 (HyScanControlModelSensor, 1);
+          info->enable = TRUE;
+
+          g_hash_table_insert (priv->sensors, g_strdup (sensor[i]), info);
+        }
     }
 
   /* Получаем список актуаторов. */
