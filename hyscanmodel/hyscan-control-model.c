@@ -89,6 +89,9 @@
 #include "hyscan-control-model.h"
 #include <hyscan-data-box.h>
 #include <hyscan-model-marshallers.h>
+#include <hyscan-sonar-driver.h>
+#include <hyscan-device-driver.h>
+#include <hyscan-sensor-driver.h>
 
 #define HYSCAN_CONTROL_MODEL_TIMEOUT (1000 /* Одна секунда*/)
 
@@ -305,41 +308,7 @@ static gboolean hyscan_control_model_actuator_set            (HyScanControlModel
                                                               const gchar                    *name,
                                                               HyScanControlModelActuator     *info);
 static gpointer hyscan_control_model_thread                  (gpointer                        data);
-static void     hyscan_control_model_sensor_data             (HyScanDevice                   *device,
-                                                              const gchar                    *sensor,
-                                                              gint                            source,
-                                                              gint64                          time,
-                                                              HyScanBuffer                   *data,
-                                                              HyScanControlModel             *self);
-static void     hyscan_control_model_sonar_signal            (HyScanDevice                   *device,
-                                                              gint                            source,
-                                                              guint                           channel,
-                                                              gint64                          time,
-                                                              HyScanBuffer                   *image,
-                                                              HyScanControlModel             *self);
-static void     hyscan_control_model_sonar_tvg               (HyScanDevice                   *device,
-                                                              gint                            source,
-                                                              guint                           channel,
-                                                              gint64                          time,
-                                                              HyScanBuffer                   *gains,
-                                                              HyScanControlModel             *self);
-static void     hyscan_control_model_sonar_acoustic_data     (HyScanDevice                   *device,
-                                                              gint                            source,
-                                                              guint                           channel,
-                                                              gboolean                        noise,
-                                                              gint64                          time,
-                                                              HyScanAcousticDataInfo         *info,
-                                                              HyScanBuffer                   *data,
-                                                              HyScanControlModel             *self);
-static void     hyscan_control_model_device_state            (HyScanDevice                   *device,
-                                                              const gchar                    *dev_id,
-                                                              HyScanControlModel             *self);
-static void     hyscan_control_model_device_log              (HyScanDevice                   *device,
-                                                              const gchar                    *source,
-                                                              gint64                          time,
-                                                              gint                            level,
-                                                              const gchar                    *message,
-                                                              HyScanControlModel             *self);
+
 static HyScanControlModelStart *
                 hyscan_control_model_start_copy               (const HyScanControlModelStart *start);
 
@@ -526,18 +495,18 @@ hyscan_control_model_object_constructed (GObject *object)
   const gchar *const *actuator;
 
   /* Ретрансляция сигналов. */
-  g_signal_connect (HYSCAN_SENSOR (priv->control), "sensor-data",
-                    G_CALLBACK (hyscan_control_model_sensor_data), self);
-  g_signal_connect (HYSCAN_DEVICE (priv->control), "device-state",
-                    G_CALLBACK (hyscan_control_model_device_state), self);
-  g_signal_connect (HYSCAN_DEVICE (priv->control), "device-log",
-                    G_CALLBACK (hyscan_control_model_device_log), self);
-  g_signal_connect (HYSCAN_SONAR (priv->control), "sonar-signal",
-                    G_CALLBACK (hyscan_control_model_sonar_signal), self);
-  g_signal_connect (HYSCAN_SONAR (priv->control), "sonar-tvg",
-                    G_CALLBACK (hyscan_control_model_sonar_tvg), self);
-  g_signal_connect (HYSCAN_SONAR (priv->control), "sonar-acoustic-data",
-                    G_CALLBACK (hyscan_control_model_sonar_acoustic_data), self);
+  g_signal_connect_swapped (HYSCAN_SENSOR (priv->control), "sensor-data",
+                            G_CALLBACK (hyscan_sensor_driver_send_data), self);
+  g_signal_connect_swapped (HYSCAN_DEVICE (priv->control), "device-state",
+                            G_CALLBACK (hyscan_device_driver_send_state), self);
+  g_signal_connect_swapped (HYSCAN_DEVICE (priv->control), "device-log",
+                            G_CALLBACK (hyscan_device_driver_send_log), self);
+  g_signal_connect_swapped (HYSCAN_SONAR (priv->control), "sonar-signal",
+                            G_CALLBACK (hyscan_sonar_driver_send_signal), self);
+  g_signal_connect_swapped (HYSCAN_SONAR (priv->control), "sonar-tvg",
+                            G_CALLBACK (hyscan_sonar_driver_send_tvg), self);
+  g_signal_connect_swapped (HYSCAN_SONAR (priv->control), "sonar-acoustic-data",
+                            G_CALLBACK (hyscan_sonar_driver_send_acoustic_data), self);
 
   priv->sync_timeout = HYSCAN_CONTROL_MODEL_TIMEOUT;
 
@@ -624,79 +593,6 @@ hyscan_control_model_start_stop (HyScanControlModel *self)
   g_signal_emit (self, hyscan_control_model_signals[SIGNAL_START_STOP], 0);
 
   return G_SOURCE_REMOVE;
-}
-
-/* Обработчик сигнала sensor-data. */
-static void
-hyscan_control_model_sensor_data (HyScanDevice       *device,
-                                  const gchar        *sensor,
-                                  gint                source,
-                                  gint64              time,
-                                  HyScanBuffer       *data,
-                                  HyScanControlModel *self)
-{
-  g_signal_emit_by_name (self, "sensor-data", sensor, source, time, data);
-}
-
-/* Обработчик сигнала sonar-signal. */
-static void
-hyscan_control_model_sonar_signal (HyScanDevice       *device,
-                                   gint                source,
-                                   guint               channel,
-                                   gint64              time,
-                                   HyScanBuffer       *image,
-                                   HyScanControlModel *self)
-{
-  g_signal_emit_by_name (self, "sonar-signal", source, channel, time, image);
-}
-
-/* Обработчик сигнала sonar-tvg. */
-static void
-hyscan_control_model_sonar_tvg (HyScanDevice       *device,
-                                gint                source,
-                                guint               channel,
-                                gint64              time,
-                                HyScanBuffer       *gains,
-                                HyScanControlModel *self)
-{
-  g_signal_emit_by_name (self, "sonar-tvg", source, channel, time, gains);
-}
-
-/* Обработчик сигнала sonar-acoustic-data. */
-static void
-hyscan_control_model_sonar_acoustic_data (HyScanDevice           *device,
-                                          gint                    source,
-                                          guint                   channel,
-                                          gboolean                noise,
-                                          gint64                  time,
-                                          HyScanAcousticDataInfo *info,
-                                          HyScanBuffer           *data,
-                                          HyScanControlModel     *self)
-{
-  g_signal_emit_by_name (self, "sonar-acoustic-data",
-                                source, channel, noise,
-                                time, info, data);
-}
-
-/* Обработчик сигнала device-state. */
-static void
-hyscan_control_model_device_state (HyScanDevice       *device,
-                                   const gchar        *dev_id,
-                                   HyScanControlModel *self)
-{
-  g_signal_emit_by_name (self, "device-state", dev_id);
-}
-
-/* Обработчик сигнала device-log. */
-static void
-hyscan_control_model_device_log (HyScanDevice       *device,
-                                 const gchar        *source,
-                                 gint64              time,
-                                 gint                level,
-                                 const gchar        *message,
-                                 HyScanControlModel *self)
-{
-  g_signal_emit_by_name (self, "device-log", source, time, level, message);
 }
 
 static HyScanControlModelStart *
