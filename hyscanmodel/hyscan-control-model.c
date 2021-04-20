@@ -1026,21 +1026,24 @@ hyscan_control_model_actuator_set (HyScanControlModel         *self,
   if (info == NULL)
     return FALSE;
 
-  if (info->mode == HYSCAN_ACTUATOR_MODE_NONE)
+  if (actuator->mode == HYSCAN_ACTUATOR_MODE_NONE)
     {
+
       status = hyscan_actuator_disable (HYSCAN_ACTUATOR (priv->control), name);
     }
-  else if (info->mode == HYSCAN_ACTUATOR_MODE_SCAN)
+  else if (actuator->mode == HYSCAN_ACTUATOR_MODE_SCAN)
     {
+
       status = hyscan_actuator_scan (HYSCAN_ACTUATOR (priv->control), name,
-                                     info->scan.from,
-                                     info->scan.to,
-                                     info->scan.speed);
+                                     actuator->scan.from,
+                                     actuator->scan.to,
+                                     actuator->scan.speed);
     }
-  else if (info->mode == HYSCAN_ACTUATOR_MODE_MANUAL)
+  else if (actuator->mode == HYSCAN_ACTUATOR_MODE_MANUAL)
     {
+
       status = hyscan_actuator_manual (HYSCAN_ACTUATOR (priv->control), name,
-                                       info->manual.angle);
+                                       actuator->manual.angle);
     }
 
   if (!status)
