@@ -160,17 +160,17 @@ test_sensor (gpointer data)
     {
       g_message ("Test sensor %s", sensors[i]);
 
-      if (hyscan_sensor_state_get_enabled (state, sensors[i]))
-        g_error ("Sensor %s state must be FALSE", sensors[i]);
-
-      if (!hyscan_sensor_set_enable (sensor, sensors[i], TRUE))
-        g_error ("Failed to enable sensor %s", sensors[i]);
-
-      if (!hyscan_dummy_device_check_sensor_enable (dummy_device, sensors[i]))
-        g_error ("Enable sensor %s check failed", sensors[i]);
-
       if (!hyscan_sensor_state_get_enabled (state, sensors[i]))
         g_error ("Sensor %s state must be TRUE", sensors[i]);
+
+      if (!hyscan_sensor_set_enable (sensor, sensors[i], FALSE))
+        g_error ("Failed to disable sensor %s", sensors[i]);
+
+      if (!hyscan_dummy_device_check_sensor_enable (dummy_device, sensors[i]))
+        g_error ("Disable sensor %s check failed", sensors[i]);
+
+      if (hyscan_sensor_state_get_enabled (state, sensors[i]))
+        g_error ("Sensor %s state must be FALSE", sensors[i]);
     }
 
   g_idle_add ((GSourceFunc) test_sonar, NULL);
@@ -329,7 +329,7 @@ static gboolean
 fail_by_timeout (gpointer data)
 {
   g_error ("Failed by timeout");
-  
+
   return G_SOURCE_REMOVE;
 }
 
@@ -398,7 +398,7 @@ test_stopped (void)
 
   /* Отключаем текущий обработчик сигнала. */
   g_signal_handler_disconnect (sonar_model, start_stop_tag);
-  
+
   if (hyscan_sonar_state_get_start (HYSCAN_SONAR_STATE (sonar_model), NULL, NULL, NULL, NULL))
     g_error ("Failed to stop sonar");
 
@@ -422,7 +422,7 @@ test_control_model_started (void)
   HyScanTrackPlan *plan;
   HyScanTrackType track_type;
   gboolean success;
-  
+
   g_message ("\"start-stop\" signal emitted");
 
   /* Отключаем ошибку по таймауту. */
@@ -447,7 +447,7 @@ test_control_model_started (void)
 
   if (!success)
     g_error ("Sonar started with wrong parameters");
-  
+
   g_main_quit (loop);
 }
 
@@ -460,9 +460,9 @@ test_start (gpointer data)
   start_stop_tag = g_signal_connect_swapped (sonar_model, "start-stop",
                                              G_CALLBACK (test_started),
                                              GUINT_TO_POINTER (timeout_tag));
-  
+
   hyscan_sonar_start (HYSCAN_SONAR (sonar_model), PROJECT_NAME, TRACK_NAME, TRACK_TYPE, &track_plan);
-  
+
   return G_SOURCE_REMOVE;
 }
 

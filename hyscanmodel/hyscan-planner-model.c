@@ -115,7 +115,7 @@ hyscan_planner_model_changed (HyScanObjectModel *model)
 
   origin.lat = object->origin.lat;
   origin.lon = object->origin.lon;
-  origin.h = object->ox;
+  origin.h = object->azimuth;
   priv->geo = hyscan_geo_new (origin, HYSCAN_GEO_ELLIPSOID_WGS84);
 
   hyscan_planner_origin_free (object);

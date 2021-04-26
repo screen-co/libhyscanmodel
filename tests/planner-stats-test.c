@@ -409,7 +409,7 @@ add_track_1 (void)
   gchar *key;
   HyScanPlannerTrack track = { .type = HYSCAN_TYPE_PLANNER_TRACK };
 
-  objects = hyscan_object_store_get_all (HYSCAN_OBJECT_STORE (model), HYSCAN_TYPE_PLANNER_TRACK);
+  objects = hyscan_object_store_get_all (HYSCAN_OBJECT_STORE (model), HYSCAN_TYPE_PLANNER_ZONE);
   g_hash_table_iter_init (&iter, objects);
 
   if (!g_hash_table_iter_next (&iter, (gpointer *) &key, NULL))
@@ -436,8 +436,8 @@ add_zone (gpointer user_data)
 
   /* Добавляем зону, галсы, записи галсов. */
   g_message ("Add zone");
-  hyscan_object_store_add (HYSCAN_OBJECT_STORE (model), (const HyScanObject *) &zone, NULL);
   g_signal_connect (model, "changed", G_CALLBACK (add_track_1), NULL);
+  hyscan_object_store_add (HYSCAN_OBJECT_STORE (model), (const HyScanObject *) &zone, NULL);
 
   return G_SOURCE_REMOVE;
 }
