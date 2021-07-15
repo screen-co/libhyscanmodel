@@ -1,6 +1,7 @@
 /* hyscan-mark-loc-model.c
  *
  * Copyright 2019 Screen LLC, Alexey Sakhnov <alexsakhnov@gmail.com>
+ * Copyright 2021 Screen LLC, Andrey Zakharov <zaharov@screen-co.ru>
  *
  * This file is part of HyScanGui library.
  *
@@ -386,22 +387,26 @@ hyscan_mark_loc_model_load_nav (HyScanMarkLocModel  *ml_model,
   HyScanDepthometer *dm;
 
   HyScanGeoPoint coord;
-  gdouble course;
+  gdouble course = 0.0; /* Курс по-умолчанию "на север". */
   HyScanAntennaOffset offset;
   gboolean found = FALSE;
 
   lat_smooth   = hyscan_mark_loc_model_nav_smooth_create (ml_model, track_param, HYSCAN_NMEA_FIELD_LAT);
   lon_smooth   = hyscan_mark_loc_model_nav_smooth_create (ml_model, track_param, HYSCAN_NMEA_FIELD_LON);
   angle_smooth = hyscan_mark_loc_model_nav_smooth_create (ml_model, track_param, HYSCAN_NMEA_FIELD_TRACK);
+
   if (lat_smooth == NULL || lon_smooth == NULL || angle_smooth == NULL)
     goto exit;
 
   found = hyscan_nav_smooth_get (lat_smooth, NULL, location->time, &coord.lat) &&
-          hyscan_nav_smooth_get (lon_smooth, NULL, location->time, &coord.lon) &&
-          hyscan_nav_smooth_get (angle_smooth, NULL, location->time, &course);
+          hyscan_nav_smooth_get (lon_smooth, NULL, location->time, &coord.lon);
 
   if (!found)
     goto exit;
+
+  /* Если нет данных о курсе, то используем курс по-умолчанию. */
+  if (!hyscan_nav_smooth_get (angle_smooth, NULL, location->time, &course))
+      location->has_course = TRUE;
 
   location->center_geo = coord;
   location->antenna_course = course;

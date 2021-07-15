@@ -1,6 +1,7 @@
 /* hyscan-mark-location.h
  *
  * Copyright 2019 Screen LLC, Alexey Sakhnov <alexsakhnov@gmail.com>
+ * Copyright 2021 Screen LLC, Andrey Zakharov <zaharov@screen-co.ru>
  *
  * This file is part of HyScanCore library.
  *
@@ -67,6 +68,9 @@ typedef enum
  * @depth: глубина метки относительно ватерлинии или -1, если глубина не известна, м
  * @along: координата метки вдоль галса, м
  * @across: координата метки поперёк галса, всегда неотрицательное, м
+ * @has_course: флаг наличия навигационных данных о курсе. Используется для генерации акустического изображения метки.
+ *                        %TRUE  - данные о курсе есть,
+ *                        %FALSE - данных о курсе нет.
  *
  * Местоположение метки, содержит в себе географические координаты метки.
  */
@@ -84,6 +88,7 @@ typedef struct
   gdouble                       depth;
   gdouble                       along;
   gdouble                       across;
+  gboolean                      has_course;
 } HyScanMarkLocation;
 
 HYSCAN_API
