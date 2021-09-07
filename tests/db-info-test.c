@@ -42,9 +42,9 @@
 #define SONAR_INFO    "<schemalist><schema id=\"info\"><key id=\"id\" name=\"ID\" type=\"integer\"/></schema></schemalist>"
 #define SOURCE_DATA   "0123456789"
 
-gdouble timeout = 3.0;
-guint   n_projects = 8;
-guint   n_tracks = 8;
+gdouble timeout = 10.0;
+guint   n_projects = 4;
+guint   n_tracks = 4;
 
 GTimer *timer = NULL;
 
