@@ -307,6 +307,7 @@ hyscan_db_info_alerter (gpointer data)
   tracks_update = priv->tracks_update;
   priv->projects_update = FALSE;
   priv->tracks_update = FALSE;
+
   g_mutex_unlock (&priv->lock);
 
   if (projects_update)
@@ -411,6 +412,7 @@ hyscan_db_info_watcher (gpointer data)
       /* Закрываем предыдущий проект. */
       if (project_changed && priv->project_id > 0)
         {
+          g_hash_table_remove_all (priv->actives);
           hyscan_db_close (priv->db, priv->project_id);
           priv->project_id = -1;
         }
@@ -426,15 +428,8 @@ hyscan_db_info_watcher (gpointer data)
           if (priv->project_id <= 0)
             continue;
 
-          /* Если проект открылся, очищаем список галсов. */
+          /* Если проект открылся, сбрасываем счётчик изменений. */
           tracks_mc_old = ~hyscan_db_get_mod_count (priv->db, priv->project_id);
-
-          g_mutex_lock (&priv->lock);
-
-          g_clear_pointer (&priv->tracks, g_hash_table_unref);
-          priv->tracks_update = TRUE;
-
-          g_mutex_unlock (&priv->lock);
         }
 
       /* Проверяем изменения в активных объектах базы данных. */
@@ -563,9 +558,13 @@ hyscan_db_info_set_project (HyScanDBInfo *info,
 
   g_mutex_lock (&priv->lock);
 
+  g_clear_pointer (&priv->tracks, g_hash_table_unref);
+  priv->tracks_update = TRUE;
+
   g_clear_pointer (&priv->new_project_name, g_free);
   priv->new_project_name = g_strdup (project_name);
   priv->project_changed = TRUE;
+
   g_cond_signal (&priv->cond);
 
   g_mutex_unlock (&priv->lock);
